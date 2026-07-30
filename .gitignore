@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.vite/
+dist-single/
+.single-tmp/
+
+# Build artefacts that have been living in the working tree
+claudemary-llmaci.html
+llmaci-src.zip
+tools/shots/
+
+# Cloudflare Pages / Wrangler
+.wrangler/
+
+# Local scratch created by the device bridge (it cannot delete files)
+_to_delete/
+.gittest/

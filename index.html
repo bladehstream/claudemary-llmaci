@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Claudemary LLMaci</title>
+<!-- The typefaces are bundled through src/ui/styles.css, not fetched from
+     fonts.googleapis.com. See the note at the top of that file for why. -->
+<link rel="stylesheet" href="./src/ui/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='%2334b44a'/><circle cx='36' cy='38' r='11' fill='%23ffd93b'/><rect x='54' y='48' width='22' height='18' rx='3' fill='%23e8544f'/><circle cx='44' cy='68' r='9' fill='%234a90d9'/></svg>" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <!-- ============ IN-GAME HUD ============ -->
+    <div id="hud" class="hidden">
+      <div class="hud-topleft">
+        <div class="size-panel">
+          <div class="size-label">Katamari</div>
+          <div id="size-readout" class="size-readout">0m0cm0mm</div>
+        </div>
+        <div class="goal-panel">
+          <div class="goal-row">
+            <span class="goal-label">Goal</span>
+            <span id="goal-readout" class="goal-value">—</span>
+          </div>
+          <div class="goal-bar"><div id="goal-fill" class="goal-fill"></div></div>
+          <div id="goal-met" class="goal-met hidden">GOAL REACHED — keep rolling!</div>
+        </div>
+      </div>
+
+      <div class="hud-topright">
+        <div id="timer" class="timer">0:00</div>
+        <div id="stage-name" class="stage-name"></div>
+      </div>
+
+      <div class="hud-bottomleft">
+        <div id="pickup-feed" class="pickup-feed"></div>
+      </div>
+
+      <div class="hud-bottomright">
+        <div class="mini-stats">
+          <div><span id="stat-count">0</span> objects</div>
+          <div><span id="stat-unique">0</span> kinds</div>
+        </div>
+      </div>
+
+      <div id="finder" class="finder hidden"></div>
+      <!-- Both prompts share one bottom-centre stack. The quit chip is on screen
+           for the whole round, so it cannot be positioned independently of the
+           finish chip that appears the moment the goal is met — they would
+           overlap exactly. -->
+      <div class="prompt-stack">
+        <!-- The stragglers counter lives IN the stack, not floating above it at a
+             hand-picked offset. It used to be positioned independently at
+             bottom:84px and landed straight on top of the finish chip — the same
+             collision the two chips had with each other, and the same fix. -->
+        <div id="finder-count" class="finder-count hidden"></div>
+        <div id="finish-prompt" class="finish-prompt hidden">
+          <span class="fp-key">Enter</span><span class="fp-text">tap to finish the round</span>
+        </div>
+        <div id="quit-prompt" class="quit-prompt">
+          <span class="qp-fill"><i id="quit-fill"></i></span>
+          <span class="qp-key">Enter</span><span class="qp-text">hold to quit to title</span>
+        </div>
+      </div>
+
+      <div id="speed-lines" class="speed-lines"></div>
+      <div id="flash" class="flash"></div>
+      <div id="sizeup-banner" class="sizeup-banner"></div>
+      <div id="countdown" class="countdown"></div>
+    </div>
+
+    <!-- ============ TITLE SCREEN ============ -->
+    <div id="title-screen" class="screen">
+      <div class="title-bg"></div>
+      <div class="title-inner">
+        <h1 class="game-title">
+          <span class="t1">CLAUDEMARY</span>
+          <span class="t2">LLMACI</span>
+        </h1>
+        <p class="title-sub">Roll up the world. Everything sticks. Nothing is out of context.</p>
+        <div class="title-buttons">
+          <button class="btn btn-big" data-action="play">Start Rolling</button>
+          <button class="btn" data-action="how">How to Play</button>
+          <button class="btn" data-action="collection">Collection</button>
+          <button class="btn" data-action="options">Options</button>
+          <!-- Only offered once the universe has actually been cleared. An
+               ending you can watch before you have earned it is a spoiler
+               button on the front page. -->
+          <button id="btn-ending" class="btn alt hidden" data-action="ending">The Ending</button>
+        </div>
+        <p class="title-foot">A fan-made homage, rolled together by Claude. Original code, original music, no assets from the real game.</p>
+      </div>
+    </div>
+
+    <!-- ============ STAGE SELECT ============ -->
+    <div id="stage-select" class="screen hidden">
+      <div class="panel wide">
+        <h2 class="panel-title">Choose Your Cosmos</h2>
+        <div id="stage-cards" class="stage-cards"></div>
+        <div class="panel-actions">
+          <button class="btn" data-action="back-title">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ HOW TO PLAY ============ -->
+    <div id="how-screen" class="screen hidden">
+      <div class="panel">
+        <h2 class="panel-title">How to Play</h2>
+        <div class="how-grid">
+          <div class="how-key">W A S D</div><div>Roll the katamari, always relative to where the camera is looking (arrow keys work too)</div>
+          <div class="how-key">Mouse</div><div>Swing the camera around</div>
+          <div class="how-key">Shift</div><div>Dash — costs momentum control</div>
+          <div class="how-key">Space</div><div>Whip around 180°</div>
+          <div class="how-key">Enter</div><div><b>Tap</b> to finish the stage early (once you have hit the goal). <b>Hold</b> it for a moment to abandon the run and go back to the title.</div>
+          <div class="how-key">Q / E</div><div>Nudge camera left / right</div>
+          <div class="how-key">Esc / P</div><div>Pause</div>
+          <div class="how-key">M</div><div>Mute music</div>
+          <div class="how-key">R</div><div>Restart the stage</div>
+        </div>
+        <p class="how-note">
+          Anything smaller than your katamari sticks to it. Every object you collect makes the
+          ball bigger, which makes bigger things collectable. Long thin things can be picked up
+          even when they look too big — they will make you roll strangely until you cover them up.
+          Slamming into something huge at speed will shake objects loose.
+        </p>
+        <p class="how-note">
+          The stage does <b>not</b> end when you hit the goal — it ends when the clock does,
+          and the size you finish at is the size that counts. Once you have passed the goal
+          you can press <b>Enter</b> to stop early and bank what you have. If you manage to
+          roll up absolutely everything, the round closes itself.
+        </p>
+        <div class="panel-actions">
+          <button class="btn" data-action="back-title">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ OPTIONS ============ -->
+    <div id="options-screen" class="screen hidden">
+      <div class="panel">
+        <h2 class="panel-title">Options</h2>
+        <div class="opt-row">
+          <label for="opt-music">Music volume</label>
+          <input id="opt-music" type="range" min="0" max="100" value="65" />
+          <span id="opt-music-val" class="opt-val">65</span>
+        </div>
+        <div class="opt-row">
+          <label for="opt-sfx">Sound effects</label>
+          <input id="opt-sfx" type="range" min="0" max="100" value="80" />
+          <span id="opt-sfx-val" class="opt-val">80</span>
+        </div>
+        <div class="opt-row">
+          <label for="opt-sens">Mouse sensitivity</label>
+          <input id="opt-sens" type="range" min="10" max="300" value="100" />
+          <span id="opt-sens-val" class="opt-val">100</span>
+        </div>
+        <div class="opt-row">
+          <label for="opt-invert">Invert camera Y</label>
+          <input id="opt-invert" type="checkbox" />
+          <span class="opt-val"></span>
+        </div>
+        <div class="opt-row">
+          <label for="opt-speedcurve">Speed as you grow</label>
+          <input id="opt-speedcurve" type="range" min="0" max="100" value="50" />
+          <span id="opt-speedcurve-val" class="opt-val">50</span>
+        </div>
+        <p class="opt-note" id="opt-speedcurve-note"></p>
+        <div class="opt-row">
+          <label for="opt-quality">Render quality</label>
+          <select id="opt-quality">
+            <option value="low">Low</option>
+            <option value="med" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+          <span class="opt-val"></span>
+        </div>
+        <div class="opt-row">
+          <label for="opt-shadows">Shadows</label>
+          <input id="opt-shadows" type="checkbox" checked />
+          <span class="opt-val"></span>
+        </div>
+        <div class="opt-row">
+          <label for="btn-reset-progress">Saved progress</label>
+          <button id="btn-reset-progress" class="btn small alt" data-action="reset-progress">Reset Progress</button>
+          <span class="opt-val"></span>
+        </div>
+        <p class="opt-note" id="opt-reset-note">
+          Clears which stages you have opened, your best sizes and the collection log.
+          Volume, camera and quality settings are kept. There is no undo, so it asks twice.
+        </p>
+        <div class="panel-actions">
+          <button class="btn" data-action="back-title">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ COLLECTION LOG ============ -->
+    <div id="collection-screen" class="screen hidden">
+      <div class="panel wide">
+        <h2 class="panel-title">Collection</h2>
+        <p id="collection-summary" class="collection-summary"></p>
+        <div id="collection-list" class="collection-list"></div>
+        <div class="panel-actions">
+          <button class="btn" data-action="back-title">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PAUSE ============ -->
+    <div id="pause-screen" class="screen hidden">
+      <div class="panel narrow">
+        <h2 class="panel-title">Paused</h2>
+        <div class="panel-actions column">
+          <button class="btn btn-big" data-action="resume">Resume</button>
+          <button id="btn-finish-now" class="btn alt hidden" data-action="finish-now">Finish Now</button>
+          <button class="btn" data-action="restart">Restart Stage</button>
+          <button class="btn" data-action="quit">Quit to Title</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RESULTS ============ -->
+    <div id="results-screen" class="screen hidden">
+      <div class="panel">
+        <div id="results-rainbow" class="rainbow hidden"></div>
+        <h2 id="results-title" class="panel-title">Time Up</h2>
+        <div class="results-size">
+          <div class="results-size-label">Final size</div>
+          <div id="results-size" class="results-size-value">0m0cm0mm</div>
+        </div>
+        <div class="results-stats">
+          <div><span class="rs-label">Goal</span><span id="results-goal">—</span></div>
+          <div><span class="rs-label">Objects</span><span id="results-count">0</span></div>
+          <div><span class="rs-label">Kinds</span><span id="results-kinds">0</span></div>
+          <div><span class="rs-label">Biggest</span><span id="results-biggest">—</span></div>
+          <div><span class="rs-label">Rolled up</span><span id="results-cleared">—</span></div>
+          <div><span class="rs-label">Best ever</span><span id="results-best">—</span></div>
+        </div>
+        <div class="king-box">
+          <div class="king-face">
+            <div class="king-crown"></div>
+            <div class="king-head"><span class="king-eye l"></span><span class="king-eye r"></span><span class="king-mouth"></span></div>
+          </div>
+          <p id="king-text" class="king-text"></p>
+        </div>
+        <div class="panel-actions">
+          <!-- When the universe has been cleared this is the primary button and
+               "Roll Again" is demoted, because at that point the game is over
+               and offering "again" first would bury the ending. -->
+          <button id="btn-ending-results" class="btn btn-big hidden" data-action="ending">The End →</button>
+          <button id="btn-retry" class="btn btn-big" data-action="retry">Roll Again</button>
+          <button id="btn-next" class="btn" data-action="next">Next Stage</button>
+          <button class="btn" data-action="quit">Title</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ STAGE INTRO ============ -->
+    <div id="intro-screen" class="screen hidden">
+      <div class="intro-inner">
+        <div id="intro-stage" class="intro-stage"></div>
+        <div class="intro-line"><span class="intro-key">Start</span><span id="intro-start"></span></div>
+        <div class="intro-line"><span class="intro-key">Goal</span><span id="intro-goal"></span></div>
+        <div class="intro-line"><span class="intro-key">Time</span><span id="intro-time"></span></div>
+        <div id="intro-brief" class="intro-brief"></div>
+        <div class="intro-go">Click to roll</div>
+      </div>
+    </div>
+
+    <!-- ============ ENDING ============
+         Plays over the still-loaded universe stage; see src/ui/Ending.js for
+         why the world must not be disposed before this appears. -->
+    <div id="ending-screen" class="screen ending hidden">
+      <div id="ending-body" class="ending-body"></div>
+      <div id="ending-hint" class="ending-hint">Click, or press Space</div>
+    </div>
+
+    <!-- ============ LOADING ============ -->
+    <div id="loading-screen" class="screen">
+      <div class="loading-inner">
+        <div class="loading-ball"><i></i><i></i><i></i><i></i></div>
+        <div id="loading-text" class="loading-text">Rolling up the cosmos…</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,796 @@
+/* ============================================================
+   Katamari Damaci — UI styling
+   Bright, chunky, candy-coloured. Everything hand-rolled.
+   ============================================================ */
+
+/* THE FONTS ARE BUNDLED, NOT FETCHED.
+ *
+ * These used to be a <link> to fonts.googleapis.com in index.html, which meant
+ * every page load opened connections to two more hosts (googleapis for the CSS,
+ * gstatic for the woff2) and blocked first paint on both. It also made a game
+ * whose entire pitch is "nothing is loaded from disk, everything is computed"
+ * depend on a third party to draw its own title.
+ *
+ * Vite emits these as hashed files in the normal build and — because
+ * `build-single.mjs` raises `assetsInlineLimit` — base64-inlines the exact same
+ * rules into the one-file build. Six faces, 112KB of woff2 in total.
+ *
+ * The weights must match what the stylesheet below actually asks for: Baloo 2 at
+ * 400/600/800 and Fredoka at 400/600/700. A weight that is used but not declared
+ * gets synthesised by the browser and looks subtly wrong rather than missing,
+ * which is the sort of thing nobody notices for months — and one of them, Fredoka
+ * 700, WAS being synthesised in the one-file build for exactly that reason.
+ *
+ * Written out rather than `@import`-ing @fontsource's own stylesheets, which
+ * declare both woff2 and woff for every face. No browser that can run WebGL2
+ * needs the woff, so importing them shipped twelve files where six will do and
+ * put six of them on the CDN to never be requested. */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/baloo-2/files/baloo-2-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/baloo-2/files/baloo-2-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('@fontsource/baloo-2/files/baloo-2-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/fredoka/files/fredoka-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/fredoka/files/fredoka-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@fontsource/fredoka/files/fredoka-latin-700-normal.woff2') format('woff2');
+}
+
+:root {
+  --sky:      #6fc6ee;
+  --sky-deep: #3a9bd4;
+  --grass:    #7dc242;
+  --pink:     #ff5f9e;
+  --pink-deep:#e03f7f;
+  --yellow:   #ffd93b;
+  --orange:   #ff8a3d;
+  --red:      #e8544f;
+  --purple:   #6b46c1;
+  --purple-d: #4c2f96;
+  --cream:    #fff8e7;
+  --ink:      #2a2140;
+  --shadow:   rgba(42, 33, 64, 0.28);
+
+  --font-display: 'Baloo 2', 'Fredoka', 'Trebuchet MS', system-ui, sans-serif;
+  --font-ui: 'Fredoka', 'Baloo 2', 'Trebuchet MS', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #101020;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+#app { position: fixed; inset: 0; }
+
+#scene {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+
+.hidden { display: none !important; }
+
+/* ------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------ */
+.btn {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(180deg, var(--pink) 0%, var(--pink-deep) 100%);
+  border: 4px solid #fff;
+  border-radius: 999px;
+  padding: 10px 34px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 var(--pink-deep), 0 10px 22px var(--shadow);
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.18);
+}
+.btn:hover { filter: brightness(1.08); transform: translateY(-2px); box-shadow: 0 8px 0 var(--pink-deep), 0 14px 26px var(--shadow); }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--pink-deep), 0 6px 14px var(--shadow); }
+.btn:disabled { filter: grayscale(0.7) brightness(0.9); cursor: not-allowed; opacity: 0.6; }
+.btn-big { font-size: 27px; padding: 14px 48px; }
+
+.btn.alt {
+  background: linear-gradient(180deg, #59c2f0 0%, var(--sky-deep) 100%);
+  box-shadow: 0 6px 0 var(--sky-deep), 0 10px 22px var(--shadow);
+}
+.btn.alt:hover { box-shadow: 0 8px 0 var(--sky-deep), 0 14px 26px var(--shadow); }
+
+/* Sits inside an .opt-row rather than a .panel-actions, so it has to be small
+   enough not to blow the row's grid out. */
+.btn.small { font-size: 15px; padding: 6px 18px; border-width: 3px; justify-self: start; white-space: nowrap; }
+/* The armed state of a two-click confirm. */
+.btn.danger {
+  background: linear-gradient(180deg, #ff7d6a 0%, var(--red) 100%);
+  box-shadow: 0 6px 0 #b83a36, 0 10px 22px var(--shadow);
+  animation: dangerPulse 900ms ease-in-out infinite;
+}
+.btn.danger:hover { box-shadow: 0 8px 0 #b83a36, 0 14px 26px var(--shadow); }
+@keyframes dangerPulse { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.16); } }
+
+/* ------------------------------------------------------------
+   Screens & panels
+   ------------------------------------------------------------ */
+.screen {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 20;
+  animation: fadeIn 240ms ease both;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.panel {
+  position: relative;
+  background: var(--cream);
+  border: 6px solid #fff;
+  border-radius: 28px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  padding: 30px 38px 26px;
+  max-width: 620px;
+  width: min(92vw, 620px);
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: center;
+}
+.panel.wide { max-width: 940px; width: min(94vw, 940px); }
+.panel.narrow { max-width: 380px; }
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 38px; font-weight: 800;
+  color: var(--purple);
+  margin-bottom: 16px;
+  text-shadow: 0 3px 0 rgba(107,70,193,0.18);
+}
+
+.panel-actions { display: flex; gap: 14px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+.panel-actions.column { flex-direction: column; align-items: center; }
+
+/* ------------------------------------------------------------
+   Title screen
+   ------------------------------------------------------------ */
+#title-screen { overflow: hidden; }
+.title-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 50% 120%, #ffe98a 0%, transparent 55%),
+    linear-gradient(180deg, #4fb3e8 0%, #86d7f5 45%, #b6ecc4 78%, #7dc242 100%);
+}
+.title-bg::after {
+  content: '';
+  position: absolute; inset: -50%;
+  background:
+    repeating-conic-gradient(from 0deg at 50% 66%,
+      rgba(255,255,255,0.16) 0deg 6deg, transparent 6deg 12deg);
+  animation: spin 60s linear infinite;
+  opacity: 0.55;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.title-inner { position: relative; text-align: center; z-index: 2; padding: 20px; }
+
+.game-title { line-height: 0.88; margin-bottom: 10px; }
+.game-title span {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.game-title .t1 {
+  font-size: clamp(48px, 11vw, 116px);
+  color: var(--yellow);
+  -webkit-text-stroke: 8px var(--purple-d);
+  paint-order: stroke fill;
+  text-shadow: 0 10px 0 rgba(76,47,150,0.35);
+  transform: rotate(-3deg);
+  animation: bobA 4s ease-in-out infinite;
+}
+.game-title .t2 {
+  font-size: clamp(36px, 8.4vw, 88px);
+  color: var(--pink);
+  -webkit-text-stroke: 7px #fff;
+  paint-order: stroke fill;
+  text-shadow: 0 8px 0 rgba(224,63,127,0.4);
+  transform: rotate(2deg) translateY(-6px);
+  animation: bobB 4.6s ease-in-out infinite;
+}
+@keyframes bobA { 0%,100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-10px); } }
+@keyframes bobB { 0%,100% { transform: rotate(2deg) translateY(-6px); } 50% { transform: rotate(3deg) translateY(2px); } }
+
+.title-sub {
+  font-size: 22px; font-weight: 600; color: #fff;
+  text-shadow: 0 3px 0 rgba(42,33,64,0.4);
+  margin: 6px 0 26px;
+}
+.title-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.title-foot {
+  margin-top: 26px; font-size: 13px; color: rgba(255,255,255,0.92);
+  text-shadow: 0 2px 3px rgba(0,0,0,0.35);
+}
+
+/* ------------------------------------------------------------
+   Stage select
+   ------------------------------------------------------------ */
+.stage-cards { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; }
+.stage-card {
+  width: 260px;
+  background: #fff;
+  border: 5px solid var(--purple);
+  border-radius: 22px;
+  padding: 16px 16px 18px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 8px 0 rgba(107,70,193,0.35);
+  text-align: left;
+}
+.stage-card:hover { transform: translateY(-5px); box-shadow: 0 13px 0 rgba(107,70,193,0.35); }
+.stage-card.locked { filter: grayscale(0.85); opacity: 0.62; cursor: not-allowed; }
+.stage-card.locked:hover { transform: none; box-shadow: 0 8px 0 rgba(107,70,193,0.35); }
+.sc-art { height: 96px; border-radius: 14px; margin-bottom: 12px; position: relative; overflow: hidden; }
+.sc-art i {
+  position: absolute; border-radius: 4px;
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,0.12);
+}
+.sc-name { font-family: var(--font-display); font-size: 25px; font-weight: 800; color: var(--purple); }
+.sc-desc { font-size: 14px; color: #5c5470; margin: 4px 0 10px; min-height: 40px; }
+.sc-stats { display: flex; gap: 10px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
+.sc-stats span { background: var(--yellow); border-radius: 999px; padding: 3px 11px; color: var(--ink); }
+.sc-best { margin-top: 8px; font-size: 13px; color: var(--pink-deep); font-weight: 700; min-height: 18px; }
+
+/* ------------------------------------------------------------
+   How to play / options
+   ------------------------------------------------------------ */
+.how-grid {
+  display: grid; grid-template-columns: 130px 1fr; gap: 10px 16px;
+  text-align: left; font-size: 16px; margin-bottom: 18px;
+}
+.how-key {
+  background: var(--purple); color: #fff; font-weight: 700;
+  border-radius: 10px; padding: 4px 10px; text-align: center; font-size: 14px;
+}
+.how-note { text-align: left; font-size: 15px; line-height: 1.5; color: #4a4260; margin-bottom: 10px; }
+
+.opt-row {
+  display: grid; grid-template-columns: 200px 1fr 46px;
+  align-items: center; gap: 14px; margin-bottom: 14px;
+  text-align: left; font-size: 17px; font-weight: 600;
+}
+.opt-row input[type=range] { width: 100%; accent-color: var(--pink); }
+.opt-row input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--pink); justify-self: start; }
+.opt-row select {
+  font-family: var(--font-ui); font-size: 16px; padding: 6px 10px;
+  border-radius: 10px; border: 3px solid var(--purple); background: #fff;
+}
+.opt-val { font-variant-numeric: tabular-nums; color: var(--purple); }
+/* `margin: auto` on the sides, not 0. The panel centres its text, so the words
+   inside this block were centred all along — but the BLOCK is narrower than the
+   panel (max-width) and with a zero side margin it hugged the left edge, so the
+   whole paragraph sat visibly left of everything above it. Reported as "the text
+   in the options screen isn't center-aligned". */
+.opt-note {
+  margin: -4px auto 14px; padding: 0 2px;
+  font-size: 13px; line-height: 1.45; color: var(--purple); opacity: 0.78;
+  max-width: 52ch;
+}
+
+/* ------------------------------------------------------------
+   Collection log
+   ------------------------------------------------------------ */
+.collection-summary { font-size: 17px; font-weight: 600; color: var(--purple); margin-bottom: 14px; }
+.collection-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 8px; max-height: 56vh; overflow-y: auto; text-align: left; padding-right: 6px;
+}
+.col-item {
+  background: #fff; border-radius: 12px; padding: 7px 12px;
+  font-size: 14px; display: flex; justify-content: space-between; gap: 8px;
+  border-left: 6px solid var(--grass);
+}
+.col-item.unseen { opacity: 0.42; border-left-color: #bbb; font-style: italic; }
+.col-item b { font-weight: 600; }
+.col-size { color: #8a819e; font-variant-numeric: tabular-nums; font-size: 12px; }
+
+/* ------------------------------------------------------------
+   HUD
+   ------------------------------------------------------------ */
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+
+.hud-topleft { position: absolute; top: 18px; left: 20px; }
+.hud-topright { position: absolute; top: 18px; right: 20px; text-align: right; }
+.hud-bottomleft { position: absolute; bottom: 18px; left: 20px; }
+.hud-bottomright { position: absolute; bottom: 18px; right: 20px; text-align: right; }
+
+.size-panel {
+  background: rgba(255,255,255,0.9);
+  border: 4px solid var(--purple);
+  border-radius: 18px;
+  padding: 6px 18px 8px;
+  box-shadow: 0 5px 0 rgba(107,70,193,0.35);
+  display: inline-block;
+}
+.size-label {
+  font-size: 13px; font-weight: 700; color: var(--purple);
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+.size-readout {
+  font-family: var(--font-display);
+  font-size: 40px; font-weight: 800; line-height: 1;
+  color: var(--pink-deep);
+  font-variant-numeric: tabular-nums;
+  transition: transform 120ms ease;
+}
+.size-readout.pulse { animation: sizePulse 320ms ease; }
+@keyframes sizePulse {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.16); color: var(--orange); }
+  100% { transform: scale(1); }
+}
+
+.goal-panel {
+  margin-top: 8px;
+  background: rgba(255,255,255,0.86);
+  border: 3px solid var(--purple);
+  border-radius: 14px;
+  padding: 6px 12px 8px;
+  width: 258px;
+}
+.goal-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: var(--purple); }
+.goal-bar {
+  height: 12px; background: #e5e0f0; border-radius: 999px; margin-top: 5px; overflow: hidden;
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.12);
+}
+.goal-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--grass), var(--yellow), var(--orange));
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+.goal-met {
+  margin-top: 5px; font-size: 12px; font-weight: 800; color: var(--grass);
+  letter-spacing: 0.04em; animation: blink 1.1s steps(2, end) infinite;
+}
+@keyframes blink { 50% { opacity: 0.25; } }
+
+.timer {
+  font-family: var(--font-display);
+  font-size: 52px; font-weight: 800; line-height: 1;
+  color: #fff; font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: 6px var(--purple);
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 rgba(76,47,150,0.4);
+}
+.timer.urgent { color: var(--yellow); -webkit-text-stroke-color: var(--red); animation: urgentPulse 0.5s ease-in-out infinite; }
+@keyframes urgentPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+
+.stage-name {
+  font-size: 16px; font-weight: 700; color: #fff;
+  text-shadow: 0 2px 0 rgba(42,33,64,0.55); margin-top: 2px;
+}
+
+.pickup-feed { display: flex; flex-direction: column-reverse; gap: 4px; }
+.pickup-item {
+  background: rgba(255,255,255,0.94);
+  border-left: 6px solid var(--grass);
+  border-radius: 8px;
+  padding: 3px 14px 4px;
+  font-size: 17px; font-weight: 600;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+  animation: feedIn 260ms cubic-bezier(.2,1.4,.4,1) both;
+  white-space: nowrap;
+}
+.pickup-item.big { border-left-color: var(--orange); font-size: 21px; font-weight: 700; }
+.pickup-item.huge { border-left-color: var(--pink); font-size: 25px; font-weight: 800; color: var(--pink-deep); }
+.pickup-item.fading { animation: feedOut 400ms ease forwards; }
+@keyframes feedIn { from { opacity: 0; transform: translateX(-40px) scale(0.8); } to { opacity: 1; transform: none; } }
+@keyframes feedOut { to { opacity: 0; transform: translateX(-30px); } }
+
+.mini-stats {
+  background: rgba(255,255,255,0.82);
+  border-radius: 12px; padding: 5px 14px;
+  font-size: 15px; font-weight: 600; color: var(--purple);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The two Enter prompts stack rather than each owning bottom-centre — see
+   index.html. The stack does the centring, so the chips inside must NOT
+   translateX(-50%) themselves, which is why fpIn/fpPulse below carry no
+   horizontal component any more. */
+.prompt-stack {
+  position: absolute; left: 50%; bottom: 22px;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  pointer-events: none;
+}
+
+.finish-prompt {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.94);
+  border: 4px solid var(--grass);
+  border-radius: 999px;
+  padding: 7px 20px 8px 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.28);
+  animation: fpIn 320ms cubic-bezier(.2,1.4,.4,1) both, fpPulse 2.2s ease-in-out 320ms infinite;
+}
+.finish-prompt.urgent { border-color: var(--orange); }
+.fp-key {
+  background: var(--purple); color: #fff; font-weight: 800; font-size: 16px;
+  border-radius: 999px; padding: 3px 16px; letter-spacing: 0.04em;
+}
+.fp-text { font-size: 18px; font-weight: 700; color: var(--purple); padding-right: 4px; }
+@keyframes fpIn { from { opacity: 0; transform: translateY(16px) scale(0.85); } }
+@keyframes fpPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+
+/* Deliberately quieter than the finish chip. This one is on screen for the whole
+   round, so it has to be legible without competing with the game for attention;
+   it brightens and fills only while Enter is actually held.
+ *
+ * IT HAS TO READ ON ELEVEN DIFFERENT BACKDROPS, four of which are near-black, so
+ * it cannot lean on either a dark fill or a light one alone: the dark fill
+ * carries it over the house's tan floor and the town's asphalt, the bright border
+ * and white text carry it over the galaxy and the universe. The first version was
+ * a dark fill at 0.44 alpha behind 0.62 element opacity — an effective 0.27 of
+ * white on the border — which was washed out on the house and would have been
+ * invisible in the cosmic stages. */
+.quit-prompt {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(24,18,40,0.62);
+  border: 2px solid rgba(255,255,255,0.72);
+  border-radius: 999px;
+  padding: 3px 14px 4px 5px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  opacity: 0.8;
+  transition: opacity 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+.quit-prompt.arming { opacity: 1; background: rgba(107,70,193,0.72); border-color: #fff; }
+.qp-fill { position: absolute; inset: 0; pointer-events: none; }
+.qp-fill i {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg, var(--pink), var(--yellow));
+  transform-origin: left center; transform: scaleX(0);
+  opacity: 0.85;
+}
+/* Above the fill, which is an absolutely-positioned sibling earlier in the DOM. */
+.qp-key, .qp-text { position: relative; }
+.qp-key {
+  background: rgba(255,255,255,0.92); color: var(--purple-d);
+  font-weight: 800; font-size: 12px;
+  border-radius: 999px; padding: 2px 11px; letter-spacing: 0.05em;
+}
+.qp-text {
+  font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 0.03em;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+}
+
+.speed-lines {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+  background:
+    repeating-conic-gradient(from 0deg at 50% 50%,
+      rgba(255,255,255,0.0) 0deg 3deg,
+      rgba(255,255,255,0.5) 3deg 3.6deg,
+      rgba(255,255,255,0.0) 3.6deg 7deg);
+  mask-image: radial-gradient(circle at 50% 50%, transparent 26%, black 72%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 26%, black 72%);
+  transition: opacity 140ms ease;
+  mix-blend-mode: screen;
+}
+
+.flash {
+  position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+}
+
+.sizeup-banner {
+  position: absolute; left: 50%; top: 26%;
+  transform: translate(-50%, -50%) scale(0.6);
+  font-family: var(--font-display); font-weight: 800; font-size: 62px;
+  color: var(--yellow); -webkit-text-stroke: 9px var(--purple-d); paint-order: stroke fill;
+  opacity: 0; pointer-events: none; white-space: nowrap;
+}
+.sizeup-banner.show { animation: sizeUp 1500ms cubic-bezier(.16,1.3,.3,1) both; }
+@keyframes sizeUp {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.3) rotate(-12deg); }
+  18%  { opacity: 1; transform: translate(-50%,-50%) scale(1.14) rotate(3deg); }
+  30%  { transform: translate(-50%,-50%) scale(1) rotate(-1deg); }
+  75%  { opacity: 1; transform: translate(-50%,-50%) scale(1) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%,-58%) scale(1.05); }
+}
+
+.countdown {
+  position: absolute; left: 50%; top: 44%;
+  transform: translate(-50%,-50%);
+  font-family: var(--font-display); font-weight: 800; font-size: 170px;
+  color: #fff; -webkit-text-stroke: 12px var(--red); paint-order: stroke fill;
+  opacity: 0; pointer-events: none;
+}
+.countdown.tick { animation: tickPop 900ms ease-out both; }
+@keyframes tickPop {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(2.2); }
+  20% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  75% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.25); }
+}
+
+/* ------------------------------------------------------------
+   Stage intro
+   ------------------------------------------------------------ */
+#intro-screen { background: rgba(30,20,60,0.55); backdrop-filter: blur(3px); cursor: pointer; }
+.intro-inner { text-align: center; color: #fff; }
+.intro-stage {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(40px, 8vw, 84px);
+  color: var(--yellow); -webkit-text-stroke: 9px var(--purple-d); paint-order: stroke fill;
+  margin-bottom: 18px;
+  animation: dropIn 500ms cubic-bezier(.2,1.4,.35,1) both;
+}
+@keyframes dropIn { from { opacity: 0; transform: translateY(-60px) scale(0.7); } to { opacity: 1; transform: none; } }
+.intro-line {
+  font-size: 26px; font-weight: 700; margin: 5px 0;
+  text-shadow: 0 3px 0 rgba(0,0,0,0.35);
+}
+.intro-key {
+  display: inline-block; width: 110px; text-align: right; margin-right: 16px;
+  color: var(--sky); font-size: 20px; text-transform: uppercase; letter-spacing: 0.1em;
+}
+.intro-brief {
+  margin: 20px auto 0; max-width: 560px; font-size: 18px; line-height: 1.5;
+  background: rgba(255,255,255,0.12); border-radius: 16px; padding: 14px 20px;
+}
+.intro-go {
+  margin-top: 26px; font-size: 24px; font-weight: 700; color: var(--pink);
+  -webkit-text-stroke: 5px #fff; paint-order: stroke fill;
+  animation: blink 1.3s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------
+   Results
+   ------------------------------------------------------------ */
+.results-size { margin: 6px 0 14px; }
+.results-size-label { font-size: 14px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--purple); }
+.results-size-value {
+  font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: 1.05;
+  color: var(--pink-deep); font-variant-numeric: tabular-nums;
+}
+.results-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px; margin-bottom: 16px;
+}
+.results-stats > div {
+  background: #fff; border-radius: 12px; padding: 6px 10px;
+  display: flex; flex-direction: column; font-weight: 700; font-size: 17px;
+}
+.rs-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #9a92ad; font-weight: 700; }
+
+.rainbow {
+  position: absolute; left: 0; right: 0; top: -14px; height: 14px;
+  background: linear-gradient(90deg, #e8544f, #ff8a3d, #ffd93b, #7dc242, #59c2f0, #6b46c1, #ff5f9e);
+  border-radius: 999px;
+  animation: rainbowSlide 2.4s linear infinite;
+  background-size: 200% 100%;
+}
+@keyframes rainbowSlide { to { background-position: 200% 0; } }
+
+.king-box {
+  display: flex; gap: 14px; align-items: flex-start; text-align: left;
+  background: #fff; border-radius: 18px; padding: 14px; margin-top: 6px;
+}
+.king-face { flex: 0 0 62px; position: relative; }
+.king-crown {
+  width: 46px; height: 20px; margin: 0 auto -3px;
+  background: var(--yellow);
+  clip-path: polygon(0% 100%, 12% 22%, 30% 62%, 50% 0%, 70% 62%, 88% 22%, 100% 100%);
+}
+.king-head {
+  width: 58px; height: 62px; margin: 0 auto;
+  background: linear-gradient(180deg, #f0d9b8, #e3c49c);
+  border-radius: 50% 50% 44% 44%;
+  position: relative;
+}
+.king-eye { position: absolute; top: 24px; width: 7px; height: 11px; background: var(--ink); border-radius: 50%; }
+.king-eye.l { left: 13px; } .king-eye.r { right: 13px; }
+.king-mouth { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 20px; height: 7px; background: #b5504f; border-radius: 0 0 12px 12px; }
+.king-text { font-size: 17px; line-height: 1.45; color: var(--ink); font-style: italic; }
+
+/* ------------------------------------------------------------
+   Pause
+   ------------------------------------------------------------ */
+#pause-screen { background: rgba(30,20,60,0.5); backdrop-filter: blur(4px); }
+
+/* ------------------------------------------------------------
+   Loading
+   ------------------------------------------------------------ */
+#loading-screen { background: linear-gradient(180deg, #4fb3e8, #b6ecc4); }
+.loading-inner { text-align: center; }
+.loading-ball {
+  width: 110px; height: 110px; margin: 0 auto 22px;
+  background: var(--grass); border-radius: 50%;
+  position: relative; animation: rollBall 1.5s linear infinite;
+  box-shadow: inset -12px -12px 0 rgba(0,0,0,0.12);
+}
+.loading-ball i { position: absolute; border-radius: 3px; }
+.loading-ball i:nth-child(1) { width: 26px; height: 26px; background: var(--yellow); top: 12px; left: 16px; border-radius: 50%; }
+.loading-ball i:nth-child(2) { width: 30px; height: 20px; background: var(--red); top: 46px; right: 6px; }
+.loading-ball i:nth-child(3) { width: 22px; height: 22px; background: var(--sky-deep); bottom: 10px; left: 34px; border-radius: 50%; }
+.loading-ball i:nth-child(4) { width: 16px; height: 30px; background: var(--purple); top: 20px; right: 22px; }
+@keyframes rollBall { to { transform: rotate(360deg); } }
+.loading-text {
+  font-family: var(--font-display); font-size: 26px; font-weight: 700; color: #fff;
+  text-shadow: 0 3px 0 rgba(42,33,64,0.35);
+}
+
+/* scrollbars */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.06); border-radius: 999px; }
+::-webkit-scrollbar-thumb { background: var(--purple); border-radius: 999px; }
+
+@media (max-width: 720px) {
+  .size-readout { font-size: 30px; }
+  .timer { font-size: 38px; }
+  .goal-panel { width: 200px; }
+  .how-grid { grid-template-columns: 100px 1fr; font-size: 14px; }
+  .opt-row { grid-template-columns: 140px 1fr 40px; font-size: 15px; }
+}
+
+
+/* ------------------------------------------------------------------
+   End-of-round finder.
+
+   Clearing a stage means collecting the LAST thing, and once a handful
+   remain in a four-kilometre city, finding them by eye is not a skill
+   test — it is a search with no information. These markers appear only
+   when the count is already small, so they never help you play, only
+   help you finish.
+   ------------------------------------------------------------------ */
+.finder { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.finder-dot {
+  position: absolute;
+  width: 26px; height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 3px solid #ffd93b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .35), 0 0 10px rgba(255, 217, 59, .8);
+  animation: finder-pulse 1.1s ease-in-out infinite;
+}
+.finder-dot.off {
+  border-radius: 4px;
+  width: 16px; height: 16px;
+  margin: -8px 0 0 -8px;
+  opacity: .85;
+}
+/* Top item of `.prompt-stack` — see index.html. NOT absolutely positioned: it
+   used to sit at a hand-chosen `bottom: 84px` while the two Enter chips were
+   anchored independently at `bottom: 22px`, and on a narrow window it printed
+   straight through "tap to finish the round". Being a flex sibling makes that
+   overlap structurally impossible instead of a number somebody has to keep
+   right, which is the same fix the two chips already got.
+
+   It is also the most urgent thing on the HUD when it appears — you are hunting
+   the last few objects in the stage — so it is the largest of the three. */
+.finder-count {
+  position: relative;
+  margin-bottom: 6px;
+  font-family: var(--font-display), 'Fredoka', system-ui, sans-serif;
+  font-size: clamp(20px, 3.2vw, 27px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--purple-d);
+  background: rgba(255, 255, 255, .95);
+  border: 4px solid var(--yellow);
+  border-radius: 999px;
+  padding: 6px 26px 7px;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+  animation: fpIn 320ms cubic-bezier(.2,1.4,.4,1) both, fpPulse 1.6s ease-in-out 320ms infinite;
+}
+@keyframes finder-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.35); opacity: .55; }
+}
+
+/* ------------------------------------------------------------
+   The ending
+
+   Not a .panel — the whole point is that the universe stage is
+   still rendering behind it, so the backdrop is a veil that
+   darkens as the sequence runs rather than an opaque card.
+   `--veil` is driven from Ending.js, one property for the whole
+   fade to black.
+   ------------------------------------------------------------ */
+.screen.ending {
+  --veil: 0.35;
+  flex-direction: column;
+  background: rgba(0, 0, 2, var(--veil));
+  transition: background-color 2600ms linear;
+  cursor: pointer;
+  padding: 6vh 5vw;
+}
+.ending-body {
+  display: flex; align-items: center; justify-content: center;
+  flex: 1 1 auto; width: 100%;
+}
+.end-beat { max-width: 62ch; text-align: center; animation: endIn 1500ms ease both; }
+@keyframes endIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.end-text {
+  font-family: var(--font-ui);
+  font-size: clamp(17px, 2.1vw, 25px);
+  line-height: 1.66;
+  font-weight: 400;
+  color: #f2ecff;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.9);
+}
+/* The opening line, alone on the screen. */
+.end-huge .end-text {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 6vw, 78px);
+  font-weight: 800;
+  line-height: 1.15;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+.end-title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 7vw, 92px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--yellow);
+  -webkit-text-stroke: 6px var(--purple-d);
+  paint-order: stroke fill;
+  margin-bottom: 26px;
+}
+.end-card .end-text { font-size: clamp(18px, 2.4vw, 28px); color: #fff; }
+.end-foot {
+  margin-top: 22px;
+  font-size: clamp(14px, 1.5vw, 18px);
+  font-style: italic;
+  color: #bfb3e0;
+}
+.ending-hint {
+  flex: 0 0 auto;
+  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #fff; opacity: 0.34;
+  animation: endHint 3s ease-in-out infinite;
+}
+@keyframes endHint { 0%,100% { opacity: 0.2; } 50% { opacity: 0.5; } }

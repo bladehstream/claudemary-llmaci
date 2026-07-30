@@ -1,0 +1,26 @@
+# Cloudflare Pages reads this from the build output root; Vite copies
+# everything in public/ there verbatim.  Limits: 100 rules, 2000 chars a line.
+#
+# Pages' default for every asset is `public, max-age=0, must-revalidate` plus an
+# ETag, so a repeat visitor pays a round trip per file and gets a 304 back. That
+# is the right default when filenames are stable and the wrong one for Vite,
+# which content-hashes everything under /assets/ — those URLs cannot change
+# meaning, so they are safe to pin for a year and skip the revalidation entirely.
+# The bundle is ~900KB (Pages serves it Brotli'd), so this is the difference
+# between a round trip and nothing at all on every load after the first.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html is the one file whose name never changes, so it must never be
+# pinned — it is what points at the new hashed assets after a deploy.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# The game is a single canvas with no embeds, no third-party scripts and no
+# outbound requests of any kind; it reads and writes one localStorage key.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
