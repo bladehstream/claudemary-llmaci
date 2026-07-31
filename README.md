@@ -154,11 +154,18 @@ Portrait, and it switches itself on — see [Playing on a phone](#playing-on-a-p
 | **✕** | Hold to quit to the title. Fills as you hold, same as holding Enter on a desktop |
 | **II** | Pause |
 
+| **Options → Tilt range** | How far you tilt for full speed, 0.6× to 1.6×. Scales both axes |
+
 Turning defaults to tilt, and the ‹ › arrows are hidden while it is on — two live inputs on
 one axis means the buttons fight whatever your wrist happens to be doing. Switching to
 buttons brings them back. The steering deadzone (6°) is deliberately wider than the drive
 deadzone (4°): your wrist rolls a little every time you tip the phone forward, and a turn
 that creeps on while you are only trying to drive is worse than a slow one.
+
+**Tilt is a throttle, not a switch.** A gentle tip crawls, a firm one runs; at the default
+range you get roughly 2 / 17 / 40 / 67 / 100 percent of top speed as you tip 6, 12, 18, 24
+and 30 degrees past neutral. If that travel is wrong for how you hold the phone, the Tilt
+range slider moves it — `npm run tiltcurve` prints the whole table.
 
 No sensor, or you declined the permission? **▲ ▼** buttons appear in place of RECENTRE and
 drive instead, and the ‹ › arrows come back whatever the Turning setting says — there is
@@ -335,6 +342,45 @@ loses. They come back automatically when there is no usable sensor, whatever the
 phone forward rolls it slightly too, so a steering deadzone as tight as the drive one makes
 the camera drift every time you accelerate. `RECENTRE` zeroes both axes together for the same
 reason — they are the same wrist.
+
+### ⚠ The tilt was a switch, and not in the file you would look in
+
+The first phone build shipped a control that the player described as "very on/off", and the
+cause was not in `Touch.js`. `Katamari.step` took the input vector, used its magnitude to
+normalise a direction and to gate the dash, and then **threw the magnitude away**:
+`speedCap` was the stage's top speed regardless, so any input past the deadzone accelerated
+to full pelt. `npm run tiltcurve` shows the old behaviour in one line — an input of 0.11
+produced **100.0%** of top speed, identical to an input of 1.00.
+
+That is correct for a keyboard. `Input.readMove` normalises, so on a desktop the magnitude is
+exactly 1 whenever it is not 0, and the whole notion of a partial press does not exist. The
+desktop build had been right for two years and the phone build inherited a physics function
+that had never had a reason to look at how hard you were pushing.
+
+Two lessons, and the second is the expensive one:
+
+- **A feel complaint is not automatically a tuning problem.** Every constant in `Touch.js`
+  could have been retuned for a week without changing anything you could feel on the drive
+  axis, because the value was being discarded downstream of all of them.
+- **Assert on the output, not the input.** Every existing assertion about tilt checked what
+  `read()` returned, and `read()` was returning perfectly good proportional numbers the whole
+  time. `test-mobile` now measures the katamari's actual speed at a gentle tilt versus a full
+  one, which is the only version of the check that could have failed.
+
+The response curve is expo (1.5), not linear and emphatically not quantised into steps — the
+request was for "20% increments", and notching an already-continuous signal can only throw
+resolution away. What "I can't find the middle" wants is more of the *physical travel* spent
+in the lower half of the *output*, which is what an exponent buys: half deflection gives 35%
+rather than 50%. And the band width is a slider, because how far a wrist wants to travel
+depends on whether you are sitting up or lying down and no measurement here can settle it.
+
+Sensor readings are also low-passed at ~70ms before the deadzone, which removes 88% of a 3°
+jitter at 60fps. Unfiltered noise reads as the ball shivering, which pushes you toward holding
+the phone at the clamped ends of the band where the signal is steady — a second, quieter route
+to the same "on/off" complaint, and one that gets *worse* as the band gets wider. `Touch.read()`
+is pure and `Touch.update(dt)` advances the filter; the split matters because the first version
+filtered inside `read()`, which made every inspection in the harness quietly wind the filter
+forward.
 
 Four things about the sensor are load-bearing, and each one is a way this silently does
 nothing on real hardware:

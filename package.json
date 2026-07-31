@@ -28,6 +28,7 @@
     "coplanar": "node tools/test-coplanar.mjs",
     "ui": "node tools/test-ui.mjs",
     "mobile": "node tools/test-mobile.mjs",
+    "tiltcurve": "node tools/test-tiltcurve.mjs",
     "progress": "node tools/test-progress.mjs"
   },
   "dependencies": {

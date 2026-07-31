@@ -560,7 +560,11 @@ export class Katamari {
 
   /**
    * Integrate one physics step.
-   * @param {object} inp  {moveX, moveZ, dash} in camera space, already normalised
+   *
+   * @param {object} inp  {moveX, moveZ, dash} in camera space. The MAGNITUDE of
+   *   (moveX, moveZ) is a throttle, not just a direction — see `throttle` below.
+   *   A keyboard always delivers exactly 1 (`Input.readMove` normalises), so
+   *   this is invisible on a desktop and is the whole game on a phone.
    * @param {number} camYaw
    */
   step(dt, inp, camYaw, world) {
@@ -589,8 +593,39 @@ export class Katamari {
     if (this.dashing) this.dash = clamp(this.dash - TUNING.dashDrain * dt, 0, 1);
     else this.dash = clamp(this.dash + TUNING.dashRecover * dt, 0, 1);
 
+    /* ---- THE INPUT MAGNITUDE IS A THROTTLE ----
+
+       It did not used to be. `mag` was computed, used to normalise the
+       direction and to gate the dash, and then thrown away: `speedCap` was
+       `base` regardless, so ANY live input accelerated to full speed. On a
+       keyboard that is correct and invisible — W is a switch and `readMove`
+       normalises, so `mag` is exactly 1 whenever it is not 0.
+
+       On a phone it meant the tilt sensor was a switch. `Touch.read()` computes
+       a careful proportional value from the angle and this function discarded
+       it one call later, which is exactly what the player reported as "it feels
+       very on/off". `tools/test-tiltcurve.mjs` shows it: a 0.11 input produced
+       100.0% of top speed, same as a 1.00 input.
+
+       Scaling the CAP rather than the acceleration is deliberate. Scaling
+       acceleration would make a gentle tilt mean "get there slowly" and it
+       would still end up at full speed; scaling the cap means a gentle tilt is
+       a genuine slow-speed command, reached just as briskly. Ease off and
+       `along > speedCap` sheds the excess at the braking rate, so it behaves
+       like a throttle in both directions. */
+    /* Snapped at the top, not just clamped. `Math.hypot(cos h, sin h)` — which
+       is exactly what the balance bot feeds, and what a keyboard diagonal
+       produces — lands one ULP below 1 for about a quarter of all headings. A
+       plain `Math.min(1, mag)` therefore multiplies the desktop speed cap by
+       0.9999999999999998 rather than by 1, which is far too small to feel and
+       just large enough that a 3000-step deterministic simulation is no longer
+       bit-identical to the one the clear rates were measured on. Snapping makes
+       "this change does not touch the keyboard game" exactly true instead of
+       true to sixteen decimal places, and 99.9% of a tilt is full tilt anyway. */
+    const throttle = mag > 0.999 ? 1 : mag;
+
     const base = topSpeedFor(D, this.stageStart, this.stageSpeed);
-    const speedCap = base * (this.dashing ? TUNING.dashMul : 1);
+    const speedCap = base * (this.dashing ? TUNING.dashMul : 1) * throttle;
     // Heaviness by progress through THIS stage, so every stage starts nimble
     // and ends ponderous instead of the later ones opening already sluggish.
     const heavy = clamp(Math.log(D / this.stageStart) / Math.log(this.stageSpan), 0, 1);

@@ -156,6 +156,12 @@ export class Game {
          buttons on its own with no sensor, so this is a preference, not a
          dependency. */
       turn: 'tilt',
+      /* Multiplier on both tilt bands, 0.6..1.6. How far a wrist wants to
+         travel for full deflection is posture-dependent — sitting up, lying
+         down, one-handed — so there is no value that is right for everyone and
+         no measurement here can find one. Shipped as a slider rather than as a
+         constant plus a round trip every time it feels wrong. */
+      tiltRange: 1,
     };
     this.save = { best: {}, cleared: [], found: [] };
 
@@ -293,6 +299,7 @@ export class Game {
     const want = this.options.controls === 'auto' ? isCoarsePointer() : this.options.controls === 'touch';
     this.touch.enabled = want;
     this.touch.turnMode = this.options.turn || 'tilt';
+    this.touch.rangeMul = this.options.tiltRange || 1;
     document.body.classList.toggle('touch', want);
     this.screens.setTouchMode(want, this.touch);
     if (!want) this.touch.releaseAll();
@@ -312,7 +319,7 @@ export class Game {
        menu, defer this to `loadStage` — every control rate is a multiple of top
        speed, so changing it mid-roll would make the ball lurch. */
     if (key === 'speedCurve') { TUNING.speedP = value; this.options.speedCurveSet = true; }
-    if (key === 'controls' || key === 'turn') this._applyControlMode();
+    if (key === 'controls' || key === 'turn' || key === 'tiltRange') this._applyControlMode();
     this._persist();
   }
 
@@ -691,6 +698,7 @@ export class Game {
        composes into steering without a second axis. Both are summed rather than
        switched, so a keyboard attached to a tablet still works. */
     const mv = this.input.readMove();
+    this.touch.update(dt);          // advance the sensor filter, once per frame
     const tc = this.touch.read();
     if (tc.turn) this.rig.yaw -= tc.turn * dt * PAN_RATE;
     const inp = {

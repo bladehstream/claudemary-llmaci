@@ -188,6 +188,11 @@ export class Screens {
     });
     bind('opt-controls', 'change', (e) => this.game.setOption('controls', e.target.value));
     bind('opt-turn', 'change', (e) => this.game.setOption('turn', e.target.value));
+    bind('opt-tiltrange', 'input', (e) => {
+      const v = +e.target.value;
+      this._tiltRangeLabel(v);
+      this.game.setOption('tiltRange', v / 100);
+    });
     bind('opt-quality', 'change', (e) => this.game.setOption('quality', e.target.value));
     bind('opt-shadows', 'change', (e) => this.game.setOption('shadows', e.target.checked));
   }
@@ -219,16 +224,43 @@ export class Screens {
       + `Applies from the next stage you start.`;
   }
 
+  /**
+   * Say it in degrees, because degrees is the thing the player can check.
+   *
+   * "Tilt range 120" is meaningless; "tip 36 degrees for full speed" is a
+   * number you can hold your phone against. The half-speed figure is the more
+   * useful one of the two, though — it is where you spend the round, and it is
+   * the number that shows what the response curve is doing. It is not half the
+   * range, because the curve is not linear.
+   */
+  _tiltRangeLabel(v) {
+    const el = document.getElementById('opt-tiltrange-note');
+    const val = document.getElementById('opt-tiltrange-val');
+    if (val) val.textContent = String(v);
+    if (!el) return;
+    const mul = v / 100;
+    const full = 30 * mul;                       // RANGE in Touch.js
+    // Invert the expo: output 0.5 happens at mag = 0.5^(1/1.5) of the travel.
+    const half = 4 + Math.pow(0.5, 1 / 1.5) * (full - 4);
+    el.textContent =
+      `Tip about ${full.toFixed(0)}° from however you are holding the phone for full speed, `
+      + `and about ${half.toFixed(0)}° for half. Lower is twitchier and reaches full speed `
+      + `with less movement; higher gives you more room to hold a steady middle. `
+      + `Steering scales with it.`;
+  }
+
   syncOptions(o) {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
     set('opt-music', Math.round(o.music * 100));
     set('opt-sfx', Math.round(o.sfx * 100));
     set('opt-sens', Math.round(o.sensitivity * 100));
     set('opt-speedcurve', Math.round(o.speedCurve * 100));
+    set('opt-tiltrange', Math.round((o.tiltRange ?? 1) * 100));
     document.getElementById('opt-music-val').textContent = String(Math.round(o.music * 100));
     document.getElementById('opt-sfx-val').textContent = String(Math.round(o.sfx * 100));
     document.getElementById('opt-sens-val').textContent = String(Math.round(o.sensitivity * 100));
     this._speedCurveLabel(Math.round(o.speedCurve * 100));
+    this._tiltRangeLabel(Math.round((o.tiltRange ?? 1) * 100));
     document.getElementById('opt-invert').checked = !!o.invertY;
     const ctl = document.getElementById('opt-controls');
     if (ctl) ctl.value = o.controls || 'auto';

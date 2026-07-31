@@ -146,5 +146,36 @@ await page.evaluate(() => { const g = window.__llmaci; while (g.ending.idx < 10)
 await page.waitForTimeout(1800);
 await shot('09-ending-card');
 
+/* ------------------------------------------------------------
+   THE SAME MENUS ON A PHONE, SCROLLED TO THE BOTTOM.
+
+   Everything above is shot at desktop width, where the menus have always been
+   fine. Two separate defects have since been reported against the PHONE menus
+   and neither was visible in any shot above: a Back button sitting under iOS
+   Safari's toolbar, and every control that was not a slider hugging the left
+   edge of an otherwise centred panel.
+
+   Scrolled to the BOTTOM specifically. That is where both of them lived, and it
+   is the part of a long panel that a default screenshot never shows.
+   ------------------------------------------------------------ */
+{
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2 });
+  const p = await phone.newPage();
+  await p.goto('http://localhost:5217/', { waitUntil: 'load' });
+  await p.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+  await p.addStyleTag({ content: '*{animation:none!important;transition:none!important}' });
+  for (const [name, action] of [['how', 'how'], ['options', 'options']]) {
+    await p.evaluate((a) => window.__llmaci.onAction(a), action);
+    await p.waitForTimeout(200);
+    await p.screenshot({ path: path.join(OUT, `phone-${name}-top.png`) });
+    await p.evaluate(() => { const el = document.querySelector('.screen:not(.hidden) .panel'); el.scrollTop = el.scrollHeight; });
+    await p.waitForTimeout(200);
+    await p.screenshot({ path: path.join(OUT, `phone-${name}-bottom.png`) });
+    console.log(`  phone-${name}-top / -bottom`);
+    await p.evaluate(() => window.__llmaci.onAction('back-title'));
+  }
+  await phone.close();
+}
+
 await browser.close(); await server.close();
 console.log(`\nwrote to ${OUT}`);

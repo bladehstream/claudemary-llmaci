@@ -171,7 +171,17 @@ html, body {
   padding: 30px 38px 26px;
   max-width: 620px;
   width: min(92vw, 620px);
-  max-height: 90vh;
+  /* PERCENTAGE, NOT `vh`.
+     `.screen` is `inset: 0` inside a `position: fixed` #app, so 100% here is
+     exactly the visible area, on every browser, with no viewport-unit games.
+     `90vh` renders identically on a desktop and is a trap on iOS: Safari's
+     `100vh` is the LARGE viewport — the height with the URL bar retracted — so
+     while the bar and the bottom toolbar are on screen, `90vh` is TALLER than
+     the container this panel actually lives in. `.screen` centres it, the
+     excess splits evenly top and bottom, and the Back button, being the last
+     thing in the panel, ends up underneath Safari's own toolbar. Reported by a
+     player as "the back button is a bit hard to hit on iPhones". */
+  max-height: 90%;
   overflow-y: auto;
   text-align: center;
 }
@@ -916,13 +926,26 @@ body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
 @media (max-width: 620px) {
   .panel, .panel.wide, .panel.narrow {
     width: min(96vw, 620px); max-width: 96vw;
-    padding: 22px 18px 20px; border-radius: 22px;
-    max-height: calc(100vh - 24px);
+    /* The bottom padding is the thumb room under Back, and it is the whole
+       point of this rule. It was 20px, which put the button's bottom edge 38px
+       from the bottom of the viewport — inside the home indicator's ~34pt strip
+       on a notched iPhone, and squarely behind Safari's toolbar when that is
+       showing. `env(safe-area-inset-bottom)` handles the indicator; the 38px
+       handles the thumb. Note this padding is INSIDE the scroll container, so it
+       is space you can actually scroll the button up away from the edge with,
+       not a margin that the panel's own overflow would swallow. */
+    padding: 22px 18px calc(38px + env(safe-area-inset-bottom));
+    border-radius: 22px;
+    max-height: calc(100% - 36px);
   }
   .panel-title { font-size: 30px; margin-bottom: 12px; }
   .btn { font-size: 18px; padding: 9px 24px; border-width: 3px; }
   .btn-big { font-size: 22px; padding: 12px 32px; }
-  .panel-actions { gap: 10px; margin-top: 16px; }
+  /* 26px, was 16. The complaint was "hard to hit", and the note paragraph
+     directly above Back is a wall of small text — a fat target 16px under a
+     block of prose still reads as crowded and still invites a mis-tap on the
+     text above it. */
+  .panel-actions { gap: 10px; margin-top: 26px; }
 
   /* One card per row, and let the art shrink rather than the text wrap. */
   .stage-cards { gap: 12px; }
@@ -933,8 +956,26 @@ body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
   /* Label column was a fixed 200px, which left ~120px for the slider. */
   .opt-row { grid-template-columns: 1fr 92px; gap: 8px 10px; font-size: 15px; }
   .opt-row label { grid-column: 1; }
-  .opt-row input[type=range] { grid-column: 1 / -1; grid-row: 2; }
   .opt-val { grid-column: 2; grid-row: 1; text-align: right; }
+
+  /* EVERY control drops to its own row, not just the sliders.
+     Only `input[type=range]` was ever placed here. Everything else — the
+     selects, the checkboxes, the Reset Progress button — had no explicit
+     placement, so it auto-flowed into the first free cell (row 2, column 1) and
+     sat hard against the left edge of a panel whose every other element is
+     centred. Measured: selects 51px left of centre, checkboxes 151px, and the
+     Reset Progress pill 89px, which is the one a player noticed because it is a
+     big pink shape with nothing to line up against.
+
+     `justify-self: center` is what does the centring; the full-width span alone
+     would only re-stretch them. The range inputs keep their `width: 100%` so
+     centring is a no-op for those and they stay edge to edge. */
+  .opt-row > input[type=range],
+  .opt-row > input[type=checkbox],
+  .opt-row > select,
+  .opt-row > .btn {
+    grid-column: 1 / -1; grid-row: 2; justify-self: center;
+  }
   .opt-note { font-size: 12px; max-width: none; }
 
   .how-grid { grid-template-columns: 1fr; gap: 6px; }

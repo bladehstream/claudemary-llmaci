@@ -47,10 +47,49 @@
 
 import { clamp } from '../util/math.js';
 
+/* ------------------------------------------------------------
+   THE RESPONSE CURVE
+
+   The first cut used an 18-degree band on drive and 20 on turn, and the player
+   reported it felt "very on/off". Two separate causes; the smaller one is here.
+
+   18 degrees is a SMALL wrist movement. Tip a phone to a comfortable reading
+   angle and you have already spent most of it, so the middle of the band — the
+   part that is supposed to be proportional — is a region you pass through
+   rather than sit in. Both bands are roughly doubled below: 34 degrees of
+   usable travel on drive, 39 on turn, which is a movement you can aim.
+
+   The LARGER cause was not in this file at all. `Katamari.step` normalised the
+   input vector and accelerated to a fixed cap, so however carefully `read()`
+   computed a proportional value, the drive axis was a switch. Fixed there.
+   Widening these constants alone would have changed nothing you could feel on
+   the drive axis — worth remembering the next time a feel complaint looks like
+   it wants a constant tuned.
+
+   EXPO, NOT STEPS. The ask was to quantise the range into 20% increments, and
+   that is the one change that makes this worse: the signal is already
+   continuous, so notching it can only throw resolution away, and five notches
+   is a coarser control than the infinite ones already on offer. What "I can't
+   find the middle" actually wants is more of the PHYSICAL travel spent in the
+   lower half of the OUTPUT — which is what an exponent does. At half
+   deflection, EXPO 1.5 gives 35% instead of 50%, so the gentle half of the band
+   buys the gentle third of the speed and the abrupt part is pushed out to the
+   end where you are deliberately shoving. Same reason a gamepad stick has one.
+
+   AND THE WIDTH IS A SLIDER, because it has to be. Widening the band trades
+   "twitchy" for "I have to wave the phone around", and where that trade lands
+   depends on whether the player is sitting up, lying down or holding the phone
+   one-handed — none of which is knowable from here. The first attempt at this
+   used RANGE 38 with EXPO 1.6, which measured beautifully and would have given
+   30% of top speed at a comfortable 20-degree tilt, i.e. an hour of crawling
+   across a city. `rangeMul` (Options -> Tilt range, 0.6x to 1.6x) scales both
+   bands so the answer is one slider away instead of one round trip away.
+   ------------------------------------------------------------ */
+
 /** Degrees away from neutral that count as "not moving" — hands are not steady. */
 const DEADZONE = 4;
-/** Degrees away from neutral for full thrust. A wrist rolls this far comfortably. */
-const RANGE = 22;
+/** Degrees away from neutral for full thrust, at a `rangeMul` of 1. */
+const RANGE = 30;
 /** Where we assume the phone is held before we have ever seen a reading. */
 const DEFAULT_NEUTRAL = 50;
 /** Camera pan rate from a held button, radians/sec. Matches Q/E on the keyboard. */
@@ -59,8 +98,43 @@ export const PAN_RATE = 2.1;
  *  wrist rolls a little every time you tip the phone forward, and a turn that
  *  creeps on while you are only trying to drive is worse than a slow one. */
 const TURN_DEAD = 6;
-/** Degrees of roll for a full-rate turn. */
-const TURN_RANGE = 26;
+/** Degrees of roll for a full-rate turn, at a `rangeMul` of 1. */
+const TURN_RANGE = 36;
+/** Shape of both axes. 1 is linear; above 1 gives away the low end. */
+const EXPO = 1.5;
+
+/**
+ * Degrees from neutral -> -1..1, deadzoned and expo'd.
+ *
+ * One function for both axes because they differ only in their constants, and
+ * two near-identical inline blocks is how a pair like that drifts apart.
+ */
+function curve(offset, dead, range) {
+  const mag = (Math.abs(offset) - dead) / (range - dead);
+  if (mag <= 0) return 0;
+  return Math.sign(offset) * Math.pow(clamp(mag, 0, 1), EXPO);
+}
+
+/**
+ * Low-pass the raw sensor.
+ *
+ * `deviceorientation` jitters at the degree level even on a phone lying still,
+ * and that noise does not average out in the hand — it reads as the ball
+ * shivering, which pushes you toward holding the phone near the ends of the
+ * band where the value is clamped and therefore steady. That is a second,
+ * sneakier route to "it feels on/off", and widening the band makes it MORE
+ * visible rather than less, because more of the band is now in the region where
+ * a degree of noise maps to a change you can see.
+ *
+ * One pole, ~70ms, and deliberately light: this is a steering input, and
+ * anything heavier trades the jitter for lag, which is the worse of the two.
+ * Written frame-rate independent so it behaves the same at 30fps and at 120.
+ */
+const SMOOTH_TAU = 0.07;
+function smooth(prev, next, dt) {
+  if (prev === null || !isFinite(prev)) return next;
+  return next + (prev - next) * Math.exp(-dt / SMOOTH_TAU);
+}
 
 /** True on a device driven by a finger rather than a mouse. */
 export function isCoarsePointer() {
@@ -81,11 +155,23 @@ export class TouchControls {
     this.rawTurn = null;           // last roll reading, degrees, or null
     this.neutralTurn = 0;
     this.turnMode = 'tilt';        // 'tilt' | 'buttons'
+    /* Scales both bands, from Options -> Tilt range. The DEADZONES deliberately
+       do not scale: they exist to swallow a hand tremor, which is an absolute
+       number of degrees and does not get bigger because you asked for a longer
+       throw. */
+    this.rangeMul = 1;
     this.quitHeld = false;
     this.dash = false;
     this.manual = 0;               // -1..1 from the fallback drive buttons
     this.portrait = true;
     this._held = new Map();        // pointerId -> button element
+    /* Filtered copies of the two raw angles. Kept separate from `raw`/`rawTurn`
+       so `calibrate()` still zeroes to the true reading and the filter is not
+       fighting a neutral derived from its own output. Null means "not started",
+       which makes the filter snap to the first sample instead of ramping up
+       from a stale angle when a new round begins. */
+    this.fRaw = null;
+    this.fTurn = null;
 
     /**
      * Fired ONCE, when the first real reading lands. Not decoration: granting
@@ -178,6 +264,12 @@ export class TouchControls {
     if (this.raw !== null) {
       this.neutral = this.raw;
       if (this.rawTurn !== null) this.neutralTurn = this.rawTurn;
+      /* Restart the filter at the new neutral. Leaving it holding the old angle
+         means the first fraction of a second after a recentre is a phantom
+         input from wherever the phone used to be — which is exactly the moment
+         the player is watching to see whether the recentre worked. */
+      this.fRaw = this.raw;
+      this.fTurn = this.rawTurn;
     } else this._needsCalibrate = true;
   }
 
@@ -260,6 +352,21 @@ export class TouchControls {
      ------------------------------------------------------------ */
 
   /**
+   * Advance the sensor filter. Call ONCE per frame, before `read()`.
+   *
+   * Filtering happens before the deadzone rather than after, because the other
+   * order lets noise chatter across the deadzone edge — the input flicking
+   * between zero and something several times a second, which feels like a loose
+   * connection rather than like a control.
+   *
+   * @param {number} dt seconds since the last frame.
+   */
+  update(dt) {
+    if (this.raw !== null) this.fRaw = smooth(this.fRaw, this.raw, dt);
+    if (this.rawTurn !== null) this.fTurn = smooth(this.fTurn, this.rawTurn, dt);
+  }
+
+  /**
    * Movement for this frame, in the same camera-relative form `Input.readMove`
    * returns, so `Katamari.step` cannot tell the difference.
    *
@@ -267,15 +374,25 @@ export class TouchControls {
    * the phone away from you LOWERS beta, so forward thrust is
    * `neutral - beta` — get that sign backwards and the game drives itself into
    * your lap.
+   *
+   * `moveZ` is a THROTTLE, not a direction flag: `Katamari.step` scales its
+   * speed cap by the magnitude. It did not always, which is what made every
+   * angle past the deadzone feel identical — see the note there.
+   *
+   * PURE. Advancing the sensor filter lives in `update()` instead, and the
+   * split is not tidiness: the first version filtered inside here, which made
+   * reading the control mutate it. `test-mobile` inspects `read()` a dozen
+   * times per assertion and would have been quietly winding the filter forward
+   * every time, and any future debug overlay that sampled the input would have
+   * changed the input by sampling it. A getter with a side effect on a
+   * once-per-frame contract is a trap for whoever calls it twice.
    */
   read() {
     if (!this.enabled) return { moveX: 0, moveZ: 0, dash: false, pan: 0, turn: 0 };
 
     let t = 0;
     if (this.tiltLive && this.portrait) {
-      const off = this.neutral - this.raw;
-      const mag = Math.max(0, Math.abs(off) - DEADZONE) / (RANGE - DEADZONE);
-      t = Math.sign(off) * clamp(mag, 0, 1);
+      t = curve(this.neutral - this.fRaw, DEADZONE, RANGE * this.rangeMul);
     } else if (!this.tiltLive) {
       t = this.manual;
     }
@@ -286,9 +403,7 @@ export class TouchControls {
        axis means the buttons fight whatever your wrist happens to be doing. */
     let turn = this.pan;
     if (this.turnByTilt) {
-      const off = this.rawTurn - this.neutralTurn;
-      const mag = Math.max(0, Math.abs(off) - TURN_DEAD) / (TURN_RANGE - TURN_DEAD);
-      turn = Math.sign(off) * clamp(mag, 0, 1);
+      turn = curve(this.fTurn - this.neutralTurn, TURN_DEAD, TURN_RANGE * this.rangeMul);
     }
     return { moveX: 0, moveZ: -t, dash: this.dash, pan: this.pan, turn };
   }

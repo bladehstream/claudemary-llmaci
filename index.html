@@ -154,16 +154,21 @@
         <!-- Two control sheets. `body.touch` swaps which one is visible, because
              telling a phone player about Shift is worse than telling them nothing. -->
         <div class="how-grid how-touch hidden">
-          <div class="how-key">Tilt</div><div>Tip the top of the phone <b>away</b> from you to roll forward, and back toward you to reverse</div>
-          <div class="how-key">‹ ›</div><div>Pan the camera. The katamari always rolls the way the camera faces, so you steer by panning while you tilt</div>
+          <div class="how-key">Tilt ↕</div><div>Tip the top of the phone <b>away</b> from you to roll forward, and back toward you to reverse. It is a throttle, not a switch — a gentle tip crawls, a firm one runs</div>
+          <div class="how-key">Tilt ↔</div><div>Roll the phone like a steering wheel to swing the camera. The katamari always rolls the way the camera faces, so this is how you steer</div>
           <div class="how-key">DASH</div><div>Hold for a burst of speed. You need it to climb — a slope you crawl at will stop you</div>
-          <div class="how-key">RECENTRE</div><div>Re-zero the tilt to however you are holding the phone now. Use it whenever you shift position</div>
+          <div class="how-key">RECENTRE</div><div>Re-zero both tilts to however you are holding the phone now. Use it whenever you shift position</div>
+          <div class="how-key">✕</div><div>Hold to quit back to the title. It fills up as you hold</div>
           <div class="how-key">II</div><div>Pause. From there you can restart or quit</div>
         </div>
         <p class="how-note how-touch hidden">
+          Prefer buttons? <b>Options → Turning</b> swaps the steering for on-screen ‹ › arrows,
+          and <b>Tilt range</b> sets how far you have to tip for full speed.
+        </p>
+        <p class="how-note how-touch hidden">
           No motion sensor, or you declined the permission? On-screen ▲ and ▼ arrows
-          appear in place of RECENTRE and drive the katamari instead. Everything else
-          is identical.
+          appear in place of RECENTRE and drive the katamari instead, and the ‹ › arrows
+          come back to steer with. Everything else is identical.
         </p>
         <div class="how-grid how-keys">
           <div class="how-key">W A S D</div><div>Roll the katamari, always relative to where the camera is looking (arrow keys work too)</div>
@@ -251,6 +256,17 @@
           Arrows are steadier if you are lying down or on a moving train. Falls back to
           arrows on its own when there is no motion sensor.
         </p>
+        <!-- How far you tilt for full speed. This is a FEEL setting and no amount of
+             measuring picks it for you: how far a wrist wants to travel depends on
+             whether you are sitting up, lying down, or holding the phone one-handed.
+             A slider the player can find in ten seconds beats a constant somebody
+             guessed and a round trip to change it. -->
+        <div class="opt-row">
+          <label for="opt-tiltrange">Tilt range (touch)</label>
+          <input id="opt-tiltrange" type="range" min="60" max="160" value="100" />
+          <span id="opt-tiltrange-val" class="opt-val">100</span>
+        </div>
+        <p class="opt-note" id="opt-tiltrange-note"></p>
         <div class="opt-row">
           <label for="opt-quality">Render quality</label>
           <select id="opt-quality">

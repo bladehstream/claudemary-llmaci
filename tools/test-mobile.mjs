@@ -54,6 +54,27 @@ const check = (name, ok, extra = '') => {
 };
 
 /**
+ * Move the sensor and let the input filter catch up, then read.
+ *
+ * `Touch.read()` is pure — `update(dt)` advances the low-pass filter, once per
+ * frame from the game loop. So setting an angle and reading it in the same task
+ * returns the PREVIOUS frame's angle, which is correct behaviour and made six
+ * assertions here read a flat 0.000 the moment the filter landed.
+ *
+ * Forcing a full second of filter time converges it completely (tau is 70ms)
+ * and keeps these assertions about the ANGLE MAPPING rather than about how many
+ * frames swiftshader managed. The end-to-end "the katamari actually travels"
+ * check below still goes through real frames, which is where the filter's real
+ * timing gets exercised.
+ */
+const tilt = (page, { beta, gamma } = {}) => page.evaluate((v) => {
+  if (v.beta !== undefined) window.__setBeta(v.beta);
+  if (v.gamma !== undefined) window.__setGamma(v.gamma);
+  window.__llmaci.touch.update(1);
+  return window.__llmaci.touch.read();
+}, { beta, gamma });
+
+/**
  * Replace DeviceOrientationEvent with something we can drive.
  *
  * `grant` false makes requestPermission() resolve 'denied', which is the branch
@@ -157,6 +178,53 @@ console.log('\n=== the game knows it is on a phone ===');
     check(`${k} panel fits the width`, !fits[k].over, `${fits[k].w}px in a ${fits.vw}px viewport`);
   }
   check('no horizontal overflow anywhere', !fits.scrollX);
+
+  /* ---- and you can actually HIT the button at the bottom ----
+
+     The check above measures WIDTH, and its own comment claims that "the
+     buttons at the bottom of a too-tall panel are unreachable" — and then never
+     looks at a button. A player reported exactly that about Back on an iPhone.
+
+     Two things a phone browser does that a desktop one does not:
+
+     - iOS Safari's `100vh` is the LARGE viewport, the height with the URL bar
+       retracted. While the bar and the bottom toolbar are on screen the visible
+       area is ~110px shorter, so a panel sized to `100vh` runs underneath the
+       toolbar and its last element is behind Safari's own UI.
+     - The home indicator owns the bottom ~34pt whatever the toolbar is doing.
+
+     Chromium cannot draw Safari's chrome, so this cannot reproduce the toolbar
+     directly. What it CAN pin is the proxy: after scrolling to the bottom of
+     the panel, how much clear space is there under the button, and is the
+     button a real touch target. 44px is Apple's minimum on both counts. */
+  const reach = await page.evaluate(() => {
+    const out = {};
+    for (const [name, action] of [['how', 'how'], ['options', 'options']]) {
+      window.__llmaci.onAction(action);
+      const panel = document.querySelector('.screen:not(.hidden) .panel');
+      panel.scrollTop = panel.scrollHeight;      // as far down as a thumb can get
+      const btn = [...document.querySelectorAll('.screen:not(.hidden) .panel-actions .btn')].pop();
+      const r = btn.getBoundingClientRect();
+      const p = panel.getBoundingClientRect();
+      out[name] = {
+        w: Math.round(r.width), h: Math.round(r.height),
+        underButton: Math.round(window.innerHeight - r.bottom),
+        insidePanel: Math.round(p.bottom - r.bottom),
+        scrolls: panel.scrollHeight > panel.clientHeight + 1,
+        inView: r.bottom <= window.innerHeight + 0.5 && r.top >= -0.5,
+      };
+    }
+    out.vh = window.innerHeight;
+    return out;
+  });
+  for (const k of ['how', 'options']) {
+    const b = reach[k];
+    check(`${k}: Back is a real touch target`, b.h >= 44 && b.w >= 44, `${b.w}x${b.h}px (Apple minimum 44)`);
+    check(`${k}: Back is on screen once scrolled`, b.inView, `bottom edge, viewport ${reach.vh}px`);
+    check(`${k}: Back clears the bottom edge`, b.underButton >= 44,
+      `${b.underButton}px of clear space under it — iOS puts its toolbar and home indicator here`);
+  }
+
   check('no page errors', errors.length === 0, errors.slice(0, 2).join(' | ').slice(0, 160));
   await ctx.close();
 }
@@ -231,18 +299,35 @@ console.log('\n=== tilt drives the katamari ===');
     `neutral ${held.neutral}, moveZ ${held.thrust}`);
 
   // Inside the deadzone: still nothing.
-  const dead = await page.evaluate(() => { window.__setBeta(49); return window.__llmaci.touch.read().moveZ; });
+  const dead = (await tilt(page, { beta: 49 })).moveZ;
   check('a 3-degree wobble is inside the deadzone', dead === 0, `moveZ ${dead}`);
 
   /* Tip the TOP AWAY from you: beta falls. That must read as forward, which is
      NEGATIVE moveZ — the same sign W produces. Getting this backwards is the
-     bug where the ball drives into your lap. */
-  const fwd = await page.evaluate(() => { window.__setBeta(30); return window.__llmaci.touch.read().moveZ; });
-  check('tilting away rolls FORWARD', fwd < -0.9, `moveZ ${fwd.toFixed(3)} (want about -1)`);
-  const back = await page.evaluate(() => { window.__setBeta(74); return window.__llmaci.touch.read().moveZ; });
-  check('tilting back reverses', back > 0.9, `moveZ ${back.toFixed(3)} (want about +1)`);
-  const partial = await page.evaluate(() => { window.__setBeta(41); return window.__llmaci.touch.read().moveZ; });
-  check('partial tilt is proportional', partial < -0.2 && partial > -0.8, `moveZ ${partial.toFixed(3)}`);
+     bug where the ball drives into your lap.
+
+     52 - 22 = 30 degrees of offset, which is exactly RANGE, so this is the
+     first angle that commands everything. It used to be 22 degrees; the band
+     was widened after the controls read as on/off. */
+  const fwd = (await tilt(page, { beta: 22 })).moveZ;
+  check('tilting away rolls FORWARD', fwd < -0.99, `moveZ ${fwd.toFixed(3)} (want -1)`);
+  const back = (await tilt(page, { beta: 82 })).moveZ;
+  check('tilting back reverses', back > 0.99, `moveZ ${back.toFixed(3)} (want +1)`);
+
+  /* THE POINT OF THE WHOLE EXERCISE: a middling angle must give a middling
+     number. 18 degrees of offset is a bit over half the band, and the expo
+     turns that into about 0.4 — deliberately less than half, so the gentle end
+     of the travel buys the gentle end of the speed. */
+  const partial = (await tilt(page, { beta: 34 })).moveZ;
+  check('partial tilt is proportional', partial < -0.25 && partial > -0.6, `moveZ ${partial.toFixed(3)}`);
+
+  /* And the curve is monotonic with no flat spots — five angles, five distinct
+     and increasing outputs. This is the assertion the player's report would
+     have failed: before the fix every one of these read exactly -1.000. */
+  const ramp = [];
+  for (const b of [46, 40, 34, 28, 22]) ramp.push(-(await tilt(page, { beta: b })).moveZ);
+  const rising = ramp.every((v, i) => i === 0 || v > ramp[i - 1] + 0.04);
+  check('the whole band is distinguishable', rising, ramp.map((v) => v.toFixed(2)).join(' -> '));
 
   // And the physics really moves. This is the end-to-end check: the other
   // assertions could all pass with the value never reaching Katamari.step.
@@ -254,6 +339,42 @@ console.log('\n=== tilt drives the katamari ===');
     return Math.hypot(g.kat.pos.x - p0.x, g.kat.pos.z - p0.z);
   });
   check('the katamari actually travels', moved > 0.01, `moved ${moved.toFixed(4)} units`);
+
+  /* AND A GENTLE TILT IS GENUINELY SLOWER.
+     This is the assertion that would have caught the original complaint, and
+     none of the ones above would have: `Katamari.step` normalised the input and
+     accelerated to a fixed cap, so every angle past the deadzone produced
+     identical motion while `read()` returned a perfectly good proportional
+     number. Everything upstream of the physics can be right and the control
+     still be a switch, so measure the SPEED, not the input. */
+  const speeds = await page.evaluate(async () => {
+    const g = window.__llmaci;
+    const p = { x: g.kat.pos.x, y: g.kat.pos.y, z: g.kat.pos.z };
+    /* PEAK speed over the run, not the speed at the end of it. The first
+       version read the final velocity and reported the full tilt as SLOWER
+       than the gentle one — because a full tilt crosses the room faster and
+       had run into the furniture by frame 20, so it was measuring a collision.
+       Acceleration does not scale with the throttle, only the cap does, so the
+       peak is reached early and survives whatever the ball hits afterwards. */
+    const run = async (beta) => {
+      g.kat.pos.set(p.x, p.y, p.z);
+      g.kat.vel.x = 0; g.kat.vel.z = 0;
+      window.__setBeta(beta);
+      let peak = 0;
+      await new Promise((res) => {
+        let n = 0;
+        const t = () => {
+          peak = Math.max(peak, Math.hypot(g.kat.vel.x, g.kat.vel.z) / g.kat.topSpeed);
+          return ++n > 20 ? res() : requestAnimationFrame(t);
+        };
+        requestAnimationFrame(t);
+      });
+      return peak;
+    };
+    return { gentle: await run(38), full: await run(22) };
+  });
+  check('a gentle tilt commands a lower speed', speeds.gentle < speeds.full * 0.6,
+    `${(speeds.gentle * 100).toFixed(0)}% of top vs ${(speeds.full * 100).toFixed(0)}% at full tilt`);
 
   // Recentring mid-round adopts the new angle as zero.
   const recal = await page.evaluate(() => {
@@ -335,16 +456,15 @@ console.log('\n=== the thumb buttons ===');
     g.setOption('turn', 'tilt');
     window.__setGamma(0);
     g.touch.calibrate();
+    // Same filter problem as the drive axis: read() is pure, so each angle
+    // needs the filter driven forward before it means anything.
+    const at = (deg) => { window.__setGamma(deg); g.touch.update(1); return g.touch.read().turn; };
     const hidden = document.getElementById('mc-panpair').classList.contains('hidden');
-    const flat = g.touch.read().turn;
-    window.__setGamma(4);                     // inside the deadzone
-    const dead = g.touch.read().turn;
-    window.__setGamma(30);                    // full roll right
-    const right = g.touch.read().turn;
-    window.__setGamma(-30);
-    const left = g.touch.read().turn;
-    window.__setGamma(-16);                   // partway
-    const part = g.touch.read().turn;
+    const flat = at(0);
+    const dead = at(4);                       // inside the 6-degree deadzone
+    const right = at(36);                     // TURN_RANGE — full roll right
+    const left = at(-36);
+    const part = at(-22);                     // partway
     const y0 = g.rig.yaw;
     await new Promise((res) => { let n = 0; const t = () => (++n > 12 ? res() : requestAnimationFrame(t)); requestAnimationFrame(t); });
     return { hidden, flat, dead, right, left, part, yawMoved: g.rig.yaw - y0 };
@@ -352,9 +472,9 @@ console.log('\n=== the thumb buttons ===');
   check('tilt steering hides the pan arrows', steer.hidden);
   check('level phone does not turn', steer.flat === 0 && steer.dead === 0,
     `level ${steer.flat}, 4deg ${steer.dead}`);
-  check('rolling right turns right', steer.right > 0.9, `turn ${steer.right.toFixed(2)}`);
-  check('rolling left turns left', steer.left < -0.9, `turn ${steer.left.toFixed(2)}`);
-  check('partial roll is proportional', steer.part < -0.2 && steer.part > -0.8, `turn ${steer.part.toFixed(2)}`);
+  check('rolling right turns right', steer.right > 0.99, `turn ${steer.right.toFixed(2)}`);
+  check('rolling left turns left', steer.left < -0.99, `turn ${steer.left.toFixed(2)}`);
+  check('partial roll is proportional', steer.part < -0.25 && steer.part > -0.7, `turn ${steer.part.toFixed(2)}`);
   check('and it actually swings the camera', Math.abs(steer.yawMoved) > 0.05,
     `yaw moved ${steer.yawMoved.toFixed(3)}`);
 
@@ -363,7 +483,7 @@ console.log('\n=== the thumb buttons ===');
     g.setOption('turn', 'buttons');
     return {
       shown: !document.getElementById('mc-panpair').classList.contains('hidden'),
-      turn: (window.__setGamma(30), g.touch.read().turn),
+      turn: (window.__setGamma(36), g.touch.update(1), g.touch.read().turn),
     };
   });
   check('switching to buttons brings the arrows back', back.shown);
@@ -419,6 +539,30 @@ console.log('\n=== the thumb buttons ===');
   await frames(3);
   check('sliding off the quit button releases it',
     await page.evaluate(() => window.__llmaci.touch.quitHeld === false && window.__llmaci.quitHold === 0));
+
+  /* ---- Options -> Tilt range ----
+     The whole argument for shipping the band width as a slider is that nobody
+     can pick the number from here, which is worth nothing if the control turns
+     out to be inert or to forget itself. Check every link in the chain: the row
+     exists, moving it reaches `touch.rangeMul`, the note says something in
+     degrees rather than in arbitrary units, and it is written to the save. */
+  const slider = await page.evaluate(() => {
+    const el = document.getElementById('opt-tiltrange');
+    if (!el) return { missing: true };
+    const g = window.__llmaci;
+    const move = (v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); return g.touch.rangeMul; };
+    const narrow = move(60);
+    const note = document.getElementById('opt-tiltrange-note').textContent;
+    const wide = move(160);
+    return { missing: false, narrow, wide, saved: g.options.tiltRange, note };
+  });
+  check('the tilt range slider exists', !slider.missing);
+  check('and moves the band', Math.abs(slider.narrow - 0.6) < 1e-9 && Math.abs(slider.wide - 1.6) < 1e-9,
+    `60 -> ${slider.narrow}, 160 -> ${slider.wide}`);
+  check('and says what it does in degrees', /\d+°/.test(slider.note || ''),
+    `"${(slider.note || '').slice(0, 48)}…"`);
+  check('and is persisted', Math.abs(slider.saved - 1.6) < 1e-9, `options.tiltRange ${slider.saved}`);
+
   await ctx.close();
 }
 
