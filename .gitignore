@@ -1,12 +1,19 @@
+# Dependencies and build output
 node_modules/
 dist/
-.DS_Store
-*.log
-.vite/
 dist-single/
+.vite/
 .single-tmp/
 
-# Build artefacts that have been living in the working tree
+# Secrets. Nothing here needs an env file today — this is preventive, because the
+# repository is public and the cost of noticing too late is a rotated credential
+# and a rewritten history.
+.env
+.env.*
+*.local
+!.env.example
+
+# Build artefacts that live in the working tree
 claudemary-llmaci.html
 llmaci-src.zip
 tools/shots/
@@ -17,3 +24,17 @@ tools/shots/
 # Local scratch created by the device bridge (it cannot delete files)
 _to_delete/
 .gittest/
+
+# Editor and OS droppings. The host is Windows, so Thumbs.db and desktop.ini are
+# the ones that actually turn up here; .DS_Store is for anyone on a Mac.
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
