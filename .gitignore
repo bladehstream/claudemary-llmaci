@@ -17,6 +17,11 @@ dist-single/
 claudemary-llmaci.html
 llmaci-src.zip
 tools/shots/
+# Rendered score, for listening to. Multi-megabyte binaries that are fully
+# reproducible from `npm run rendermusic`, so there is no reason to version them
+# -- and every reason not to, in a repo whose whole pitch is that it ships no
+# audio assets.
+tools/audio/
 
 # Cloudflare Pages / Wrangler
 .wrangler/
@@ -38,3 +43,9 @@ desktop.ini
 # Logs
 *.log
 npm-debug.log*
+
+# Raw fart-sample sources. The BAKED result lives in src/audio/fartSamples.js,
+# which is what the game actually ships; keeping the originals here as well
+# would double the audio in the repo for no benefit. Re-bake from wherever you
+# keep the originals with `npm run bakefarts -- <dir>`.
+sfx_an/

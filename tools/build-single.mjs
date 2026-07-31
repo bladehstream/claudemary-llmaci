@@ -42,12 +42,18 @@ await build({
     cssCodeSplit: false,
     assetsInlineLimit: 100_000_000,
     modulePreload: { polyfill: false },
+    /* Still `rollupOptions` on Vite 8, which bundles with rolldown rather than
+       rollup — the key is kept as an alias and everything below is honoured.
+       `inlineDynamicImports: true` used to live here and has been removed: it is
+       implied by the `iife` format's `codeSplitting: false`, and rolldown warns
+       on every build that it is being ignored. The single-file guarantee does
+       not rest on it either way — this script asserts "external refs: none"
+       against the finished HTML, which is the property that actually matters. */
     rollupOptions: {
       output: {
         // A classic script, not a module: this is the bit that makes
         // file:// work at all.
         format: 'iife',
-        inlineDynamicImports: true,
         entryFileNames: 'bundle.js',
         assetFileNames: 'bundle.[ext]',
       },

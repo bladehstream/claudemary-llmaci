@@ -162,12 +162,23 @@ export class Game {
          no measurement here can find one. Shipped as a slider rather than as a
          constant plus a round trip every time it feels wrong. */
       tiltRange: 1,
+      /* Fart mode. Deliberately NOT given an Options row — it is unlocked by
+         tapping the play area ten times and the discovery is most of the joke.
+         It lives in `options` rather than in `save` so that Reset Progress
+         keeps it: it is a preference, not something you earned, and somebody
+         replaying the ladder has not asked to be made serious again. */
+      fart: false,
     };
     this.save = { best: {}, cleared: [], found: [] };
 
     this._load();
     this.screens.syncOptions(this.options);
     this._applyControlMode();
+    /* Restore the easter egg across reloads. `_load` fills `this.options` but
+       `Sfx` holds the live flag, and nothing else copies it across — without
+       this line the mode silently switches itself off every refresh and reads
+       as a bug rather than as a joke. */
+    this.sfx.fartMode = !!this.options.fart;
 
     window.addEventListener('resize', () => this.scene.resize());
     this.input.onKey = (code) => this._onKey(code);
@@ -180,6 +191,48 @@ export class Game {
         this.input.requestLock();
       }
     });
+    /* THE TEN-TAP EASTER EGG. `pointerdown`, not `click`, so it counts a mouse
+       and a thumb identically — and on the canvas specifically, so it only
+       fires in the play area. The mobile control buttons are separate elements
+       with their own handlers, so hammering DASH does not accidentally unlock
+       anything. */
+    canvas.addEventListener('pointerdown', () => this._secretTap());
+  }
+
+  /**
+   * Ten taps in the play area toggles fart mode. Yes, really.
+   *
+   * Windowed rather than cumulative: ten taps spread over a whole round is
+   * ordinary play (every click also asks for pointer lock), so a plain counter
+   * would fire on somebody who never asked for it. Requiring them within 900ms
+   * of each other makes it a deliberate act — nobody drums on the screen ten
+   * times by accident — while still being findable by a person who has been
+   * told "tap it a bunch of times".
+   *
+   * Toggling rather than latching matters just as much: it persists in the
+   * save, so without a way back the only cure for a joke that stopped being
+   * funny would be Reset Progress, which also throws away every stage you
+   * cleared.
+   */
+  _secretTap() {
+    if (this.state !== 'playing') return;
+    const now = performance.now();
+    if (now - (this._tapAt || 0) > 900) this._tapCount = 0;
+    this._tapAt = now;
+    this._tapCount = (this._tapCount || 0) + 1;
+    if (this._tapCount < 10) return;
+    this._tapCount = 0;
+
+    const on = !this.sfx.fartMode;
+    this.sfx.fartMode = on;
+    this.options.fart = on;
+    this._persist();
+    this._ensureAudio();
+    this.hud.banner(on ? "OK I guess we're 10!" : 'grown up again');
+    /* Play one immediately at a middling size. Without it the unlock is a
+       banner and a promise, and the next pickup might be a hundred metres
+       away — the payoff has to land while the banner is still on screen. */
+    if (on) this.sfx.fart(0.45);
   }
 
   /* ------------------------------------------------------------

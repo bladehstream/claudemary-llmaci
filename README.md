@@ -90,8 +90,10 @@ Three files in the repo exist only for this:
 
 - **`.node-version`** pins Node to 22.16.0. Pages' v3 build image already defaults to that,
   but v2 defaults to 18.17.1 and v1 to 12.18.0, and which image a project gets depends on
-  when it was created. Vite 5 needs ≥18, so v1 would fail with a confusing error a long way
-  from the cause. Pinning costs one line.
+  when it was created. Pinning costs one line and it now does more work than it used to:
+  **Vite 8 requires `^20.19.0 || >=22.12.0`**, so both the v2 and v1 images would fail
+  outright rather than merely confusingly. 22.16.0 satisfies it with room to spare — but if
+  this pin is ever lowered, check it against Vite's `engines` first.
 - **`public/_headers`** is copied verbatim into `dist/` by Vite and read by Pages from the
   output root. Pages' default for every asset is `public, max-age=0, must-revalidate` plus an
   ETag, which is correct for stable filenames and wasteful for Vite's content-hashed ones — a
@@ -935,7 +937,10 @@ npm run tricost      # triangle cost per archetype per stage
 
 Those need nothing beyond `npm install`. The browser harnesses additionally need
 Playwright, which is deliberately **not** a dependency because installing it downloads
-several hundred megabytes of browsers:
+several hundred megabytes of browsers — and because Cloudflare Pages installs
+devDependencies on every build, so adding it there would drag that download into the
+deploy. Note that `npm install` will *prune* an unsaved Playwright as extraneous, so a
+`npm install --save-dev <anything>` means re-running the line below:
 
 ```
 npm i -D playwright
