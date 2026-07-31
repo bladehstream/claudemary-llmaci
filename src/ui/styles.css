@@ -106,6 +106,17 @@ html, body {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   display: block;
+  /* NO BROWSER GESTURES ON THE PLAY AREA.
+     `user-scalable=no` in the viewport meta is not enough on its own: Safari
+     has ignored it for years, so double-tap-to-zoom stays live on the canvas
+     and every rapid tap is held back while the browser waits to see whether a
+     second one is coming. That delay is what broke the ten-tap easter egg on
+     a phone — measured gaps of 1.5-2.9s between taps that were 60ms apart.
+     `touch-action: none` is the only thing that actually turns it off, and a
+     full-screen game canvas has no pan or zoom to lose. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 .hidden { display: none !important; }

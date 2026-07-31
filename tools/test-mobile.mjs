@@ -540,6 +540,77 @@ console.log('\n=== the thumb buttons ===');
   check('sliding off the quit button releases it',
     await page.evaluate(() => window.__llmaci.touch.quitHeld === false && window.__llmaci.quitHold === 0));
 
+  /* ---- the ten-tap easter egg, which worked on a mouse and not on a phone ----
+
+     Reported as "clicking the mouse 10 times works, but tapping the screen
+     doesn't". Two causes, and only the second is visible in this harness.
+
+     Safari has ignored `user-scalable=no` for years, so double-tap-to-zoom was
+     still live on the canvas and every rapid tap sat in a hold-off while the
+     browser waited for a possible second one. `touch-action: none` on `#scene`
+     is what actually turns that off — asserted here because it is one CSS line
+     that a later tidy-up would happily delete, and nothing else would fail.
+
+     The other cause was the counter: it reset whenever two taps were more than
+     900ms apart, so ONE slow tap anywhere in the ten discarded all the progress
+     before it. That is fragile on a thumb and fine on a mouse, which is exactly
+     the reported asymmetry. Now a rolling window.
+
+     `_secretTap` is driven directly rather than through real touches, on
+     purpose: under swiftshader this page runs near 1fps, and dispatched taps
+     120ms apart actually ARRIVE 1.5-2.9s apart. That measures the harness, not
+     the game — it is how the bug was found, and it would now mask the fix. */
+  check('the play area takes no browser gestures',
+    (await page.evaluate(() => getComputedStyle(document.querySelector('canvas')).touchAction)) === 'none',
+    'touch-action on #scene');
+
+  const tapAt = (gaps) => page.evaluate(async (ms) => {
+    const g = window.__llmaci;
+    g.sfx.fartMode = false; g._taps = [];
+    for (const d of ms) { g._secretTap(); await new Promise((r) => setTimeout(r, d)); }
+    return g.sfx.fartMode;
+  }, gaps);
+
+  check('ten taps at a thumb cadence unlocks it',
+    await tapAt(Array(10).fill(120)));
+  /* One deliberately slow tap, longer than the old 900ms rule allowed. This is
+     the case that was broken, so it is the case worth pinning. */
+  check('and an uneven rhythm still unlocks it',
+    await tapAt([100, 90, 110, 1400, 95, 105, 80, 130, 100, 90]), 'one 1.4s gap mid-run');
+  check('ten more taps turns it back off',
+    (await tapAt(Array(20).fill(110))) === false, 'toggles, never latches');
+  check('ten taps spread over a minute does NOT unlock it',
+    await page.evaluate(() => {
+      const g = window.__llmaci;
+      g.sfx.fartMode = false;
+      const t0 = performance.now();
+      g._taps = Array.from({ length: 10 }, (_, i) => t0 - (60000 - i * 6000));
+      g._secretTap();
+      return g.sfx.fartMode === false;
+    }));
+
+  /* ---- and the reason an iPhone was silent ----
+     iOS puts Web Audio in the AMBIENT session category, which the physical
+     ring/silent switch mutes — so a correct page produces no sound at all, with
+     nothing in the console. An HTMLMediaElement uses PLAYBACK instead and
+     promotes the session. Cannot be verified from here (no switch to flip, and
+     Chromium has no such category), so assert the SHAPE of the fix: the thing
+     exists, loops, is inline, and is NOT muted — a muted element does not
+     change the category, which would make the whole workaround a no-op that
+     still looks present. */
+  const ios = await page.evaluate(() => {
+    const el = window.__llmaci.audio._silentEl;
+    return el && {
+      loop: el.loop, muted: el.muted, vol: el.volume,
+      inline: el.hasAttribute('playsinline'), wav: /^data:audio\/wav/.test(el.src),
+    };
+  });
+  check('the iOS audio-session unlock exists', !!ios);
+  check('and is looping, inline, and NOT muted',
+    !!ios && ios.loop && !ios.muted && ios.vol > 0 && ios.inline,
+    ios ? `loop ${ios.loop}, muted ${ios.muted}, vol ${ios.vol}, playsinline ${ios.inline}` : '');
+  check('and its silence is generated, not an asset', !!ios && ios.wav);
+
   /* ---- Options -> Tilt range ----
      The whole argument for shipping the band width as a slider is that nobody
      can pick the number from here, which is worth nothing if the control turns

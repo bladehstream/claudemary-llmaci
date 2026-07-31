@@ -202,12 +202,26 @@ export class Game {
   /**
    * Ten taps in the play area toggles fart mode. Yes, really.
    *
-   * Windowed rather than cumulative: ten taps spread over a whole round is
-   * ordinary play (every click also asks for pointer lock), so a plain counter
-   * would fire on somebody who never asked for it. Requiring them within 900ms
-   * of each other makes it a deliberate act — nobody drums on the screen ten
-   * times by accident — while still being findable by a person who has been
-   * told "tap it a bunch of times".
+   * ⚠ A ROLLING WINDOW, NOT A CONSECUTIVE-GAP TEST. The first version reset the
+   * count whenever two taps were more than 900ms apart, which worked with a
+   * mouse and failed on every phone — reported as "clicking the mouse 10 times
+   * works, but tapping the screen doesn't".
+   *
+   * Two things conspired. Safari has ignored `user-scalable=no` for years, so
+   * double-tap-to-zoom was still live on the canvas and every rapid tap sat in
+   * a hold-off while the browser waited to see whether another was coming;
+   * measured, taps dispatched 60ms apart arrived 1.5-2.9 SECONDS apart. And a
+   * consecutive-gap rule is brittle by design: one slow tap anywhere in the ten
+   * throws away all the progress before it, which on a phone is most attempts.
+   * `touch-action: none` on `#scene` fixes the delay; this fixes the fragility.
+   *
+   * Keeping the last N timestamps and asking "were there ten inside six
+   * seconds" tolerates an uneven rhythm completely while still being something
+   * nobody does by accident. Six rather than four because the cost of being
+   * generous here is essentially zero: on a phone, tapping the play area does
+   * nothing else whatsoever — pointer lock is desktop-only — so there is no
+   * ordinary interaction to collide with, and a player who has been told "tap
+   * it a bunch of times" should not have to be told how FAST.
    *
    * Toggling rather than latching matters just as much: it persists in the
    * save, so without a way back the only cure for a joke that stopped being
@@ -217,11 +231,14 @@ export class Game {
   _secretTap() {
     if (this.state !== 'playing') return;
     const now = performance.now();
-    if (now - (this._tapAt || 0) > 900) this._tapCount = 0;
-    this._tapAt = now;
-    this._tapCount = (this._tapCount || 0) + 1;
-    if (this._tapCount < 10) return;
-    this._tapCount = 0;
+    const WINDOW = 6000;
+    const NEEDED = 10;
+    const taps = (this._taps = this._taps || []);
+    taps.push(now);
+    // Drop anything that has aged out, and never let the list grow unbounded.
+    while (taps.length && now - taps[0] > WINDOW) taps.shift();
+    if (taps.length < NEEDED) return;
+    taps.length = 0;
 
     const on = !this.sfx.fartMode;
     this.sfx.fartMode = on;

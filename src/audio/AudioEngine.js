@@ -205,7 +205,87 @@ export class AudioEngine {
 
     this.noise = this._makeNoise(2);
     this.ready = true;
+    this._unlockIOS();
     return ctx;
+  }
+
+  /* ============================================================
+     ⚠ WHY AN iPHONE PLAYS NOTHING AT ALL
+
+     Reported as "apple iphone users get no audio at all", with
+     the same build working everywhere else. It is not a bug in
+     the graph, and no amount of checking `ctx.state` finds it.
+
+     iOS puts Web Audio in the AMBIENT audio session category,
+     and ambient is silenced by the physical ring/silent switch
+     on the side of the phone. A player with that switch down —
+     which is most people, most of the time — gets a page that is
+     working perfectly and produces no sound, with nothing in the
+     console and no way to detect it from inside the page.
+
+     The lever is that an HTMLMediaElement uses the PLAYBACK
+     category instead, and starting one promotes the whole
+     session. So: keep a silent media element playing, and Web
+     Audio comes along with it.
+
+     Three details, each of which makes this silently not work:
+
+       1. THE ELEMENT MUST ACTUALLY BE PLAYING, AND MUST LOOP. A
+          one-shot ends, the session reverts, and the sound dies
+          again a few seconds in — worse than never working,
+          because it presents as intermittent.
+       2. `playsinline` is required or iOS may take the element
+          fullscreen, and `muted` is NOT usable: a muted element
+          does not change the session category, which is the
+          entire point. The buffer is genuine digital silence, so
+          full volume costs the player nothing.
+       3. It has to start from a user gesture like everything else
+          on iOS. `init()` is only ever reached from one — see
+          `Game._ensureAudio` and its callers.
+
+     The silent WAV is BUILT HERE rather than shipped as a file.
+     A WAV is a 44-byte header followed by samples, and silence is
+     samples that are zero, so generating it procedurally is about
+     fifteen lines and keeps the promise the README makes.
+     ============================================================ */
+  _unlockIOS() {
+    if (this._silentEl || typeof document === 'undefined') return;
+    try {
+      const SEC = 0.5, RATE = 8000;              // as small as will loop cleanly
+      const n = Math.floor(SEC * RATE);
+      const buf = new ArrayBuffer(44 + n * 2);
+      const dv = new DataView(buf);
+      const tag = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+      tag(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); tag(8, 'WAVEfmt ');
+      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, RATE, true); dv.setUint32(28, RATE * 2, true);
+      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+      tag(36, 'data'); dv.setUint32(40, n * 2, true);
+      /* The samples are already zero — an ArrayBuffer starts zeroed. That is
+         the entire payload: 8KB of nothing, and no asset file. */
+      let bin = '';
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+
+      const el = document.createElement('audio');
+      el.setAttribute('playsinline', '');
+      el.loop = true;
+      el.volume = 1;                             // see note 2 — must NOT be muted
+      el.src = `data:audio/wav;base64,${btoa(bin)}`;
+      const p = el.play();
+      if (p && p.catch) p.catch(() => { /* no gesture yet; the next one retries */ });
+      this._silentEl = el;
+
+      /* iOS also suspends the context when the page is backgrounded and does
+         not reliably resume it on return, which reads as "the sound just
+         stopped halfway through the round". Cheap to re-arm both. */
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        this.resume();
+        const q = this._silentEl && this._silentEl.play();
+        if (q && q.catch) q.catch(() => {});
+      });
+    } catch { /* no document, no autoplay, no matter — Web Audio still tries */ }
   }
 
   /**
@@ -241,7 +321,18 @@ export class AudioEngine {
    */
   _revFor(dest) { return dest === this.sfx ? this.sfxSend : this.musicSend; }
 
-  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    /* Retry the silent element on EVERY resume, not just at init. Its first
+       play() can be rejected — autoplay policy, a gesture that had already
+       elapsed — and if that is the only attempt, an iPhone stays silent for the
+       whole session with no second chance. `resume()` is called from every
+       gesture that matters, so this costs nothing and keeps trying. */
+    if (this._silentEl && this._silentEl.paused) {
+      const p = this._silentEl.play();
+      if (p && p.catch) p.catch(() => {});
+    }
+  }
   suspend() { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); }
 
   get now() { return this.ctx ? this.ctx.currentTime : 0; }
