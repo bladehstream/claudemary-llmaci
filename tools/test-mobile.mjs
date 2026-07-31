@@ -84,9 +84,14 @@ const initScript = (grant) => `
     if (t === 'deviceorientation') window.__tilt.listeners.push(fn);
     return realAdd(t, fn, o);
   };
+  window.__gamma = 0;
   window.__setBeta = (b) => {
     window.__tilt.beta = b;
-    for (const fn of window.__tilt.listeners) fn({ beta: b, gamma: 0, alpha: 0 });
+    for (const fn of window.__tilt.listeners) fn({ beta: b, gamma: window.__gamma, alpha: 0 });
+  };
+  window.__setGamma = (g) => {
+    window.__gamma = g;
+    for (const fn of window.__tilt.listeners) fn({ beta: window.__tilt.beta, gamma: g, alpha: 0 });
   };
 `;
 
@@ -269,8 +274,16 @@ console.log('\n=== the thumb buttons ===');
 {
   const { ctx, page } = await openPhone(true);
   await toIntro(page);
+  /* Grant tilt here too. The steering assertions below need a live sensor, and
+     without it `turnByTilt` is false and `read().turn` quietly falls back to the
+     buttons — which reads as "tilt steering is broken" when it was never on. */
+  await page.tap('#intro-tilt');
+  await page.waitForFunction(() => window.__llmaci.touch.tiltLive, { timeout: 10000 });
   await page.evaluate(() => window.__llmaci.begin());
   await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  /* Arrows first, so put turning on buttons. With the default (tilt) the arrows
+     are hidden on purpose, and `boundingBox()` on a hidden element is null. */
+  await page.evaluate(() => window.__llmaci.setOption('turn', 'buttons'));
 
   /* REAL TOUCH, held. `page.mouse` does not reach pointer handlers in a
      hasTouch context and `page.tap` cannot express a hold, so this goes through
@@ -316,6 +329,47 @@ console.log('\n=== the thumb buttons ===');
   const slid = await page.evaluate(() => window.__llmaci.touch.pan);
   check('sliding a thumb off a button releases it', slid === 0, `pan ${slid}`);
 
+  /* ---- tilt steering, and the toggle ---- */
+  const steer = await page.evaluate(async () => {
+    const g = window.__llmaci;
+    g.setOption('turn', 'tilt');
+    window.__setGamma(0);
+    g.touch.calibrate();
+    const hidden = document.getElementById('mc-panpair').classList.contains('hidden');
+    const flat = g.touch.read().turn;
+    window.__setGamma(4);                     // inside the deadzone
+    const dead = g.touch.read().turn;
+    window.__setGamma(30);                    // full roll right
+    const right = g.touch.read().turn;
+    window.__setGamma(-30);
+    const left = g.touch.read().turn;
+    window.__setGamma(-16);                   // partway
+    const part = g.touch.read().turn;
+    const y0 = g.rig.yaw;
+    await new Promise((res) => { let n = 0; const t = () => (++n > 12 ? res() : requestAnimationFrame(t)); requestAnimationFrame(t); });
+    return { hidden, flat, dead, right, left, part, yawMoved: g.rig.yaw - y0 };
+  });
+  check('tilt steering hides the pan arrows', steer.hidden);
+  check('level phone does not turn', steer.flat === 0 && steer.dead === 0,
+    `level ${steer.flat}, 4deg ${steer.dead}`);
+  check('rolling right turns right', steer.right > 0.9, `turn ${steer.right.toFixed(2)}`);
+  check('rolling left turns left', steer.left < -0.9, `turn ${steer.left.toFixed(2)}`);
+  check('partial roll is proportional', steer.part < -0.2 && steer.part > -0.8, `turn ${steer.part.toFixed(2)}`);
+  check('and it actually swings the camera', Math.abs(steer.yawMoved) > 0.05,
+    `yaw moved ${steer.yawMoved.toFixed(3)}`);
+
+  const back = await page.evaluate(() => {
+    const g = window.__llmaci;
+    g.setOption('turn', 'buttons');
+    return {
+      shown: !document.getElementById('mc-panpair').classList.contains('hidden'),
+      turn: (window.__setGamma(30), g.touch.read().turn),
+    };
+  });
+  check('switching to buttons brings the arrows back', back.shown);
+  check('and tilt stops steering', back.turn === 0, `turn ${back.turn}`);
+  await page.evaluate(() => window.__llmaci.setOption('turn', 'tilt'));
+
   const dash = await page.evaluate(() => {
     const el = document.querySelector('[data-mc="dash"]');
     el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true }));
@@ -333,6 +387,38 @@ console.log('\n=== the thumb buttons ===');
     return { pan: window.__llmaci.touch.pan, state: window.__llmaci.state };
   });
   check('pausing releases every held button', afterPause.pan === 0 && afterPause.state === 'paused');
+
+  /* ---- a way out, which the touch build did not have ---- */
+  await page.evaluate(() => window.__llmaci.resume());
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  const quitBox = await page.locator('#mc-quit').boundingBox();
+  check('the quit button is on screen and thumb-sized', !!quitBox && quitBox.width >= 40,
+    quitBox ? `${Math.round(quitBox.width)}x${Math.round(quitBox.height)} at y=${Math.round(quitBox.y)}` : 'missing');
+  await touchAt('touchStart', quitBox.x + quitBox.width / 2, quitBox.y + quitBox.height / 2);
+  await frames(2);
+  const arming = await page.evaluate(() => ({
+    held: window.__llmaci.touch.quitHeld,
+    fill: document.getElementById('mc-quit-fill').style.transform,
+    state: window.__llmaci.state,
+  }));
+  check('holding it starts the timer and fills', arming.held && /scaleY\(0\.[0-9]*[1-9]/.test(arming.fill),
+    `${arming.fill || '(none)'}`);
+  check('a brief touch does not quit', arming.state === 'playing');
+  await page.waitForFunction(() => window.__llmaci.state === 'title', { timeout: 30000 });
+  await touchAt('touchEnd', 0, 0);
+  check('holding it through quits to the title', true);
+
+  // And it must not latch: a touch that slides off leaves nothing held.
+  await toIntro(page);
+  await page.evaluate(() => window.__llmaci.begin());
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  const q2 = await page.locator('#mc-quit').boundingBox();
+  await touchAt('touchStart', q2.x + q2.width / 2, q2.y + q2.height / 2);
+  await touchAt('touchMove', q2.x - 180, q2.y + 300);
+  await touchAt('touchEnd', 0, 0);
+  await frames(3);
+  check('sliding off the quit button releases it',
+    await page.evaluate(() => window.__llmaci.touch.quitHeld === false && window.__llmaci.quitHold === 0));
   await ctx.close();
 }
 
@@ -413,6 +499,134 @@ console.log('\n=== the portrait camera ===');
   await page.evaluate(() => { const g = window.__llmaci; g.goalMet = true; g.hud.setCanFinish(true); });
   await frames2(page, 8);
   await page.screenshot({ path: path.join(ROOT, 'tools', 'shots', 'mobile-house.png') });
+
+  /* ------------------------------------------------------------
+     ...and nothing on screen is printing through anything else.
+
+     This stylesheet has now had THREE collisions between overlays that each
+     own an independent `bottom:` — the two Enter chips, then the stragglers
+     counter landing on the finish chip, and now the raised pan arrows against
+     that same chip. Every one was found by a human noticing it in a
+     screenshot, which is a bad detector in both directions: it missed all
+     three for a while, and then I re-read a STALE png and announced that a fix
+     had not landed when it had. Screenshots are for judging whether something
+     looks nice. Whether two boxes overlap is arithmetic, so do the arithmetic.
+
+     Worst case on purpose: goal met (finish chip up), stragglers counter
+     showing, every mobile button on screen. If they fit here they fit always.
+     ------------------------------------------------------------ */
+  const overlapCheck = async (label) => {
+    const res = await page.evaluate(() => {
+      /* Show the stragglers counter HERE, in the same task as the measurement.
+         A first version set it up, waited three frames and then measured — and
+         the game loop calls `hud.clearFinder()` on any frame with nothing left
+         to point at, so it was hidden again long before anything read its box.
+         The test would have reported a clean bill of health for a worst case
+         it never actually assembled. Measuring in the same synchronous task as
+         the mutation is the only version the loop cannot undo, and the
+         `missing` list below is there so a selector that silently stops
+         matching shows up as a failure instead of as one less thing to test. */
+      const fc = document.getElementById('finder-count');
+      fc.classList.remove('hidden');
+      fc.textContent = '3 THINGS LEFT';
+      /* `animation: fpIn ... both` means that at t=0 the element is holding the
+         first keyframe — opacity 0 and a scale — so measuring it in this same
+         task gets an invisible element with a shrunken box. Kill the animation
+         and we read the settled geometry, which is the only geometry worth
+         asserting about anyway. */
+      fc.style.animation = 'none';
+      /* PAINTED LEAVES, not layout containers.
+         A first version listed `.hud-topright` and `.mc-right`, and both are
+         invisible wrappers whose boxes are much bigger than their ink:
+         `.hud-topright` reserves a 52px right padding so the timer clears the
+         pause button, but padding does not shrink the element's rect, so the
+         wrapper "collided" with a button it was explicitly making room for.
+         Assert on the things that actually draw pixels. */
+      const SEL = [
+        '#finder-count', '#finish-prompt', '#quit-prompt',
+        '.mini-stats', '#pickup-feed',
+        '.mc-left .mc-btn', '.mc-right .mc-btn', '#mc-pause', '#mc-quit',
+        '.size-panel', '.goal-panel', '#timer', '#stage-name',
+      ];
+      const boxes = [];
+      for (const sel of SEL) {
+        for (const el of document.querySelectorAll(sel)) {
+          const cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) continue;
+          boxes.push({ sel, el, x: r.x, y: r.y, w: r.width, h: r.height });
+        }
+      }
+      /* The overlays that MUST be on screen for this to be the worst case.
+         Not every selector — the drive arrows and the pan arrows are mutually
+         exclusive by design, and `#pickup-feed` is empty unless something was
+         just collected. */
+      const REQUIRED = ['#finder-count', '#finish-prompt', '#mc-quit', '.mc-right .mc-btn'];
+      const seen = new Set(boxes.map((b) => b.sel));
+      const missing = REQUIRED.filter((s) => !seen.has(s));
+      const hits = [];
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i], b = boxes[j];
+          // Nesting is not collision — a child inside its own parent is fine.
+          if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+          const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+          const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+          /* 2px of slack: borders and subpixel rounding are not a collision
+             anyone can see, and asserting exact separation makes this fail on
+             a font metric change. */
+          if (ox > 2 && oy > 2) {
+            hits.push(`${a.sel} x ${b.sel} (${Math.round(ox)}x${Math.round(oy)}px)`);
+          }
+        }
+      }
+      return { hits, missing, n: boxes.length };
+    });
+    check(`the worst case is actually on screen (${label})`, res.missing.length === 0,
+      res.missing.length ? `not showing: ${res.missing.join(', ')}` : `${res.n} overlays measured`);
+    check(`no overlay prints through another (${label})`, res.hits.length === 0, res.hits.join('; '));
+  };
+
+  /* THREE layouts, not one twice.
+     The right-hand column and the left-hand pair each swap independently — the
+     column is RECENTRE with a live sensor and a forward/back pair without one,
+     and the pan arrows appear whenever tilt steering is not actually available.
+     A first pass ran the check twice without ever granting the sensor, so both
+     runs measured the same 13 boxes and the label "tilt steering" was a lie;
+     the counts printed below are what makes that visible. */
+  await overlapCheck('no sensor: drive + pan arrows');
+  await page.screenshot({ path: path.join(ROOT, 'tools', 'shots', 'mobile-crowded.png') });
+
+  await page.evaluate(async () => {
+    const g = window.__llmaci;
+    await g.touch.requestTilt();
+    window.__setBeta(50);
+  });
+  await frames2(page, 3);
+  const swapped = await page.evaluate(() => ({
+    live: window.__llmaci.touch.tiltLive,
+    drive: !document.getElementById('mc-drive').classList.contains('hidden'),
+  }));
+  check('granting the sensor mid-round swaps the column', swapped.live && !swapped.drive,
+    `tiltLive ${swapped.live}, drive arrows ${swapped.drive}`);
+
+  await overlapCheck('tilt steering: no pan arrows');
+  await page.evaluate(() => window.__llmaci.setOption('turn', 'buttons'));
+  await frames2(page, 3);
+  await overlapCheck('button steering: pan arrows back');
+
+  /* The arrows are only "moved up out of the way" if they actually cleared the
+     chip they were colliding with. Assert the gap, not just the absence of an
+     intersection, so a future change that parks them 1px apart is still a
+     failure. */
+  const gap = await page.evaluate(() => {
+    const a = document.querySelector('.mc-left').getBoundingClientRect();
+    const c = document.getElementById('finish-prompt').getBoundingClientRect();
+    return a.top - c.bottom;
+  });
+  check('the pan arrows clear the finish chip', gap > 6, `${Math.round(gap)}px gap`);
+
   await ctx.close();
 }
 

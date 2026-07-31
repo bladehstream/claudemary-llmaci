@@ -68,11 +68,26 @@ const Y_HALO = 0.0075;
 
 /** Plate colours. Warm, washed out, nothing saturated. */
 const A = {
-  agar:      0xf1e4b2,
-  agarWarm:  0xe6d596,
-  agarDark:  0xd6c07c,
-  rim:       0xe9e2cf,
-  rimDark:   0xcfc6ae,
+  /* THE GROUND CAME DOWN THREE STOPS, and the reason is a player report of 66%
+     rolled up on a stage they cleared the house and the atom in.
+     Every measurement said this stage should be the EASIER of the three: more
+     clock than the atom (5:30 to 5:00), more travel per round (11.4 map-widths
+     to 10.4), fewer props needing a climb (52% to 76%), comparable size ladder
+     and headroom. Four separate probes, no signal anywhere.
+     A screenshot at the spawn found it in one look: the agar was 0xf1e4b2, a
+     pale warm beige, and the things living on it are pastel greens, dusty pinks
+     and muted purples — every prop within a stop or two of the ground it sits
+     on. The big ones read; a 26nm virion at any distance does not. You collect
+     what you can see, and 34% of this stage was camouflage.
+     Same failure as the quantum realm's near-black floor and the exact opposite
+     correction. The palette is unchanged in hue — this is still a warm agar
+     plate, just a darker one, so the pale props it exists to show off actually
+     separate from it. Nothing about the props themselves moved. */
+  agar:      0xbda874,
+  agarWarm:  0xae9761,
+  agarDark:  0x9b8450,
+  rim:       0xc9bfa2,
+  rimDark:   0xa89e83,
   film:      0xbfe3d6,
   filmDeep:  0x9ed2c6,
   streak:    0xdfe9b0,

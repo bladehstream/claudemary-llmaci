@@ -137,6 +137,14 @@ export class HUD {
     this._quitFrac = f;
     this.quitFill.style.transform = `scaleX(${f.toFixed(3)})`;
     this.quitPrompt.classList.toggle('arming', f > 0.001);
+    /* The touch build has its own quit button with its own fill, driven by the
+       same timer — one hold duration for the whole game. */
+    if (!this._mqFill) this._mqFill = document.getElementById('mc-quit-fill');
+    if (!this._mqBtn) this._mqBtn = document.getElementById('mc-quit');
+    if (this._mqFill) {
+      this._mqFill.style.transform = `scaleY(${f.toFixed(3)})`;
+      this._mqBtn.classList.toggle('arming', f > 0.001);
+    }
   }
 
   show() { this.root.classList.remove('hidden'); }

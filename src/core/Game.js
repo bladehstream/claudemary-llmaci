@@ -151,6 +151,11 @@ export class Game {
          awkward middle — a touchscreen laptop, where a coarse pointer is
          available but a keyboard is what the player actually wants. */
       controls: 'auto',
+      /* 'tilt' | 'buttons' — how touch play turns. Tilt frees the left thumb
+         entirely; buttons are steadier if you are lying down. Falls back to
+         buttons on its own with no sensor, so this is a preference, not a
+         dependency. */
+      turn: 'tilt',
     };
     this.save = { best: {}, cleared: [], found: [] };
 
@@ -287,6 +292,7 @@ export class Game {
   _applyControlMode() {
     const want = this.options.controls === 'auto' ? isCoarsePointer() : this.options.controls === 'touch';
     this.touch.enabled = want;
+    this.touch.turnMode = this.options.turn || 'tilt';
     document.body.classList.toggle('touch', want);
     this.screens.setTouchMode(want, this.touch);
     if (!want) this.touch.releaseAll();
@@ -306,7 +312,7 @@ export class Game {
        menu, defer this to `loadStage` — every control rate is a multiple of top
        speed, so changing it mid-roll would make the ball lurch. */
     if (key === 'speedCurve') { TUNING.speedP = value; this.options.speedCurveSet = true; }
-    if (key === 'controls') this._applyControlMode();
+    if (key === 'controls' || key === 'turn') this._applyControlMode();
     this._persist();
   }
 
@@ -657,9 +663,13 @@ export class Game {
        there is nothing to count except frames. Returns immediately on the way
        out: `toTitle` has already disposed the world this function is holding a
        reference to. */
+    /* The touch quit button feeds the SAME timer as Enter, so there is one
+       hold duration, one fill bar and one exit path in the whole game rather
+       than a second half-implemented one for phones. */
     const enterDown = this.input.down('Enter', 'NumpadEnter');
     if (!enterDown) this._quitLatch = false;
-    if (enterDown && !this._quitLatch) this.quitHold += dt; else this.quitHold = 0;
+    const holding = (enterDown && !this._quitLatch) || this.touch.quitHeld;
+    if (holding) this.quitHold += dt; else this.quitHold = 0;
     this.hud.setQuitHold(this.quitHold / QUIT_HOLD);
     if (this.quitHold >= QUIT_HOLD) {
       this.sfx.ui('back');
@@ -682,7 +692,7 @@ export class Game {
        switched, so a keyboard attached to a tablet still works. */
     const mv = this.input.readMove();
     const tc = this.touch.read();
-    if (tc.pan) this.rig.yaw -= tc.pan * dt * PAN_RATE;
+    if (tc.turn) this.rig.yaw -= tc.turn * dt * PAN_RATE;
     const inp = {
       moveX: clamp(mv.moveX + tc.moveX, -1, 1),
       moveZ: clamp(mv.moveZ + tc.moveZ, -1, 1),

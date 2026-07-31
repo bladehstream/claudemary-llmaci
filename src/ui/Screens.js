@@ -187,6 +187,7 @@ export class Screens {
       this.game.setOption('speedCurve', v / 100);
     });
     bind('opt-controls', 'change', (e) => this.game.setOption('controls', e.target.value));
+    bind('opt-turn', 'change', (e) => this.game.setOption('turn', e.target.value));
     bind('opt-quality', 'change', (e) => this.game.setOption('quality', e.target.value));
     bind('opt-shadows', 'change', (e) => this.game.setOption('shadows', e.target.checked));
   }
@@ -231,6 +232,8 @@ export class Screens {
     document.getElementById('opt-invert').checked = !!o.invertY;
     const ctl = document.getElementById('opt-controls');
     if (ctl) ctl.value = o.controls || 'auto';
+    const trn = document.getElementById('opt-turn');
+    if (trn) trn.value = o.turn || 'tilt';
     document.getElementById('opt-quality').value = o.quality;
     document.getElementById('opt-shadows').checked = !!o.shadows;
     // Re-entering Options must never find the destructive button already armed.
@@ -322,13 +325,23 @@ export class Screens {
     this.refreshTiltUi(touch);
   }
 
-  /** Swap the recentre pill for a forward/back pair when there is no sensor. */
+  /**
+   * Lay the overlay out for whatever the sensor is actually doing.
+   *
+   * Two independent swaps: the recentre pill becomes a forward/back pair with
+   * no sensor, and the pan arrows disappear when tilt is steering. The arrows
+   * come BACK on their own if the sensor is missing or the phone is sideways —
+   * a steering control that vanishes and leaves nothing behind is worse than
+   * one you did not want.
+   */
   refreshTiltUi(touch) {
     const live = touch && touch.tiltLive;
     const rec = document.getElementById('mc-recentre');
     const drive = document.getElementById('mc-drive');
+    const pans = document.getElementById('mc-panpair');
     if (rec) rec.classList.toggle('hidden', !live);
     if (drive) drive.classList.toggle('hidden', !!live);
+    if (pans) pans.classList.toggle('hidden', !!(touch && touch.turnByTilt));
   }
 
   /**

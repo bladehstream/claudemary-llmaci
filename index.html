@@ -86,7 +86,13 @@
            iOS permission still leaves a playable game. -->
       <div id="mobile-controls" class="mobile-controls hidden">
         <button id="mc-pause" class="mc-btn mc-corner" data-mc="pause" aria-label="Pause">II</button>
-        <div class="mc-left">
+        <!-- A visible way out. The desktop build holds Enter and watches a chip
+             fill; touch had only the pause menu, which nobody found. Same hold,
+             same fill, its own button. -->
+        <button id="mc-quit" class="mc-btn mc-corner mc-quit" data-mc="quit" aria-label="Hold to quit">
+          <span class="mq-fill"><i id="mc-quit-fill"></i></span><span class="mq-x">✕</span>
+        </button>
+        <div class="mc-left" id="mc-panpair">
           <button class="mc-btn mc-pan" data-mc="pan-left" aria-label="Pan camera left">‹</button>
           <button class="mc-btn mc-pan" data-mc="pan-right" aria-label="Pan camera right">›</button>
         </div>
@@ -231,6 +237,19 @@
           Automatic picks touch controls on a device with a touchscreen and no mouse.
           Override it if you are on a laptop with a touchscreen, or want to try the
           phone controls on a desktop.
+        </p>
+        <div class="opt-row">
+          <label for="opt-turn">Turning (touch)</label>
+          <select id="opt-turn">
+            <option value="tilt">Tilt left / right</option>
+            <option value="buttons">On-screen arrows</option>
+          </select>
+          <span class="opt-val"></span>
+        </div>
+        <p class="opt-note">
+          Tilt steering rolls the phone to turn, which frees your left thumb entirely.
+          Arrows are steadier if you are lying down or on a moving train. Falls back to
+          arrows on its own when there is no motion sensor.
         </p>
         <div class="opt-row">
           <label for="opt-quality">Render quality</label>

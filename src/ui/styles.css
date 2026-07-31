@@ -898,8 +898,16 @@ body.touch #mobile-controls:not(.hidden) { display: block; }
 
 /* The prompt stack has to clear the thumb buttons, which own the bottom
    corners. Pushing it up is cheaper than moving the controls, because the
-   controls are where thumbs actually are. */
-body.touch .prompt-stack { bottom: calc(120px + env(safe-area-inset-bottom)); }
+   controls are where thumbs actually are.
+ *
+ * 186px, not 120: raising the pan arrows to 96 put their tops at 164 and the
+ * finish chip printed straight through them. That is the THIRD collision
+ * between two independently bottom-anchored overlays in this file — the two
+ * Enter chips, then the stragglers counter, now this. Anything anchored to the
+ * bottom edge here has to be checked against everything else that is, and the
+ * only real cure is for them to share a layout. Noted for whoever adds the
+ * fourth. */
+body.touch .prompt-stack { bottom: calc(186px + env(safe-area-inset-bottom)); }
 body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
 
 /* ------------------------------------------------------------
@@ -959,3 +967,23 @@ body.touch .how-touch.how-grid.hidden { display: grid !important; }
 /* The pause button owns the top-right corner on touch, so the timer has to get
    out of its way — they were printing on top of each other. */
 body.touch .hud-topright { padding-right: 52px; }
+
+/* Raise the pan arrows off the very bottom edge — a thumb's arc sits above the
+   corner, not in it, and on a tall phone the corner is a stretch. */
+.mc-left { bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
+
+/* Hold-to-quit, sitting under the pause button. Fills bottom-up as you hold,
+   from the same timer the desktop Enter-hold uses. */
+.mc-quit {
+  top: calc(66px + env(safe-area-inset-top));
+  overflow: hidden;
+}
+.mc-quit.arming { border-color: #fff; background: rgba(232,84,79,0.55); }
+.mq-fill { position: absolute; inset: 0; pointer-events: none; }
+.mq-fill i {
+  display: block; width: 100%; height: 100%;
+  background: linear-gradient(0deg, var(--red), var(--orange));
+  transform-origin: bottom center; transform: scaleY(0);
+  opacity: 0.9;
+}
+.mq-x { position: relative; font-size: 19px; line-height: 1; }

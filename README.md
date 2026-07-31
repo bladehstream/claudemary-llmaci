@@ -146,14 +146,23 @@ Portrait, and it switches itself on — see [Playing on a phone](#playing-on-a-p
 
 | | |
 |---|---|
-| **Tilt** | Tip the top of the phone *away* from you to roll forward, back toward you to reverse |
-| **‹ ›** | Pan the camera. The katamari rolls the way the camera faces, so you steer by panning while you tilt |
+| **Tilt forward / back** | Tip the top of the phone *away* from you to roll forward, back toward you to reverse |
+| **Tilt left / right** | Roll the phone like a steering wheel to swing the camera. The katamari rolls the way the camera faces, so this is how you steer |
+| **‹ ›** | The same steering, as buttons — Options → Turning switches between the two |
 | **DASH** | Hold. You need it to climb — a slope you crawl at will stop you |
-| **RECENTRE** | Re-zero the tilt to however you are holding the phone now |
+| **RECENTRE** | Re-zero *both* tilt axes to however you are holding the phone now |
+| **✕** | Hold to quit to the title. Fills as you hold, same as holding Enter on a desktop |
 | **II** | Pause |
 
+Turning defaults to tilt, and the ‹ › arrows are hidden while it is on — two live inputs on
+one axis means the buttons fight whatever your wrist happens to be doing. Switching to
+buttons brings them back. The steering deadzone (6°) is deliberately wider than the drive
+deadzone (4°): your wrist rolls a little every time you tip the phone forward, and a turn
+that creeps on while you are only trying to drive is worse than a slow one.
+
 No sensor, or you declined the permission? **▲ ▼** buttons appear in place of RECENTRE and
-drive instead. Nothing else changes.
+drive instead, and the ‹ › arrows come back whatever the Turning setting says — there is
+nothing to steer with otherwise. Nothing else changes.
 
 ## Stages
 
@@ -307,11 +316,25 @@ build, not a second site: `(pointer: coarse)` plus a touch point decides at boot
 agent string** — that tells you what a browser wants you to think it is, and is wrong for
 tablets, desktop-mode phones, and everything released after the string was written.
 
-**The scheme is tank controls.** Tilt supplies forward and back; the two thumb buttons swing
-the camera; the katamari always rolls along the camera's forward axis. That composes into
-steering without a second analogue axis, and it means `Katamari.step` needs no mobile branch —
-touch and keyboard produce the same `{moveX, moveZ, dash}` and are summed, so a keyboard
-attached to a tablet still works.
+**The scheme is tank controls.** Tilt supplies forward and back; something swings the camera;
+the katamari always rolls along the camera's forward axis. That composes into steering without
+a second analogue axis, and it means `Katamari.step` needs no mobile branch — touch and
+keyboard produce the same `{moveX, moveZ, dash}` and are summed, so a keyboard attached to a
+tablet still works.
+
+That "something" is a toggle, because the two options are genuinely different instruments and
+neither is strictly better. `gamma` — roll the phone like a steering wheel — is continuous,
+proportional, and leaves your thumbs free, which is what you want while you are hunting.
+Buttons are exact and hold a fixed rate, which is what you want while you are threading a gap.
+The default is tilt; **Options → Turning** switches. With tilt steering live the ‹ › arrows
+are *hidden* rather than merely ignored: two live inputs onto one axis means the buttons fight
+whatever your wrist happens to be doing, and leaving them visible advertises a control that
+loses. They come back automatically when there is no usable sensor, whatever the setting says.
+
+`TURN_DEAD` is 6° against the drive axis's 4°, and the asymmetry is the point: tipping the
+phone forward rolls it slightly too, so a steering deadzone as tight as the drive one makes
+the camera drift every time you accelerate. `RECENTRE` zeroes both axes together for the same
+reason — they are the same wrist.
 
 Four things about the sensor are load-bearing, and each one is a way this silently does
 nothing on real hardware:

@@ -55,6 +55,12 @@ const RANGE = 22;
 const DEFAULT_NEUTRAL = 50;
 /** Camera pan rate from a held button, radians/sec. Matches Q/E on the keyboard. */
 export const PAN_RATE = 2.1;
+/** Degrees of roll before turning starts. Wider than the drive deadzone: your
+ *  wrist rolls a little every time you tip the phone forward, and a turn that
+ *  creeps on while you are only trying to drive is worse than a slow one. */
+const TURN_DEAD = 6;
+/** Degrees of roll for a full-rate turn. */
+const TURN_RANGE = 26;
 
 /** True on a device driven by a finger rather than a mouse. */
 export function isCoarsePointer() {
@@ -72,6 +78,10 @@ export class TouchControls {
     this.raw = null;               // last axis reading, degrees, or null
     this.thrust = 0;               // -1..1, forward positive
     this.pan = 0;                  // -1, 0 or 1 from the buttons
+    this.rawTurn = null;           // last roll reading, degrees, or null
+    this.neutralTurn = 0;
+    this.turnMode = 'tilt';        // 'tilt' | 'buttons'
+    this.quitHeld = false;
     this.dash = false;
     this.manual = 0;               // -1..1 from the fallback drive buttons
     this.portrait = true;
@@ -99,7 +109,16 @@ export class TouchControls {
       if (b === null || b === undefined || Number.isNaN(b)) return;
       const first = this.raw === null;
       this.raw = b;
-      if (this._needsCalibrate) { this.neutral = b; this._needsCalibrate = false; }
+      /* gamma is the ROLL axis — tip the phone left or right and this moves,
+         which is the natural gesture for steering. It is only meaningful while
+         the phone is upright, which is already enforced by `needsRotate`. */
+      const g = e.gamma;
+      if (g !== null && g !== undefined && !Number.isNaN(g)) this.rawTurn = g;
+      if (this._needsCalibrate) {
+        this.neutral = b;
+        if (this.rawTurn !== null) this.neutralTurn = this.rawTurn;
+        this._needsCalibrate = false;
+      }
       if (first && this.onLive) this.onLive();
     };
     this._onOrientationChange = () => this._readOrientation();
@@ -154,10 +173,17 @@ export class TouchControls {
     return this.tilt;
   }
 
-  /** Zero the neutral angle to wherever the phone is being held right now. */
+  /** Zero both neutral angles to however the phone is being held right now. */
   calibrate() {
-    if (this.raw !== null) this.neutral = this.raw;
-    else this._needsCalibrate = true;
+    if (this.raw !== null) {
+      this.neutral = this.raw;
+      if (this.rawTurn !== null) this.neutralTurn = this.rawTurn;
+    } else this._needsCalibrate = true;
+  }
+
+  /** Is tilt-steering actually available and selected? */
+  get turnByTilt() {
+    return this.turnMode === 'tilt' && this.tiltLive && this.portrait && this.rawTurn !== null;
   }
 
   get tiltLive() { return this.tilt === 'granted' && this.raw !== null; }
@@ -219,12 +245,13 @@ export class TouchControls {
     this.pan = (held.has('pan-right') ? 1 : 0) - (held.has('pan-left') ? 1 : 0);
     this.manual = (held.has('drive-fwd') ? 1 : 0) - (held.has('drive-back') ? 1 : 0);
     this.dash = held.has('dash');
+    this.quitHeld = held.has('quit');
   }
 
   /** Drop every held button — call when leaving play, or they latch. */
   releaseAll() {
     this._held.clear();
-    this.pan = 0; this.manual = 0; this.dash = false;
+    this.pan = 0; this.manual = 0; this.dash = false; this.quitHeld = false;
     for (const el of document.querySelectorAll('.mc-btn.held')) el.classList.remove('held');
   }
 
@@ -242,7 +269,7 @@ export class TouchControls {
    * your lap.
    */
   read() {
-    if (!this.enabled) return { moveX: 0, moveZ: 0, dash: false, pan: 0 };
+    if (!this.enabled) return { moveX: 0, moveZ: 0, dash: false, pan: 0, turn: 0 };
 
     let t = 0;
     if (this.tiltLive && this.portrait) {
@@ -253,6 +280,16 @@ export class TouchControls {
       t = this.manual;
     }
     this.thrust = t;
-    return { moveX: 0, moveZ: -t, dash: this.dash, pan: this.pan };
+
+    /* Turning: roll the phone, or hold a button. Never both — with tilt
+       steering on, the pan buttons are hidden, because two live inputs onto one
+       axis means the buttons fight whatever your wrist happens to be doing. */
+    let turn = this.pan;
+    if (this.turnByTilt) {
+      const off = this.rawTurn - this.neutralTurn;
+      const mag = Math.max(0, Math.abs(off) - TURN_DEAD) / (TURN_RANGE - TURN_DEAD);
+      turn = Math.sign(off) * clamp(mag, 0, 1);
+    }
+    return { moveX: 0, moveZ: -t, dash: this.dash, pan: this.pan, turn };
   }
 }
