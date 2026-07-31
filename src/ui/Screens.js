@@ -148,7 +148,13 @@ export class Screens {
       this.game.onAction(action, btn);
     });
 
-    this.el.intro.addEventListener('click', () => this.game.onAction('begin'));
+    /* The whole intro screen is a "tap to roll" target, so a real button inside
+       it would fire twice — once as itself, once as begin(). Anything carrying
+       a data-action has already been handled by the delegate above. */
+    this.el.intro.addEventListener('click', (e) => {
+      if (e.target.closest('[data-action]')) return;
+      this.game.onAction('begin');
+    });
 
     // Clicking anywhere on the ending advances it. It carries no buttons on
     // purpose — buttons would make it feel like a menu.
@@ -180,6 +186,7 @@ export class Screens {
       this._speedCurveLabel(v);
       this.game.setOption('speedCurve', v / 100);
     });
+    bind('opt-controls', 'change', (e) => this.game.setOption('controls', e.target.value));
     bind('opt-quality', 'change', (e) => this.game.setOption('quality', e.target.value));
     bind('opt-shadows', 'change', (e) => this.game.setOption('shadows', e.target.checked));
   }
@@ -222,6 +229,8 @@ export class Screens {
     document.getElementById('opt-sens-val').textContent = String(Math.round(o.sensitivity * 100));
     this._speedCurveLabel(Math.round(o.speedCurve * 100));
     document.getElementById('opt-invert').checked = !!o.invertY;
+    const ctl = document.getElementById('opt-controls');
+    if (ctl) ctl.value = o.controls || 'auto';
     document.getElementById('opt-quality').value = o.quality;
     document.getElementById('opt-shadows').checked = !!o.shadows;
     // Re-entering Options must never find the destructive button already armed.
@@ -273,6 +282,78 @@ export class Screens {
       btn.classList.remove('danger');
       btn.classList.add('alt');
     }
+  }
+
+  /* ---------------- touch mode ---------------- */
+
+  /**
+   * Reshape the UI for thumbs, and bind the on-screen buttons once.
+   *
+   * Binding is idempotent because this is called from `_applyControlMode`,
+   * which runs on boot AND whenever the player flips the Options toggle —
+   * re-binding would stack duplicate listeners and make one tap register as
+   * several, which shows up as a button that pans twice as fast every time you
+   * visit Options.
+   */
+  setTouchMode(on, touch) {
+    const wrap = document.getElementById('mobile-controls');
+    if (wrap) wrap.classList.toggle('hidden', !on);
+
+    if (on && !this._touchBound) {
+      this._touchBound = true;
+      for (const el of document.querySelectorAll('[data-mc]')) {
+        const action = el.dataset.mc;
+        if (action === 'pause' || action === 'recentre') {
+          /* One-shots, not held states, so they go through click rather than
+             the pointer-capture path the held buttons use. */
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (action === 'pause') this.game.onAction('pause-touch');
+            else { touch.calibrate(); this.game.sfx.ui('confirm'); }
+          });
+        } else {
+          touch.bind(el, action);
+        }
+      }
+      /* No Enter key to tap, so the chip itself becomes the button. */
+      const fin = document.getElementById('finish-prompt');
+      if (fin) fin.addEventListener('click', () => this.game.onAction('finish-touch'));
+    }
+    this.refreshTiltUi(touch);
+  }
+
+  /** Swap the recentre pill for a forward/back pair when there is no sensor. */
+  refreshTiltUi(touch) {
+    const live = touch && touch.tiltLive;
+    const rec = document.getElementById('mc-recentre');
+    const drive = document.getElementById('mc-drive');
+    if (rec) rec.classList.toggle('hidden', !live);
+    if (drive) drive.classList.toggle('hidden', !!live);
+  }
+
+  /**
+   * The intro screen doubles as the permission prompt, because iOS will only
+   * hand over the sensor from inside a user gesture and this is the one tap
+   * that reliably happens before every round.
+   */
+  showTiltPrompt(touch) {
+    const btn = document.getElementById('intro-tilt');
+    const note = document.getElementById('intro-tilt-note');
+    const go = document.getElementById('intro-go');
+    if (!btn || !note || !go) return;
+    const needsAsk = touch.enabled && touch.tilt === 'idle' && touch.constructor.hasSensor();
+    btn.classList.toggle('hidden', !needsAsk);
+    go.textContent = touch.enabled ? 'Tap to roll' : 'Click to roll';
+    note.classList.toggle('hidden', !touch.enabled);
+    if (!touch.enabled) return;
+    note.textContent =
+      touch.tilt === 'granted' ? 'Tip the top of the phone away from you to roll forward. '
+        + 'Arrows pan the camera; you steer by panning while you tilt.'
+      : touch.tilt === 'denied' ? 'No tilt — using the on-screen arrows instead. '
+        + 'You can turn motion access on again in your browser settings.'
+      : touch.tilt === 'unsupported' ? 'This browser has no motion sensor, so the '
+        + 'on-screen arrows drive instead.'
+      : 'Tilt steering needs your permission. You can also just use the arrows.';
   }
 
   /* ---------------- ending ---------------- */

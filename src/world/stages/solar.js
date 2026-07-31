@@ -159,7 +159,13 @@ export const solarStage = {
   startSize: 0.05,
   goal: 1.6,
   time: 560,
-  speed: 0.33,
+  /* 0.385, not 0.33 — the same travel outlier the quantum realm had.
+   *
+   * Every stage in the game crosses its own map in 76-80 seconds at starting
+   * speed; this one took 91. See the table in the README. The quantum realm was
+   * at 100 and a player could not finish it, which is what turned this into a
+   * thing worth checking on every stage rather than a one-off. 30 / 78 = 0.385. */
+  speed: 0.385,
   density: 1,
   spread: 1,
   cell: 0.9,

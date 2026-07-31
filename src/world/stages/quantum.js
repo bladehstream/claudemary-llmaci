@@ -110,21 +110,44 @@ const B = 15, D = 13;           // half-extents of the playable vacuum
 const AX = 5.0, AZ = 4.6;       // half-widths of the two arms of the cross
 const WH = 3.4;                 // containment wall height
 
-/* Colours. Dark and luminous: the floor is nearly black and everything drawn on
-   it glows. The containment wall is the one thing in the stage that is not
-   lit from within, so it takes the shared neutral rather than another violet. */
-const VOID     = 0x0f0824;
-const VOID_LO  = 0x0a0518;
-const LATTICE  = 0x1b1140;
-const SPECK_A  = 0x2a1a5c;
-const SPECK_B  = 0x3d2680;
-const FRINGE_A = 0x3a2a8e;
-const FRINGE_B = 0x2a6fb0;
-const DECK_LEP = 0x1c1547;
-const DECK_COL = 0x231152;
-const DECK_BOS = 0x2b1a5e;
-const DECK_NUC = 0x341a63;
-const RAMPC    = 0x241a55;
+/* Colours. Luminous, and no longer nearly black.
+ *
+ * THE FIRST VERSION WAS UNPLAYABLE AND NO INSTRUMENT COULD SEE IT. Player
+ * report: could not finish this stage in three attempts, "the clock ran out
+ * while I was still growing" and "I spent the time hunting". Every number said
+ * the opposite — 789 edible props at the starting size against the house's 491,
+ * the nearest one 2.5 ball-diameters away against the house's 11.5, and 100% of
+ * everything within eight diameters collectable. Balance cleared it 9 of 9, and
+ * still cleared it 5 of 5 with the bot's vision cut to 12 diameters.
+ *
+ * A screenshot at the spawn settled it in one look: at 50am the katamari is a
+ * dark green ball on a near-black floor and **you cannot pick it out of the
+ * frame**. The nearby props are dark violet on darker violet, and a flat unlit
+ * plane gives no perspective cue, so there is no way to judge how far anything
+ * is. Hunting with hundreds of edible props in reach means you could not SEE
+ * them. That is a rendering problem wearing a balance problem's clothes, and
+ * the balance harness is structurally incapable of noticing it.
+ *
+ * So the floor and the decks come up roughly two stops, and the lattice and
+ * speck patterns that give the ground its texture come up further — they are
+ * the depth cue, and a depth cue you cannot see is not one. The stage is still
+ * the darkest in the game and still reads as a void; it is now a void you can
+ * navigate. The glowing props were never the problem and are untouched.
+ *
+ * The containment wall is the one thing here not lit from within, so it takes
+ * the shared neutral rather than another violet. */
+const VOID     = 0x241553;
+const VOID_LO  = 0x1a0f3e;
+const LATTICE  = 0x453091;
+const SPECK_A  = 0x5a3fae;
+const SPECK_B  = 0x7856d6;
+const FRINGE_A = 0x6a52c8;
+const FRINGE_B = 0x4a9fd8;
+const DECK_LEP = 0x3a2c85;
+const DECK_COL = 0x432596;
+const DECK_BOS = 0x4d33a2;
+const DECK_NUC = 0x5a30a8;
+const RAMPC    = 0x443396;
 const EDGE_C   = 0x54e6ff;
 const EDGE_M   = 0xff5cd6;
 const EDGE_V   = 0x9a5cff;
@@ -150,8 +173,42 @@ export const quantumStage = {
   seed: 19271205,
   startSize: 0.05,
   goal: 1.6,
-  time: 270,
-  speed: 0.3,
+  /* 5:00, up from 4:30 on a player note that the first stage felt aggressive.
+   *
+   * Worth knowing WHY the first stage in particular: it is the one nobody has
+   * learned yet. Every later stage is played by someone who already knows what
+   * sticks to what and which way the ramps go, and the balance bot has that
+   * knowledge on the first frame of every run — so the cost of not knowing is
+   * invisible to it everywhere, and largest exactly here. Same blind spot as
+   * the galaxy and universe clocks, for a different reason. */
+  time: 300,
+  /**
+   * 0.39, not 0.30 — the actual reason this stage played badly.
+   *
+   * A player cleared the atom stage almost completely and could not finish this
+   * one in three attempts, which is a clean controlled comparison: same 32x
+   * growth ratio, same five-minute clock, one works and one does not. The
+   * difference is how much of its own map you can cover in that time.
+   *
+   *     stage      map   speed   seconds to cross at start size
+   *     atom        52    0.68        76
+   *     microbe     32    0.42        76
+   *     house       26    0.34        76
+   *     town       192    2.53        76
+   *     country  25600  320.00        80
+   *     quantum     30    0.30       100     <- the odd one out
+   *
+   * Every other stage in the game sits at 76-80 seconds. This one was at 100,
+   * so everything took a third longer to reach and the round was a third
+   * shorter in the only unit that matters. 30 / 78 = 0.385, rounded to 0.39,
+   * puts it back with the family: 10.3 map-widths of travel per round against
+   * the atom's 10.4.
+   *
+   * Nothing in the balance harness could see this. It reported 9 of 9 clears
+   * because the bot knows where everything is and never wastes a metre — the
+   * cost of a slow stage falls entirely on the player who has to look.
+   */
+  speed: 0.39,
   /**
    * Clutter dial, multiplying every scatter count in this build.
    *
@@ -170,7 +227,7 @@ export const quantumStage = {
   bounds: { minX: -15, maxX: 15, minZ: -13, maxZ: 13 },
   // Close fog at the start — a 50am ball has no business seeing the far wall —
   // opening out with the ball, as everywhere else.
-  sky: { top: 0x090418, bottom: 0x1d0a3a, fog: 0x120626, fogNear: 14, fogFar: 46 },
+  sky: { top: 0x150a33, bottom: 0x3a1d6e, fog: 0x2a1450, fogNear: 16, fogFar: 50 },
   // Low and cold: nothing down here is lit by a sun, it is lit by itself.
   sun: { x: 0.3, y: 1, z: 0.5, intensity: 0.95 },
   camera: { pitch: 0.33, distance: 6.2 },
@@ -226,7 +283,8 @@ export const quantumStage = {
     for (let i = 0; i < 260; i++) {
       const x = -B + r() * B * 2, z = -D + r() * D * 2;
       const rr = 0.06 + r() * 0.13;
-      t.cyl(rr, rr, 0.0016, r() < 0.3 ? SPECK_B : SPECK_A, { x, y: Y_SPECK - 0.0008, z }, 6);
+      t.cyl(rr, rr, 0.0016, r() < 0.3 ? SPECK_B : SPECK_A,
+        { x, y: Y_SPECK - 0.0008 + (i % 64) * 6e-6, z }, 6);   // per-speck, see STEP below
     }
 
     /* ================= the four field regions =================
@@ -266,18 +324,38 @@ export const quantumStage = {
     /* Deck markings, one motif each so the four regions are told apart at a
        glance. All of them sit between the deck's drawn face and the height the
        ball rolls at, so none of them can ever be a floor at chest height. */
+    /* SCATTERED DECALS NEED A PER-DECAL HEIGHT, not one shared one.
+     *
+     * Both of these loops used to paint every patch at a single y. They are
+     * randomly placed and they overlap constantly, and the Colour Field's are
+     * three different colours by design — so every overlap was two coplanar
+     * different-coloured faces, which z-fight across the whole intersection.
+     * Reported with a screenshot: ragged, crawling edges where the red patches
+     * cross the green and blue ones.
+     *
+     * `GeomBuilder.build({separate:true})` already solves this for PROPS by
+     * nudging each primitive along its own normals — but terrain never goes
+     * through `buildCatalog`, so no floor decal in the game has ever had that
+     * treatment. Here it is done by hand: a unique step per index, tiny enough
+     * to be invisible and to stay far inside the decal budget, large enough to
+     * dwarf float32 resolution at this height by three orders of magnitude.
+     *
+     * The whole ramp is 90 * STEP ~ 1e-3, against a MARK gap of 0.003 above and
+     * a starting radius of 0.025 — so `npm run decals` does not move. */
+    const STEP = 1.2e-5;
+
     // Lepton Shoal: a scatter of orbit dots
     for (let i = 0; i < 90; i++) {
       const x = -B + 0.4 + r() * (B - AX - 0.8), z = AZ + 0.4 + r() * (D - AZ - 0.8);
       t.cyl(0.1 + r() * 0.16, 0.1 + r() * 0.16, 0.002, i % 4 ? SPECK_B : EDGE_C,
-        { x, y: Y_LEP - MARK - 0.001, z }, 6);
+        { x, y: Y_LEP - MARK - 0.001 + i * STEP, z }, 6);
     }
     // Colour Field: red / green / blue patches, because it is the colour field
     const CC = [0xff4d5e, 0x62ff8a, 0x5aa8ff];
     for (let i = 0; i < 84; i++) {
       const x = -B + 0.4 + r() * (B - AX - 0.8), z = -D + 0.4 + r() * (D - AZ - 0.8);
       t.cyl(0.14 + r() * 0.2, 0.14 + r() * 0.2, 0.002, CC[i % 3],
-        { x, y: Y_COL - MARK - 0.001, z }, 6);
+        { x, y: Y_COL - MARK - 0.001 + i * STEP, z }, 6);
     }
     // Boson Terrace: concentric rings round its middle, painted as thin bands
     for (let k = 1; k <= 9; k++) {

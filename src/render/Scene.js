@@ -151,10 +151,41 @@ export class Scene {
     this.sky.scale.setScalar(far * 0.85);
   }
 
+  /**
+   * Vertical FOV that still leaves a usable horizontal view on a tall screen.
+   *
+   * `camera.fov` in three.js is the VERTICAL angle, so a fixed value means the
+   * horizontal view collapses as the viewport narrows. The game is authored at
+   * 58 degrees on 16:9, which is an 89-degree horizontal sweep; the same 58 on
+   * a 0.46-aspect phone gives **29**. That is not a slightly worse view, it is
+   * a different game — you cannot see anything beside you.
+   *
+   * Preserving the horizontal angle outright is worse: it wants a 130-degree
+   * vertical FOV at that aspect, which is a fish-eye with a katamari somewhere
+   * in the middle of it. So this compensates by half (`K`, a geometric blend
+   * between none and full) and clamps the result. What that leaves on the table
+   * is bought back by `CameraRig` pulling the camera further out in portrait,
+   * which widens the view without bending any straight lines.
+   *
+   * At or above the reference aspect this returns `base` exactly, so desktop
+   * and landscape are untouched.
+   */
+  _aspectFov(base) {
+    const REF = 16 / 9;
+    const K = 0.5;
+    const MAX = 82;
+    const a = this.camera.aspect;
+    if (!isFinite(a) || a <= 0 || a >= REF) return base;
+    const halfV = (base * Math.PI) / 360;
+    const scaled = Math.tan(halfV) * Math.pow(REF / a, K);
+    return Math.min(MAX, (Math.atan(scaled) * 360) / Math.PI);
+  }
+
   setFov(target, dt) {
     this._fov = damp(this._fov, target, 6, dt);
-    if (Math.abs(this.camera.fov - this._fov) > 0.01) {
-      this.camera.fov = this._fov;
+    const v = this._aspectFov(this._fov);
+    if (Math.abs(this.camera.fov - v) > 0.01) {
+      this.camera.fov = v;
       this.camera.updateProjectionMatrix();
     }
   }
@@ -164,6 +195,11 @@ export class Scene {
     const h = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
+    /* Re-derive the FOV here as well as in `setFov`. Rotating a phone, or the
+       address bar sliding away, changes the aspect without the game loop asking
+       for a new FOV — and without this the compensation would not catch up
+       until the next time the player changed speed. */
+    this.camera.fov = this._aspectFov(this._fov);
     this.camera.updateProjectionMatrix();
   }
 

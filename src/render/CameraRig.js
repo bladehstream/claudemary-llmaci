@@ -9,6 +9,7 @@ import { clamp, damp, dampAngle, lerp } from '../util/math.js';
 
 const _target = new THREE.Vector3();
 const _desired = new THREE.Vector3();
+const _aim = new THREE.Vector3();
 
 export class CameraRig {
   constructor(camera) {
@@ -49,13 +50,35 @@ export class CameraRig {
     }
 
     const R = kat.radius;
+
+    /* PORTRAIT NEEDS A DIFFERENT RIG, not just a different field of view.
+     *
+     * A phone held upright is about 0.46 aspect against a monitor's 1.78, and
+     * three.js `fov` is the VERTICAL angle — so the same 58 degrees that gives
+     * an 89-degree horizontal sweep on a desktop gives 29 on a phone. Scene.js
+     * widens the vertical angle to claw some of that back, but only some: full
+     * compensation would need a 130-degree vertical FOV, which is a fish-eye.
+     *
+     * The rest is bought here, and the first attempt got the sign wrong.
+     *
+     * Tipping DOWN sounds right — aim the spare vertical angle at the ground —
+     * and it is exactly backwards. Raising the camera enlarges the wedge of
+     * near, empty floor between the lens and the ball, and an 82-degree
+     * vertical FOV renders all of it: the screenshot was a third props and a
+     * half bare floorboards. Dropping the pitch brings the camera nearer ball
+     * height, shrinks that wedge, and pulls the band where the props actually
+     * live down into the middle of the frame where the player is looking. */
+    const tall = this.camera.aspect < 1;
+    const distMul = tall ? this.distMul * 1.25 : this.distMul;
+    const pitch = tall ? Math.max(-0.12, this.pitch - 0.08) : this.pitch;
+
     // Distance is a function of SIZE ONLY. It used to also pull back with
     // speed, which meant the view crept in and out every time you accelerated
     // or braked — the camera doing something the player did not ask it to.
-    const dist = R * this.distMul;
+    const dist = R * distMul;
     // Deliberately shallow. A steeper rig shows mostly floor, and the whole
     // appeal of this game is seeing the next thing you are about to eat.
-    const height = R * (0.5 + this.pitch * 1.15);
+    const height = R * (0.5 + pitch * 1.15);
 
     _target.set(kat.group.position.x, kat.group.position.y + R * 0.25, kat.group.position.z);
 
@@ -81,10 +104,10 @@ export class CameraRig {
       this.look.z = damp(this.look.z, _target.z, rate, dt);
     }
 
-    const cp = Math.cos(this.pitch);
+    const cp = Math.cos(pitch);
     _desired.set(
       this.look.x + Math.sin(this.yaw) * dist * cp,
-      this.look.y + height + Math.sin(this.pitch) * dist * 0.55,
+      this.look.y + height + Math.sin(pitch) * dist * 0.55,
       this.look.z + Math.cos(this.yaw) * dist * cp,
     );
 
@@ -115,7 +138,24 @@ export class CameraRig {
     } else {
       this.camera.position.copy(this.pos);
     }
-    this.camera.lookAt(this.look);
+    /* AIM ABOVE THE BALL IN PORTRAIT, without moving the camera.
+     *
+     * Even after dropping the pitch, the bottom 40% of a phone screen was bare
+     * floor between the lens and the katamari. Raising the camera's TARGET
+     * would not fix it — the rig orbits that target, so lifting it lifts the
+     * camera too and the geometry comes out identical. Rotating the aim up
+     * while the camera stays put is the thing that actually works: it slides
+     * the ball down the frame and pulls the horizon and the props with it.
+     *
+     * 1.2 radii at the ~7.8-radius portrait chase distance is about 9 degrees,
+     * which drops the ball from the middle of the screen to roughly 60% — clear
+     * of the thumb buttons, with the world above it instead of carpet below. */
+    if (tall) {
+      _aim.set(this.look.x, this.look.y + R * 1.2, this.look.z);
+      this.camera.lookAt(_aim);
+    } else {
+      this.camera.lookAt(this.look);
+    }
 
     // Depth range follows the katamari's scale.
     const near = clamp(R * 0.06, 0.004, 4);

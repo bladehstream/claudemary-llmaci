@@ -9,6 +9,7 @@ import { Input } from './Input.js';
 import { HUD } from '../ui/HUD.js';
 import { Screens } from '../ui/Screens.js';
 import { Ending } from '../ui/Ending.js';
+import { TouchControls, isCoarsePointer, PAN_RATE } from './Touch.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
 import { Music } from '../audio/Music.js';
 import { Sfx } from '../audio/Sfx.js';
@@ -101,6 +102,14 @@ export class Game {
     this.sfx = new Sfx(this.audio);
     this.screens = new Screens(this);
     this.ending = new Ending(this);
+    this.touch = new TouchControls();
+    /* The sensor going live is asynchronous and arrives AFTER the permission
+       resolves, so the control overlay has to be laid out from this rather than
+       from the grant. See the note on `onLive`. */
+    this.touch.onLive = () => {
+      this.screens.refreshTiltUi(this.touch);
+      if (this.state === 'intro') this.screens.showTiltPrompt(this.touch);
+    };
 
     this.state = 'loading';
     this.stage = null;
@@ -137,17 +146,28 @@ export class Game {
          miss them — which is exactly the audience a retune is aimed at. Only
          `setOption` sets it. */
       speedCurveSet: false,
+      /* 'auto' | 'touch' | 'keys'. Auto follows the pointer type, which is the
+         right answer on a phone and on a desktop; the override exists for the
+         awkward middle — a touchscreen laptop, where a coarse pointer is
+         available but a keyboard is what the player actually wants. */
+      controls: 'auto',
     };
     this.save = { best: {}, cleared: [], found: [] };
 
     this._load();
     this.screens.syncOptions(this.options);
+    this._applyControlMode();
 
     window.addEventListener('resize', () => this.scene.resize());
     this.input.onKey = (code) => this._onKey(code);
     this.input.onKeyUp = (code) => this._onKeyUp(code);
     canvas.addEventListener('click', () => {
-      if (this.state === 'playing') { this._ensureAudio(); this.input.requestLock(); }
+      /* Pointer lock is a mouse concept and asking for it on a phone throws a
+         permission error into the console on every tap. */
+      if (this.state === 'playing' && !this.touch.enabled) {
+        this._ensureAudio();
+        this.input.requestLock();
+      }
     });
   }
 
@@ -197,6 +217,17 @@ export class Game {
   _load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
+      /* FIRST RUN ON A PHONE gets cheaper defaults, and only the first run.
+         A mid-range phone rendering the city at 1.3M triangles with a 2048
+         shadow map and a devicePixelRatio of 3 is asking for about nine times
+         the fill rate of the desktop default, which reads as "the game is
+         broken" rather than "the settings are wrong". Gated on there being no
+         save at all, so a returning player's own choices are never overwritten
+         — the same trap `speedCurveSet` exists to avoid. */
+      if (!raw && isCoarsePointer()) {
+        this.options.quality = 'low';
+        this.options.shadows = false;
+      }
       if (raw) {
         const d = JSON.parse(raw);
         this.save = { best: d.best || {}, cleared: d.cleared || [], found: d.found || [] };
@@ -243,6 +274,24 @@ export class Game {
   /** Stage ids in ladder order — the harness enumerates stages through this. */
   stageIds() { return STAGES.map((s) => s.id); }
 
+  /**
+   * Decide whether this session is played with thumbs or with a keyboard, and
+   * reshape the UI to match.
+   *
+   * Detection is by POINTER TYPE, never by user agent — a UA string tells you
+   * what a browser wants you to think it is, and gets it wrong for tablets,
+   * desktop-mode phones and every device released after the string was written.
+   * `(pointer: coarse)` plus a touch point tells you what the player's hand is
+   * actually doing, which is the only thing that matters here.
+   */
+  _applyControlMode() {
+    const want = this.options.controls === 'auto' ? isCoarsePointer() : this.options.controls === 'touch';
+    this.touch.enabled = want;
+    document.body.classList.toggle('touch', want);
+    this.screens.setTouchMode(want, this.touch);
+    if (!want) this.touch.releaseAll();
+  }
+
   setOption(key, value) {
     this.options[key] = value;
     if (key === 'music') this.audio.setMusicVolume(value);
@@ -257,6 +306,7 @@ export class Game {
        menu, defer this to `loadStage` — every control rate is a multiple of top
        speed, so changing it mid-roll would make the ball lurch. */
     if (key === 'speedCurve') { TUNING.speedP = value; this.options.speedCurveSet = true; }
+    if (key === 'controls') this._applyControlMode();
     this._persist();
   }
 
@@ -270,6 +320,7 @@ export class Game {
        life of the page, so anything that leaves a round has to close the gate or
        the hiss follows you to the menu — which it did. */
     this.sfx.setRolling(false);
+    this.touch.releaseAll();
     this.quitHold = 0;
     this.hud.setQuitHold(0);
     this.hud.hide();
@@ -342,6 +393,23 @@ export class Game {
       case 'quit': this.toTitle(); break;
       case 'retry': this.loadStage(this.stage); break;
       case 'ending': this.showEnding(); break;
+      case 'pause-touch': this.pause(); break;
+      case 'finish-touch':
+        // The finish chip IS the button on a phone; there is no Enter to tap.
+        if (this.state === 'playing' && (this.goalMet || this.exhausted)) {
+          this.sfx.ui('confirm');
+          this.finish(this.exhausted ? 'cleared' : 'early');
+        }
+        break;
+      case 'enable-tilt':
+        /* MUST stay on the synchronous path from the tap. iOS only hands over
+           the sensor from inside a user gesture, and a request that starts in a
+           timer resolves 'denied' without ever showing the dialog. */
+        this.touch.requestTilt().then(() => {
+          this.screens.refreshTiltUi(this.touch);
+          this.screens.showTiltPrompt(this.touch);
+        });
+        break;
       case 'reset-progress':
         // Two clicks, handled in Screens — there is no undo for this.
         if (this.screens.confirmReset()) this.resetProgress();
@@ -457,6 +525,7 @@ export class Game {
 
       this.hud.reset(stage);
       this.screens.showIntro(stage);
+      this.screens.showTiltPrompt(this.touch);
       this.state = 'intro';
       if (this.audio.ready) { this.music.play(stage.id); this.music.setIntensity(0.4); this.music.setHurry(false); }
     }));
@@ -473,6 +542,11 @@ export class Game {
     this.accum = 0;
     this.quitHold = 0;
     this._quitLatch = this.input.down('Enter', 'NumpadEnter');
+    /* Zero the tilt to however the phone is being held RIGHT NOW. Nobody holds
+       a phone flat, and beta is 0 lying on a table — so an uncalibrated neutral
+       reads a comfortable 50-degree reading angle as permanent full throttle. */
+    this.touch.releaseAll();
+    this.touch.calibrate();
     this.lastFrame = performance.now();
   }
 
@@ -484,6 +558,7 @@ export class Game {
     this.screens.setFinishAvailable(this.goalMet || this.exhausted);
     this.screens.show('pause');
     this.sfx.setRolling(false);
+    this.touch.releaseAll();
   }
 
   resume() {
@@ -508,6 +583,7 @@ export class Game {
     this.hud.setQuitHold(0);
     this.hud.hide();
     this.sfx.setRolling(false);
+    this.touch.releaseAll();
     this.sfx.timeUp();
     this.music.stop();
 
@@ -597,9 +673,25 @@ export class Game {
     const nudge = this.input.readCameraNudge();
     if (nudge) this.rig.yaw -= nudge * dt * 2.1;
 
-    /* ---- fixed-step physics ---- */
+    /* ---- fixed-step physics ----
+       Touch and keyboard produce the SAME shape, so `Katamari.step` never
+       learns which one it is being driven by and the physics needs no mobile
+       branch at all. On a phone the tilt supplies forward/back only and the pan
+       buttons swing the camera; because movement is camera-relative, that
+       composes into steering without a second axis. Both are summed rather than
+       switched, so a keyboard attached to a tablet still works. */
     const mv = this.input.readMove();
-    const inp = { moveX: mv.moveX, moveZ: mv.moveZ, dash: this.input.dash };
+    const tc = this.touch.read();
+    if (tc.pan) this.rig.yaw -= tc.pan * dt * PAN_RATE;
+    const inp = {
+      moveX: clamp(mv.moveX + tc.moveX, -1, 1),
+      moveZ: clamp(mv.moveZ + tc.moveZ, -1, 1),
+      dash: this.input.dash || tc.dash,
+    };
+    /* Tilt is meaningless about one axis once the phone is on its side, so the
+       round holds rather than driving off in a direction nobody asked for. */
+    this.hud.setRotateHint(this.touch.needsRotate);
+    if (this.touch.needsRotate) { inp.moveX = 0; inp.moveZ = 0; inp.dash = false; }
     this.accum += dt;
     const H = 1 / 120;
     let steps = 0;

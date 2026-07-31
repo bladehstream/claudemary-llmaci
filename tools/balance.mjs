@@ -53,6 +53,14 @@ const SKILL = parseFloat(process.argv[2]?.startsWith('--') ? '0.82' : process.ar
 const DASH = !process.argv.includes('--nodash');
 const ONLY = flag('only')?.split(',').map((s) => s.trim()).filter(Boolean) ?? null;
 const SPEED = flag('speed') ? parseFloat(flag('speed')) : null;
+/* `--time=N` overrides every stage's clock for this run. Added to sweep for the
+   clock a stage needs to be fully clearable, rather than guessing a multiplier
+   and re-editing eleven files to find out. */
+const COLLECT = process.argv.includes('--collect');
+const TIMEOVR = (() => {
+  const a = process.argv.find((x) => x.startsWith('--time='));
+  return a ? parseFloat(a.split('=')[1]) : null;
+})();
 /** Seeds per bot. One run is one path and a path is a chaotic function of the tuning. */
 const RUNS = flag('runs') ? Math.max(1, parseInt(flag('runs'), 10)) : 5;
 /* Growth knobs, for answering "how do we make a stage last longer?" without
@@ -78,6 +86,13 @@ const DENSITY_MUL = flag('densityMul') ? parseFloat(flag('densityMul')) : 1;
 buildCatalog();
 
 const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+/* How far the targeter may chase, in ball diameters. Infinity reproduces every
+   number this harness printed before the flag existed. */
+const VISION = (() => {
+  const a = process.argv.find((x) => x.startsWith('--vision='));
+  return a ? parseFloat(a.split('=')[1]) : Infinity;
+})();
 
 /** Speed/weight curves are anchored per stage; mirror what Game.loadStage does. */
 function applyStageProfile(kat, stage) {
@@ -199,25 +214,53 @@ function run(stage, seed = 99) {
    * is gone, so: consider only what is within `NEAR` ball-diameters, widening
    * until something turns up. */
   const NEAR = 24;
+  /**
+   * `--vision=N` caps how far the bot may chase, in ball diameters.
+   *
+   * WITHOUT it the ring search has an escape hatch: at ring 8 the distance
+   * filter is dropped entirely, so the bot always finds something SOMEWHERE on
+   * the map and drives straight to it with perfect knowledge. That is the
+   * single largest reason its numbers do not describe a person. A player
+   * hoovers what is around them and wanders when it runs out; they do not
+   * teleport their attention to the best remaining prop two hundred diameters
+   * away.
+   *
+   * With a finite vision the bot returns -1 when nothing is in range, and the
+   * main loop already responds to that by picking a random heading — which is
+   * exactly what wandering looks like. Default is Infinity, so every number
+   * this harness has ever printed still reproduces.
+   */
   function pickTarget() {
     const limit = kat.diameter * TUNING.pickupRatio;
     const bottom = kat.pos.y - kat.radius;
     const climb = kat.radius * 1.15;
     const v = Math.max(0.2, kat.topSpeed || 1);
+    const cap = kat.diameter * VISION;
     for (let ring = 1; ring <= 8; ring++) {
-      const reach = kat.diameter * NEAR * ring;
+      const reach = Math.min(kat.diameter * NEAR * ring, cap);
       let best = -1, bestScore = 0;
       for (let i = 0; i < f.n; i++) {
         if (!f.alive[i] || f.pickup[i] > limit) continue;
         if (blacklist.get(i) > t) continue;
         const d = Math.hypot(f.x[i] - kat.pos.x, f.z[i] - kat.pos.z);
-        if (d > reach && ring < 8) continue;
+        if (d > reach && (ring < 8 || isFinite(VISION))) continue;
         const rise = f.y[i] - bottom;
         const pen = rise > climb ? 30 + rise * 10 : 1;
-        const score = f.arch[i].volume / ((d / v + 0.6) * pen);
+        /* `--collect` drops the volume term, turning the value-maximiser into a
+           completionist that always takes the NEAREST edible thing.
+           Why it exists: "props left" was being read as a clear rate and it is
+           not one. The targeter chases volume, so it skips tiny props on
+           purpose — it left 39% of the quantum realm behind and doubling the
+           clock did not change that by a single prop, because those props were
+           never worth its time. A player trying to empty a stage behaves like
+           this instead, and a human did clear the atom stage far closer to
+           fully than this bot's 72% suggested was possible. */
+        const score = (COLLECT ? 1 : f.arch[i].volume) / ((d / v + 0.6) * pen);
         if (score > bestScore) { bestScore = score; best = i; }
       }
       if (best >= 0) return best;
+      // Once the rings have grown past what can be seen, widening is pointless.
+      if (kat.diameter * NEAR * ring >= cap) break;
     }
     return -1;
   }
@@ -286,7 +329,8 @@ function run(stage, seed = 99) {
 
 /** Second strategy: lawnmower sweeping with heading momentum. Wins in big
     open stages where committing to a direction beats chasing individual props. */
-function runSweeper(stage, seed = 7) {
+function runSweeper(stageIn, seed = 7) {
+  const stage = TIMEOVR ? { ...stageIn, time: TIMEOVR } : stageIn;
   const world = new World(mat).build(stage);
   const kat = new Katamari(mat, stage.startSize / 2);
   applyStageProfile(kat, stage);
@@ -354,7 +398,7 @@ function runSweeper(stage, seed = 7) {
 }
 
 
-console.log(`skill = ${SKILL}   runs = ${RUNS}${SPEED ? `   speed override = ${SPEED} m/s` : ''}\n`);
+console.log(`skill = ${SKILL}   runs = ${RUNS}   vision = ${isFinite(VISION) ? VISION + " diameters" : "unlimited"}${SPEED ? `   speed override = ${SPEED} m/s` : ""}\n`);
 for (const stage of [quantumStage, atomStage, microbeStage, houseStage, townStage, cityStage, countryStage, worldStage, solarStage, galaxyStage, universeStage].filter((s) => !ONLY || ONLY.includes(s.id))) {
   const t0 = Date.now();
   if (TIME_MUL !== 1) stage.time = Math.round(stage.time * TIME_MUL);

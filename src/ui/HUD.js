@@ -101,6 +101,21 @@ export class HUD {
     }
   }
 
+  /**
+   * "Turn your phone upright."
+   *
+   * Shown while a tilt-controlled round is held sideways. It is not decoration:
+   * `Game._stepPlaying` zeroes the input at the same time, because beta stops
+   * being the front-to-back axis once the phone is on its side and driving off
+   * whatever it reads instead is worse than stopping.
+   */
+  setRotateHint(on) {
+    if (!this._rotateEl) this._rotateEl = document.getElementById('rotate-hint');
+    if (!this._rotateEl || on === this._rotateOn) return;
+    this._rotateOn = on;
+    this._rotateEl.classList.toggle('hidden', !on);
+  }
+
   clearFinder() {
     if (this.finderEl) this.finderEl.classList.add('hidden');
     // Separate elements now, in separate parents, so both have to be hidden.
@@ -131,9 +146,13 @@ export class HUD {
     this._canFinish = on;
     if (this.finishPrompt && !this._exhausted) this.finishPrompt.classList.toggle('hidden', !on);
     if (!this._exhausted) {
-      this.goalMet.innerHTML = on
-        ? 'GOAL REACHED — keep rolling, or press <b>Enter</b> to finish'
-        : 'GOAL REACHED — keep rolling!';
+      /* "Press Enter" is a lie on a phone, and the long version wrapped to
+         three lines and spilled out of the goal panel. The touch wording is
+         also shorter, which is what actually fixes the overflow. */
+      const touch = document.body.classList.contains('touch');
+      this.goalMet.innerHTML = !on ? 'GOAL REACHED — keep rolling!'
+        : touch ? 'GOAL REACHED — keep rolling, or tap below to finish'
+        : 'GOAL REACHED — keep rolling, or press <b>Enter</b> to finish';
     }
   }
 

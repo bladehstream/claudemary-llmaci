@@ -794,3 +794,168 @@ html, body {
   animation: endHint 3s ease-in-out infinite;
 }
 @keyframes endHint { 0%,100% { opacity: 0.2; } 50% { opacity: 0.5; } }
+
+/* ============================================================
+   PHONE
+
+   Portrait only, by design — the tilt axis stops meaning
+   "forward and back" the moment the phone is on its side, and a
+   sign-flip table nobody has tested on real hardware is worse
+   than a polite ask to turn it upright.
+
+   Everything below is gated on `body.touch`, set from JS on a
+   coarse pointer, so a desktop build is byte-for-byte unaffected.
+   ============================================================ */
+
+.mobile-controls {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  /* Under the notch and the home indicator. Paired with viewport-fit=cover
+     in the <meta>; one without the other is either black bars or a dash
+     button you cannot reach. */
+  padding:
+    calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+    calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+}
+.mobile-controls .mc-btn { pointer-events: auto; }
+
+.mc-btn {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: #fff;
+  background: rgba(24,18,40,0.52);
+  border: 3px solid rgba(255,255,255,0.72);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  /* A finger is not a cursor: no hover, no text selection, no 300ms tap delay,
+     and no iOS long-press callout on a button you are holding down. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 70ms ease, background-color 70ms ease;
+}
+.mc-btn.held {
+  background: rgba(107,70,193,0.85);
+  border-color: #fff;
+  transform: scale(0.94);
+}
+
+.mc-left, .mc-right {
+  position: absolute; bottom: calc(18px + env(safe-area-inset-bottom));
+  display: flex; align-items: flex-end; gap: 12px;
+}
+.mc-left  { left:  calc(16px + env(safe-area-inset-left)); }
+.mc-right { right: calc(16px + env(safe-area-inset-right)); flex-direction: column; align-items: flex-end; gap: 10px; }
+
+/* Thumb-sized. 68px is comfortably above the ~44px minimum touch target and
+   sized for a thumb arc rather than a fingertip. */
+.mc-pan  { width: 68px; height: 68px; font-size: 40px; line-height: 1; padding-bottom: 4px; }
+.mc-dash { width: 84px; height: 84px; font-size: 17px; letter-spacing: 0.06em; }
+.mc-small {
+  height: 34px; padding: 0 14px; font-size: 12px; letter-spacing: 0.07em;
+  background: rgba(24,18,40,0.42); border-width: 2px;
+}
+.mc-corner {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
+  width: 44px; height: 44px; font-size: 15px; letter-spacing: 0.08em;
+  background: rgba(24,18,40,0.42); border-width: 2px;
+}
+.mc-drive { display: flex; flex-direction: column; gap: 10px; }
+
+.rotate-hint {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  background: rgba(10,6,22,0.94);
+  color: #fff; font-family: var(--font-display); font-size: 22px; font-weight: 800;
+  text-align: center; padding: 24px;
+}
+.rh-phone {
+  width: 54px; height: 92px;
+  border: 5px solid #fff; border-radius: 12px;
+  animation: rhSpin 2.4s ease-in-out infinite;
+}
+@keyframes rhSpin {
+  0%, 30%   { transform: rotate(90deg); }
+  55%, 100% { transform: rotate(0deg); }
+}
+
+.intro-tilt-note {
+  margin-top: 10px; font-size: 14px; line-height: 1.45;
+  color: #fff; opacity: 0.9; max-width: 40ch;
+}
+
+/* ------------------------------------------------------------
+   Touch layout: the mouse-shaped parts of the UI go away
+   ------------------------------------------------------------ */
+body.touch .finish-prompt .fp-key,
+body.touch .quit-prompt { display: none; }
+body.touch #mobile-controls:not(.hidden) { display: block; }
+
+/* The prompt stack has to clear the thumb buttons, which own the bottom
+   corners. Pushing it up is cheaper than moving the controls, because the
+   controls are where thumbs actually are. */
+body.touch .prompt-stack { bottom: calc(120px + env(safe-area-inset-bottom)); }
+body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
+
+/* ------------------------------------------------------------
+   Portrait: the menus were laid out for a 620px panel
+   ------------------------------------------------------------ */
+@media (max-width: 620px) {
+  .panel, .panel.wide, .panel.narrow {
+    width: min(96vw, 620px); max-width: 96vw;
+    padding: 22px 18px 20px; border-radius: 22px;
+    max-height: calc(100vh - 24px);
+  }
+  .panel-title { font-size: 30px; margin-bottom: 12px; }
+  .btn { font-size: 18px; padding: 9px 24px; border-width: 3px; }
+  .btn-big { font-size: 22px; padding: 12px 32px; }
+  .panel-actions { gap: 10px; margin-top: 16px; }
+
+  /* One card per row, and let the art shrink rather than the text wrap. */
+  .stage-cards { gap: 12px; }
+  .stage-card { width: 100%; max-width: 420px; padding: 12px 12px 14px; }
+  .sc-art { height: 74px; }
+  .sc-desc { min-height: 0; margin-bottom: 8px; }
+
+  /* Label column was a fixed 200px, which left ~120px for the slider. */
+  .opt-row { grid-template-columns: 1fr 92px; gap: 8px 10px; font-size: 15px; }
+  .opt-row label { grid-column: 1; }
+  .opt-row input[type=range] { grid-column: 1 / -1; grid-row: 2; }
+  .opt-val { grid-column: 2; grid-row: 1; text-align: right; }
+  .opt-note { font-size: 12px; max-width: none; }
+
+  .how-grid { grid-template-columns: 1fr; gap: 6px; }
+  .how-key { justify-self: start; }
+  .how-note { font-size: 14px; }
+
+  .collection-list { grid-template-columns: 1fr 1fr; }
+  .results-stats { grid-template-columns: 1fr 1fr; }
+  .results-size-value { font-size: 34px; }
+
+  .hud-topleft, .hud-topright { transform: scale(0.82); transform-origin: top left; }
+  .hud-topright { transform-origin: top right; }
+  .size-readout { font-size: 30px; }
+  .pickup-feed { font-size: 15px; }
+  .mini-stats { display: none; }   /* the corner it lives in is now a dash button */
+}
+
+/* Very short viewports — a phone with the address bar showing. */
+@media (max-height: 560px) {
+  .panel { padding: 16px 16px 14px; }
+  .panel-title { font-size: 26px; margin-bottom: 8px; }
+  .sc-art { height: 56px; }
+}
+
+/* Two control sheets in How to Play; only one is ever right for the device. */
+body.touch .how-keys { display: none; }
+body.touch .how-touch.hidden { display: block !important; }
+body.touch .how-touch.how-grid.hidden { display: grid !important; }
+
+/* The pause button owns the top-right corner on touch, so the timer has to get
+   out of its way — they were printing on top of each other. */
+body.touch .hud-topright { padding-right: 52px; }

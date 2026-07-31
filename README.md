@@ -140,11 +140,26 @@ drawn properly everywhere else. There is now one list, in the stylesheet that us
 
 Click the canvas to capture the pointer; dragging works too if you'd rather not.
 
+### On a phone
+
+Portrait, and it switches itself on — see [Playing on a phone](#playing-on-a-phone).
+
+| | |
+|---|---|
+| **Tilt** | Tip the top of the phone *away* from you to roll forward, back toward you to reverse |
+| **‹ ›** | Pan the camera. The katamari rolls the way the camera faces, so you steer by panning while you tilt |
+| **DASH** | Hold. You need it to climb — a slope you crawl at will stop you |
+| **RECENTRE** | Re-zero the tilt to however you are holding the phone now |
+| **II** | Pause |
+
+No sensor, or you declined the permission? **▲ ▼** buttons appear in place of RECENTRE and
+drive instead. Nothing else changes.
+
 ## Stages
 
 | Stage | Start | Goal | Time | Base speed | Size | Unit |
 |---|---|---|---|---|---|---|
-| The Quantum Realm | 50am | 1fm600am | 4:30 | 0.30 | 30 across | femto |
+| The Quantum Realm | 50am | 1fm600am | 5:00 | 0.39 | 30 across | femto |
 | The Atom | 1Å | 3nm2Å | 5:00 | 0.68 | 52 across | atomic |
 | The Culture | 50nm | 1µm600nm | 5:30 | 0.42 | 32 across | micron |
 | The House | 5cm | 1m60cm | 5:45 | 0.34 | 26 across | metric |
@@ -152,7 +167,7 @@ Click the canvas to capture the pointer; dragging works too if you'd rather not.
 | The City | 5m | 200m | 8:00 | 52.8 | 4,160 across | metric |
 | The Country | 50km | 1600km | 9:00 | 320 | 25,600 across | geo |
 | The World | 400km | 12,800km | 9:00 | 10.5 | 840 across | planet |
-| The Solar System | 50Mm | 1Gm600Mm | 9:20 | 0.33 | 30 across | giga |
+| The Solar System | 50Mm | 1Gm600Mm | 9:20 | 0.385 | 30 across | giga |
 | The Galaxy | 50ly | 1600ly | 11:30 | 330 | 25,600 across | light |
 | The Universe | 50Mpc | 1600Mpc | 13:30 | 330 | 25,600 across | cosmic |
 
@@ -282,6 +297,80 @@ a way the original's never can:
 The results screen reports what percentage of the stage you rolled up.
 
 ---
+
+## Playing on a phone
+
+The first question the game got from someone who wasn't the author was "how do I play this on
+my phone", which is a fair question about a thing controlled with WASD and a mouse. It is one
+build, not a second site: `(pointer: coarse)` plus a touch point decides at boot, and Options
+→ Controls overrides it for the awkward middle case of a touchscreen laptop. **Never a user
+agent string** — that tells you what a browser wants you to think it is, and is wrong for
+tablets, desktop-mode phones, and everything released after the string was written.
+
+**The scheme is tank controls.** Tilt supplies forward and back; the two thumb buttons swing
+the camera; the katamari always rolls along the camera's forward axis. That composes into
+steering without a second analogue axis, and it means `Katamari.step` needs no mobile branch —
+touch and keyboard produce the same `{moveX, moveZ, dash}` and are summed, so a keyboard
+attached to a tablet still works.
+
+Four things about the sensor are load-bearing, and each one is a way this silently does
+nothing on real hardware:
+
+1. **iOS needs an explicit grant, from inside a user gesture.**
+   `DeviceOrientationEvent.requestPermission()` only exists in Safari; call it outside a tap
+   and it resolves `denied` with no dialog ever shown. Adding the listener without asking gets
+   you an event that never fires. So the ask is a real button on the intro screen, and
+   `test-mobile` asserts `navigator.userActivation.isActive` was true when it ran.
+2. **Secure context only.** Free on Pages, and a trap on a laptop dev server reached by IP
+   from a phone — use a tunnel, or accept that tilt is dead there and the fallback runs.
+3. **Neutral has to be calibrated.** `beta` is 0 lying flat and 90 held upright, so a
+   comfortable reading angle is around 50 — which against a fixed zero is permanent full
+   throttle. It is captured at `begin()` and re-zeroable mid-round, because people shift
+   position on a sofa.
+4. **Granting and receiving a reading are different moments.** The permission resolves the
+   instant the player taps Allow; the first `deviceorientation` event lands a frame later.
+   Laying the overlay out on the grant showed the no-sensor fallback and never re-checked, so
+   a player got working tilt *and* the drive buttons, permanently. `TouchControls.onLive`
+   fires once when the first reading arrives. `test-mobile` found this, and the fake sensor in
+   that harness deliberately reproduces the delay rather than answering synchronously.
+
+**Declining is a supported path, not an error state.** The ▲▼ buttons take over and everything
+else is identical. A game that is dead because someone tapped "Don't Allow" is a bug.
+
+**Landscape is deliberately unsupported.** `beta` stops being the front-to-back axis once the
+phone is on its side, and rather than ship a sign-flip table nobody has tested on real
+hardware, the round holds and asks for the phone back upright.
+
+### Portrait is a different camera, not just a narrower one
+
+`camera.fov` in three.js is the **vertical** angle. The game is authored at 58° on 16:9, which
+is an 89° horizontal sweep; the same 58° on a 0.46-aspect phone gives **29°**. That is not a
+slightly worse view, it is a different game — you cannot see anything beside you.
+
+Preserving the horizontal angle outright is worse: it wants a 130° vertical FOV, which is a
+fish-eye. So it is bought in three parts, and the middle one was wrong on the first attempt:
+
+- **Compensate the FOV by half** and clamp at 82°. Recovers 43.9° horizontal from 28.7°.
+- **Drop the pitch**, do not raise it. Tipping down to "aim the spare angle at the ground"
+  is exactly backwards: raising the camera enlarges the wedge of near, empty floor between
+  the lens and the ball, and an 82° vertical FOV renders all of it. The first screenshot was
+  a third props and half bare floorboards.
+- **Aim above the ball without moving the camera.** Raising the camera's *target* does
+  nothing, because the rig orbits that target — lift it and the camera lifts with it and the
+  geometry is identical. Rotating the aim up while the camera stays put slides the ball from
+  the middle of the frame to about 60%, clear of the thumb buttons, with world above it
+  instead of carpet below.
+
+First run on a coarse pointer also picks `low` quality with shadows off, and only the first
+run — a returning player's own choices are never overwritten, the same trap `speedCurveSet`
+exists to avoid. A mid-range phone rendering the city at 1.3M triangles with a 2048 shadow map
+and a devicePixelRatio of 3 is asking for roughly nine times the desktop fill rate, which
+reads as "the game is broken" rather than "the settings are wrong".
+
+`npm run mobile` runs all of it at 390×844 with touch emulation, a fabricated sensor, and real
+held touches dispatched over CDP — `page.mouse` does not reach pointer handlers in a
+`hasTouch` context and `page.tap` cannot express a hold, which is worth knowing before you
+write a test that passes for the wrong reason.
 
 ## The ending
 
@@ -786,6 +875,7 @@ npm run smoke                     # boot every stage in headless Chromium, check
 npm run controls                  # assert W/A/S/D stay camera-relative at every angle
 npm run endgame                   # assert the round ends on clock, on Enter, and on empty stage
 npm run ui                        # hold-Enter-to-quit, Reset Progress, and the ending
+npm run mobile                    # the phone build: tilt, thumb buttons, portrait camera
 npm run audio                     # silence is silent and a fader at 0 is actually zero
 npm run speedcurve                # the speed-curve slider is settable, sticky and live
 node tools/shot.mjs house         # screenshot a representative moment
@@ -839,6 +929,33 @@ goal percentage, because the sweeper empties both stages before the clock runs o
 The one time this lesson was ignored, the report said 12/15 clears and the reply from the
 person actually playing it was "there is no chance of completing even the first area". It cost
 two rounds of retuning.
+
+### The travel check the harness does not do
+
+Every stage should let you cover a similar amount of its own map in the time it gives you.
+That is not something `balance` measures, and it is the one number that explained the only
+stage a player could not finish:
+
+| stage | map | speed | seconds to cross at start size |
+|---|---|---|---|
+| atom | 52 | 0.68 | 76 |
+| microbe | 32 | 0.42 | 76 |
+| house | 26 | 0.34 | 76 |
+| town | 192 | 2.53 | 76 |
+| country | 25,600 | 320 | 80 |
+| **quantum (was)** | **30** | **0.30** | **100** |
+| **solar (was)** | **30** | **0.33** | **91** |
+
+The quantum realm was the only small stage off the pattern. Everything in it took a third
+longer to reach, which makes the round a third shorter in the only unit that matters — and
+`balance` reported 9 of 9 clears throughout, because the bot knows where every prop is and
+never wastes a metre. **The cost of a slow stage falls entirely on the player who has to
+look.** Same shape as the search-cost blind spot, measured a different way.
+
+`stage.speed` defaults to `stageWidth / TUNING.crossSeconds` when omitted. Any stage that
+sets it by hand should be checked against this table. The city is a deliberate exception at
+315s — it is authored small and stretched by `spread: 4`, and you cover its ground quickly
+once you are large.
 
 Bad simulator output that looks reasonable is worse than a crash. When a balance number
 surprises you, suspect the harness before the game — and when a player and the harness

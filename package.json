@@ -26,7 +26,9 @@
     "reach": "node tools/test-reach.mjs",
     "audio": "node tools/test-audio.mjs",
     "coplanar": "node tools/test-coplanar.mjs",
-    "ui": "node tools/test-ui.mjs"
+    "ui": "node tools/test-ui.mjs",
+    "mobile": "node tools/test-mobile.mjs",
+    "progress": "node tools/test-progress.mjs"
   },
   "dependencies": {
     "@fontsource/baloo-2": "^5.3.0",

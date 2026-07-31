@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<!-- viewport-fit=cover lets the canvas run under the notch and the home
+     indicator; the CSS then pads the controls back out with env(safe-area-*).
+     Without cover you get black bars, with cover but no padding your dash
+     button sits under the home bar. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#6fc6ee" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>Claudemary LLMaci</title>
 <!-- The typefaces are bundled through src/ui/styles.css, not fetched from
      fonts.googleapis.com. See the note at the top of that file for why. -->
@@ -70,6 +77,34 @@
       <div id="flash" class="flash"></div>
       <div id="sizeup-banner" class="sizeup-banner"></div>
       <div id="countdown" class="countdown"></div>
+
+      <!-- ===== TOUCH CONTROLS =====
+           Only shown on a coarse pointer. Left thumb pans the camera, right
+           thumb dashes; the katamari rolls along the camera's forward axis, so
+           panning while tilted is how you steer. `#mc-drive` replaces the
+           recentre pill when there is no usable tilt sensor, so declining the
+           iOS permission still leaves a playable game. -->
+      <div id="mobile-controls" class="mobile-controls hidden">
+        <button id="mc-pause" class="mc-btn mc-corner" data-mc="pause" aria-label="Pause">II</button>
+        <div class="mc-left">
+          <button class="mc-btn mc-pan" data-mc="pan-left" aria-label="Pan camera left">‹</button>
+          <button class="mc-btn mc-pan" data-mc="pan-right" aria-label="Pan camera right">›</button>
+        </div>
+        <div class="mc-right">
+          <button id="mc-recentre" class="mc-btn mc-small" data-mc="recentre" aria-label="Recentre tilt">RECENTRE</button>
+          <div id="mc-drive" class="mc-drive hidden">
+            <button class="mc-btn mc-pan" data-mc="drive-fwd" aria-label="Roll forward">▲</button>
+            <button class="mc-btn mc-pan" data-mc="drive-back" aria-label="Roll backward">▼</button>
+          </div>
+          <button class="mc-btn mc-dash" data-mc="dash" aria-label="Dash">DASH</button>
+        </div>
+      </div>
+
+      <!-- Tilt only means anything about one axis while the phone is upright. -->
+      <div id="rotate-hint" class="rotate-hint hidden">
+        <div class="rh-phone"></div>
+        <p>Turn your phone upright</p>
+      </div>
     </div>
 
     <!-- ============ TITLE SCREEN ============ -->
@@ -110,7 +145,21 @@
     <div id="how-screen" class="screen hidden">
       <div class="panel">
         <h2 class="panel-title">How to Play</h2>
-        <div class="how-grid">
+        <!-- Two control sheets. `body.touch` swaps which one is visible, because
+             telling a phone player about Shift is worse than telling them nothing. -->
+        <div class="how-grid how-touch hidden">
+          <div class="how-key">Tilt</div><div>Tip the top of the phone <b>away</b> from you to roll forward, and back toward you to reverse</div>
+          <div class="how-key">‹ ›</div><div>Pan the camera. The katamari always rolls the way the camera faces, so you steer by panning while you tilt</div>
+          <div class="how-key">DASH</div><div>Hold for a burst of speed. You need it to climb — a slope you crawl at will stop you</div>
+          <div class="how-key">RECENTRE</div><div>Re-zero the tilt to however you are holding the phone now. Use it whenever you shift position</div>
+          <div class="how-key">II</div><div>Pause. From there you can restart or quit</div>
+        </div>
+        <p class="how-note how-touch hidden">
+          No motion sensor, or you declined the permission? On-screen ▲ and ▼ arrows
+          appear in place of RECENTRE and drive the katamari instead. Everything else
+          is identical.
+        </p>
+        <div class="how-grid how-keys">
           <div class="how-key">W A S D</div><div>Roll the katamari, always relative to where the camera is looking (arrow keys work too)</div>
           <div class="how-key">Mouse</div><div>Swing the camera around</div>
           <div class="how-key">Shift</div><div>Dash — costs momentum control</div>
@@ -169,6 +218,20 @@
           <span id="opt-speedcurve-val" class="opt-val">50</span>
         </div>
         <p class="opt-note" id="opt-speedcurve-note"></p>
+        <div class="opt-row">
+          <label for="opt-controls">Controls</label>
+          <select id="opt-controls">
+            <option value="auto">Automatic</option>
+            <option value="touch">Touch &amp; tilt</option>
+            <option value="keys">Keyboard &amp; mouse</option>
+          </select>
+          <span class="opt-val"></span>
+        </div>
+        <p class="opt-note">
+          Automatic picks touch controls on a device with a touchscreen and no mouse.
+          Override it if you are on a laptop with a touchscreen, or want to try the
+          phone controls on a desktop.
+        </p>
         <div class="opt-row">
           <label for="opt-quality">Render quality</label>
           <select id="opt-quality">
@@ -267,7 +330,12 @@
         <div class="intro-line"><span class="intro-key">Goal</span><span id="intro-goal"></span></div>
         <div class="intro-line"><span class="intro-key">Time</span><span id="intro-time"></span></div>
         <div id="intro-brief" class="intro-brief"></div>
-        <div class="intro-go">Click to roll</div>
+        <!-- On a phone this button is also the user gesture that iOS requires
+             for DeviceOrientationEvent.requestPermission(). Asking from page
+             load resolves 'denied' without ever showing the dialog. -->
+        <button id="intro-tilt" class="btn btn-big hidden" data-action="enable-tilt">Enable Tilt Controls</button>
+        <div id="intro-tilt-note" class="intro-tilt-note hidden"></div>
+        <div id="intro-go" class="intro-go">Click to roll</div>
       </div>
     </div>
 
