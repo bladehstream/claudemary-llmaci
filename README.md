@@ -361,8 +361,11 @@ designs and logos are copyrighted and none of them are used here. What you get i
 - **Original sound effects**, all synthesised: the rolling grind (which drops in pitch as
   you grow), pickup pops (pitched by how big the object was relative to you), impact
   thuds, size-up chimes, the countdown, and the royal gibberish voice.
-- **Original models**, ~180 archetypes assembled from primitives in code.
-- **Original text**, including the King's commentary.
+- **Original models**, 429 archetypes assembled from primitives in code.
+- **Original text**, including the King's commentary and the ending.
+
+The licence and the trademark position are spelled out at the [very bottom of this
+file](#licence-and-what-this-actually-is).
 
 ---
 
@@ -855,3 +858,39 @@ disagree, go looking for what the harness structurally cannot see.
 - Dual analog stick controls. This uses WASD + mouse.
 - Cousins, presents, and the constellation meta-game.
 - Anything at all from the original's asset files.
+
+---
+
+## Licence, and what this actually is
+
+**[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)** — see
+`LICENSE`. Fork it, take it apart, rewrite the physics, put it on your own site, teach from it,
+use it in a class. All fine. The one thing it does not permit is making money from it.
+
+That licence was picked deliberately over Creative Commons BY-NC, which is what most people
+reach for. Creative Commons themselves [recommend against CC licences for
+software](https://creativecommons.org/faq/#can-i-apply-a-creative-commons-license-to-software):
+no source-code provisions, no patent grant, and incompatible with the major software licences.
+PolyForm is drafted for software, in plain English, carries a patent grant, and defines
+"noncommercial" concretely rather than by vibes — it names hobby projects, personal study and
+private entertainment, and separately permits charities, schools and public bodies whatever
+their funding.
+
+Be aware that a noncommercial licence is **not** open source by the OSI's definition, nor free
+software by the FSF's. That is the trade: the point here is the money, not the freedom.
+
+### It is a fan homage, and unaffiliated with anybody
+
+This is an original piece of software written from scratch. There is no code, no art, no audio
+and no data from any commercial game in this repository — there are no asset files in it at
+all, which is the whole point of the thing: every mesh, every note and every sound effect is
+computed at runtime by the code you are reading.
+
+It is nonetheless obviously a love letter to Katamari Damacy, and it makes no claim to any
+trademark, character or property belonging to Bandai Namco Entertainment or anyone else. It is
+not affiliated with, endorsed by, or connected to them in any way. The name is a joke about a
+language model, not an attempt to trade on theirs. It is free, it is noncommercial, and it will
+stay that way.
+
+If you own something here and would rather it did not exist, open an issue and it will come
+down. No argument.

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Claudemary LLMaci - a browser recreation of the classic katamari-rolling game. Original geometry, procedural audio, eleven stages from quantum foam to the observable universe.",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
