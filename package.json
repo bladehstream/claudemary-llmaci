@@ -37,7 +37,8 @@
     "net": "node tools/test-net.mjs",
     "bakefarts": "node tools/bake-farts.mjs",
     "magnet": "node tools/test-magnet.mjs",
-    "zoom": "node tools/test-zoom.mjs"
+    "zoom": "node tools/test-zoom.mjs",
+    "escape": "node tools/test-escape.mjs"
   },
   "dependencies": {
     "@fontsource/baloo-2": "^5.3.0",

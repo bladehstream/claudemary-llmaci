@@ -383,6 +383,41 @@ phone forward rolls it slightly too, so a steering deadzone as tight as the driv
 the camera drift every time you accelerate. `RECENTRE` zeroes both axes together for the same
 reason — they are the same wrist.
 
+### ⚠ Two ways iOS breaks a page that no other browser does
+
+Both reported by an iPhone player, both invisible everywhere else, and neither reproducible in
+this project's headless Chromium.
+
+**`100vh` is not the height of the screen.** Safari resolves viewport units against the LARGE
+viewport — the height with the URL bar retracted — so while the bars are showing, anything
+sized in `vh` is *taller than the area it is being laid out in*. This shipped twice. First as
+"the back button is a bit hard to hit on iPhones" (`.panel` at `90vh`), and then, after that
+was fixed, as **"I can't close the collection menu"** — because the one thing *inside* the
+panel still used `vh`, and the collection log is its own scroll box filling most of the panel.
+So Back went below the fold, and a finger trying to scroll the panel to reach it landed on the
+list and scrolled that instead. Not awkward: there was no gesture that worked.
+
+The fix is structural rather than a better number. The collection panel is a flex column with
+a fixed title, a fixed summary, fixed actions and a list that takes what is left, so the exit
+is no longer downstream of anything that can grow. `npm run escape` sweeps every screen at five
+phone sizes and asserts the way out is on screen, hittable by `elementFromPoint`, big enough to
+tap, and **not behind a nested scroller that would eat the gesture** — plus a source audit that
+no height anywhere is measured in `vh`.
+
+**`AudioContext.state` has a fourth value.** WebKit adds `'interrupted'`, entered when the
+system takes the audio session away: a phone call, the screen locking, another app playing, or
+Safari backgrounding the tab. It is not in the Web Audio spec and no other engine has it — so
+code written against the spec checks for `'suspended'`, finds `'interrupted'`, concludes there
+is nothing to do, and leaves the context dead for the rest of the session. Reported as
+**"if I come back to play again, I have to refresh the window to get audio back"**, and
+refreshing worked precisely because it built a new context.
+
+Two things were needed. `resume()` now acts on any state that is not already running. And
+there is a document-level `pointerdown`/`touchend` hook, because none of `visibilitychange`,
+`pageshow` or a timer is a user gesture and iOS refuses `resume()` without one — and on a
+phone there was no other route: the only in-game caller of `_ensureAudio` is the canvas click
+handler, which is gated on `!touch.enabled` because pointer lock is a mouse concept.
+
 ### ⚠ The tilt was a switch, and not in the file you would look in
 
 The first phone build shipped a control that the player described as "very on/off", and the
@@ -1120,6 +1155,8 @@ npm run net                       # the wire format, two real peers, and two rea
 npm run magnet                    # reach is not appetite: exact distances, then the
                                   # balance sweep across the slider's whole range
 npm run zoom                      # the camera, the fog and the far plane move together
+npm run escape                    # every screen has a reachable way out, at every
+                                  # phone size, with nothing nested eating the gesture
                                   # connecting end to end through the actual UI
 node tools/shot.mjs house         # screenshot a representative moment
 node tools/shot-ui.mjs            # screenshot the menus, the prompt chips and the ending

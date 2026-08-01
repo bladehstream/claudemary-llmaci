@@ -436,15 +436,61 @@ html, body {
    Collection log
    ------------------------------------------------------------ */
 .collection-summary { font-size: 17px; font-weight: 600; color: var(--purple); margin-bottom: 14px; }
+
+/* ⚠ THE BACK BUTTON MUST BE STRUCTURALLY UNREACHABLE BY THE LIST.
+ *
+ * Reported by an iPhone player as *"I can't close the collection menu"*, and
+ * it was two faults compounding:
+ *
+ *   1. the list was `max-height: 56vh`, and iOS resolves `vh` against the
+ *      LARGE viewport — the height with the URL bar retracted. With the bars
+ *      showing, 56vh on an iPhone 14 is 473px inside a 664px-tall visible
+ *      area, not the 372px it looks like. This project had already been bitten
+ *      by exactly this once, on `.panel`, and the note there says so; the fix
+ *      was applied to the panel and not to the one thing inside it that also
+ *      used `vh`.
+ *   2. the list is its own scroll box filling most of the panel, so once Back
+ *      HAD been pushed below the fold, a finger trying to scroll the panel to
+ *      reach it landed on the list and scrolled that instead. Unreachable, not
+ *      merely awkward — there was no gesture that would work.
+ *
+ * So the panel becomes a flex column: fixed title, fixed summary, fixed
+ * actions, and the list takes whatever is left. The exit cannot be pushed out
+ * of the viewport because it is no longer downstream of anything that grows.
+ * That is the same move as the prompt-chip stack — make the collision
+ * impossible rather than keep a number correct.
+ *
+ * `min-height: 0` is load-bearing: a flex item's default `min-height: auto`
+ * refuses to shrink below its content, so without it the list would push the
+ * actions straight back out and this would look fixed while being broken.
+ */
+#collection-screen .panel {
+  display: flex;
+  flex-direction: column;
+  /* The list scrolls; the panel must not, or the two compete. */
+  overflow: hidden;
+}
+#collection-screen .panel-title,
+#collection-screen .collection-summary,
+#collection-screen .panel-actions { flex: 0 0 auto; }
 .collection-list {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
-  gap: 8px; max-height: 56vh; overflow-y: auto; text-align: left; padding-right: 6px;
+  gap: 8px; overflow-y: auto; text-align: left; padding-right: 6px;
+  flex: 1 1 auto; min-height: 0;
+  /* Scrolling the list to its end must not then scroll the page behind it. */
+  overscroll-behavior: contain;
 }
 .col-item {
   background: #fff; border-radius: 12px; padding: 7px 12px;
   font-size: 14px; display: flex; justify-content: space-between; gap: 8px;
   border-left: 6px solid var(--grass);
+  /* A flex item defaults to `min-width: auto`, which refuses to shrink below
+     its content — so one long name ("Suspiciously Optimal Paperclip") widens
+     its whole grid column and pushes the second one off the side of a 320px
+     screen. Measured: the right-hand column was clipped mid-word. */
+  min-width: 0;
 }
+.col-item b { min-width: 0; overflow-wrap: anywhere; }
 .col-item.unseen { opacity: 0.42; border-left-color: #bbb; font-style: italic; }
 .col-item b { font-weight: 600; }
 .col-size { color: #8a819e; font-variant-numeric: tabular-nums; font-size: 12px; }
@@ -1130,7 +1176,12 @@ body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
   .how-key { justify-self: start; }
   .how-note { font-size: 14px; }
 
-  .collection-list { grid-template-columns: 1fr 1fr; }
+  /* `auto-fill`, not a hard `1fr 1fr`. Two fixed columns cannot fit on a
+     320px screen once the panel padding is taken out, and a grid column's
+     default `min-width: auto` means it does not shrink — it overflows. Letting
+     the count fall out of the available width gives two columns on an ordinary
+     phone and one on a very small one, with no breakpoint to keep correct. */
+  .collection-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .results-stats { grid-template-columns: 1fr 1fr; }
   .results-size-value { font-size: 34px; }
 

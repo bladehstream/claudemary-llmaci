@@ -288,13 +288,36 @@ export class AudioEngine {
 
       /* iOS also suspends the context when the page is backgrounded and does
          not reliably resume it on return, which reads as "the sound just
-         stopped halfway through the round". Cheap to re-arm both. */
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState !== 'visible') return;
+         stopped halfway through the round". Cheap to re-arm both.
+         `pageshow` as well as `visibilitychange`: coming back through the
+         back/forward cache fires pageshow and does NOT always fire a
+         visibility change. */
+      const wake = () => {
         this.resume();
         const q = this._silentEl && this._silentEl.play();
         if (q && q.catch) q.catch(() => {});
+      };
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') wake();
       });
+      window.addEventListener('pageshow', wake);
+
+      /* ⚠ AND A GESTURE HOOK ON THE WHOLE DOCUMENT, because none of the above
+         is a user gesture and iOS will refuse `resume()` without one.
+         Everything else that calls `resume()` goes through `Game._ensureAudio`,
+         and on a PHONE there is no path from playing the game to that function
+         at all: the canvas click handler that calls it is gated on
+         `!touch.enabled` (pointer lock is a mouse concept), and the menu
+         actions that call it are not reachable mid-round. So a player who
+         backgrounded the app, came back, and tapped to keep rolling had no way
+         to re-arm the audio short of reloading — which is what they did.
+         Idempotent, passive, and a no-op once the context is running, so it
+         costs a state comparison per tap. Both events because `touchend` is
+         the historically most reliable unlock on iOS and `pointerdown` covers
+         everything else. */
+      const onGesture = () => { if (this.ctx && this.ctx.state !== 'running') wake(); };
+      document.addEventListener('pointerdown', onGesture, { passive: true });
+      document.addEventListener('touchend', onGesture, { passive: true });
     } catch { /* no document, no autoplay, no matter — Web Audio still tries */ }
   }
 
@@ -331,8 +354,31 @@ export class AudioEngine {
    */
   _revFor(dest) { return dest === this.sfx ? this.sfxSend : this.musicSend; }
 
+  /**
+   * Bring the audio back, from whatever state iOS has left it in.
+   *
+   * ⚠ `state === 'suspended'` IS NOT THE ONLY WAY TO BE STOPPED, and testing
+   * for it exactly is why an iPhone needed a page refresh to get sound back.
+   * WebKit has a fourth, non-standard AudioContext state — **`'interrupted'`**
+   * — which it enters when the system takes the audio session away: a phone
+   * call, the screen locking, another app playing, or Safari backgrounding the
+   * tab. It is not in the Web Audio spec and no other browser has it, so code
+   * written against the spec checks for `'suspended'`, finds `'interrupted'`,
+   * concludes there is nothing to do, and leaves the context dead for the rest
+   * of the session. Reloading the page builds a new context, which is exactly
+   * the workaround the player found: *"if I come back to play again, I have to
+   * refresh the window to get audio back."*
+   *
+   * So: resume anything that is not already running. `resume()` on a running
+   * context is a no-op and on a closed one rejects harmlessly, so there is
+   * nothing to be gained by being clever about which states are legal.
+   */
   resume() {
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    const st = this.ctx && this.ctx.state;
+    if (this.ctx && st !== 'running' && st !== 'closed') {
+      const r = this.ctx.resume();
+      if (r && r.catch) r.catch(() => { /* closed, or no gesture yet */ });
+    }
     /* Retry the silent element on EVERY resume, not just at init. Its first
        play() can be rejected — autoplay policy, a gesture that had already
        elapsed — and if that is the only attempt, an iPhone stays silent for the

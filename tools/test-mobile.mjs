@@ -611,6 +611,64 @@ console.log('\n=== the thumb buttons ===');
     ios ? `loop ${ios.loop}, muted ${ios.muted}, vol ${ios.vol}, playsinline ${ios.inline}` : '');
   check('and its silence is generated, not an asset', !!ios && ios.wav);
 
+  /* ---- COMING BACK TO A BACKGROUNDED GAME ----
+     Reported: *"if I come back to play again, I have to refresh the window to
+     get audio back."*
+
+     ⚠ WHAT CHROMIUM CANNOT REPRODUCE, and it is the actual cause. WebKit has a
+     fourth, non-standard AudioContext state, `'interrupted'`, entered when the
+     system takes the audio session away — a call, the screen locking, Safari
+     backgrounding the tab. Chromium only ever has running/suspended/closed, so
+     the real failure is unreachable from here. What IS testable is the two
+     things that made it unrecoverable, and both are ordinary logic:
+
+       1. `resume()` must act on any state that is not already running, rather
+          than testing for `'suspended'` exactly — that test is what left an
+          interrupted context dead for the rest of the session;
+       2. an ordinary TAP must reach `resume()`. On a phone it previously could
+          not: the only in-game caller is gated on `!touch.enabled`, so there
+          was no gesture a player could make that re-armed the audio. */
+  const recover = await page.evaluate(async () => {
+    const g = window.__llmaci;
+    const a = g.audio;
+    const out = {};
+
+    // 1. Does resume() act on a state that is not the one it used to test for?
+    const real = a.ctx;
+    let asked = 0;
+    const fake = { state: 'interrupted', resume: () => { asked++; return Promise.resolve(); } };
+    a.ctx = fake;
+    a.resume();
+    out.resumesInterrupted = asked === 1;
+    fake.state = 'running';
+    a.resume();
+    out.leavesRunningAlone = asked === 1;      // still 1: no pointless resume
+    fake.state = 'closed';
+    a.resume();
+    out.leavesClosedAlone = asked === 1;
+    a.ctx = real;
+
+    // 2. Is there a document-level gesture path back to resume()?
+    let woke = 0;
+    const spy = a.resume.bind(a);
+    a.resume = () => { woke++; return spy(); };
+    // Pretend the system took the session away, then tap somewhere ordinary.
+    const was = a.ctx;
+    a.ctx = { state: 'interrupted', resume: () => Promise.resolve() };
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 20));
+    out.tapWakesIt = woke > 0;
+    a.ctx = was;
+    a.resume = spy;
+    return out;
+  });
+  check('resume() acts on an interrupted context, not only a suspended one',
+    recover.resumesInterrupted, 'the iOS-only state that needed a page reload');
+  check('and does not poke a context that is already running or closed',
+    recover.leavesRunningAlone && recover.leavesClosedAlone);
+  check('a tap anywhere re-arms the audio', recover.tapWakesIt,
+    'on a phone there was no other route to resume() during play');
+
   /* ---- Options -> Tilt range ----
      The whole argument for shipping the band width as a slider is that nobody
      can pick the number from here, which is worth nothing if the control turns
