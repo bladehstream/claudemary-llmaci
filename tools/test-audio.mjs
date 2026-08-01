@@ -143,6 +143,151 @@ await page.waitForTimeout(600);
 const sfxOff = await peakRms(2400, FIRE_SFX);
 check('sound effects at 0 are silent, tails and all', sfxOff < SILENT, `rms ${sfxOff.toExponential(2)}`);
 
+/* ---- 4. the transport survives a drifted clock ----------------------------
+ *
+ * ⚠ THIS SECTION EXISTS BECAUSE OF "the background music got crackly and then
+ * stopped entirely", reported from the main menu after finishing a stage.
+ *
+ * A browser throttles a hidden tab's timers to roughly one per second, while
+ * `AudioContext.currentTime` keeps running at real time. `Music._tick` walks
+ * `nextTime` forward in step-sized increments, so a player who leaves the menu
+ * open for two minutes and comes back has a `nextTime` two MINUTES behind —
+ * about a thousand 16th notes owed. And the menu is exactly where a player
+ * leaves the game sitting, which is why the report came from there.
+ *
+ * Web Audio starts a source scheduled at a past timestamp immediately, so a
+ * catch-up loop dumps its entire per-tick allowance AT ONCE, every 25ms, until
+ * it closes the gap: thousands of overlapping voices into a limiter. That is
+ * the "crackly". Then, once the arithmetic in some voice computes a negative
+ * absolute time, `setValueAtTime` throws a RangeError — measured, 60 of them in
+ * a second and a half — and because the throw escapes the `setInterval`
+ * callback BEFORE `nextTime` is advanced, the next tick retries the same step
+ * and throws again, forever. That is the "stopped entirely", and it is why
+ * starting a new round fixed it: `play()` resets the clock.
+ *
+ * Two independent defences, asserted separately below, because either one alone
+ * leaves a hole:
+ *   - resync, so no note is ever scheduled in the past;
+ *   - a try/catch per step, so any FUTURE slip in any of eleven voices costs
+ *     one dropped note instead of all remaining music.
+ *
+ * The drift is imposed rather than waited for: hiding a tab under Playwright
+ * does not reliably reproduce timer throttling, and two minutes is not a
+ * reasonable thing to put in a test suite.
+ */
+const VOICES = ['kick', 'snare', 'hat', 'rim', 'shaker', 'tom',
+  'bass', 'pluck', 'vibe', 'scat', 'brass'];
+
+await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.setOption('music', 1);
+  g.setOption('sfx', 0);
+  g.music.play('menu');
+});
+await page.waitForTimeout(1400);
+
+// Anything escaping the scheduler's setInterval callback lands here.
+const pageErrors = [];
+page.on('pageerror', (err) => pageErrors.push(String(err)));
+
+/* Count every note the scheduler hands the engine.
+ *
+ * ⚠ THE HEADLINE NUMBER HERE IS NOTES PER SECOND, NOT LOUDNESS. An earlier
+ * version compared peak RMS before and after, and it was flaky at 3x: the
+ * resync deliberately lands on a bar boundary, so recovery always replays a
+ * downbeat — kick, bass root and a four-note comp together, the loudest moment
+ * in the loop — while the "normal" window might have sampled between them. RMS
+ * measures which notes landed; the bug is HOW MANY. Count them instead, and
+ * keep a much looser RMS bound as a second opinion. */
+await page.evaluate((voices) => {
+  const g = window.__llmaci;
+  window.__drift = { past: [], notes: 0, undo: [] };
+  for (const name of voices) {
+    const fn = g.audio[name].bind(g.audio);
+    g.audio[name] = (t, ...rest) => {
+      const d = window.__drift;
+      d.notes++;
+      if (t < g.audio.now - 0.02) d.past.push(t - g.audio.now);
+      return fn(t, ...rest);
+    };
+    window.__drift.undo.push(() => { g.audio[name] = fn; });
+  }
+}, VOICES);
+
+const WINDOW = 1800;
+const notesSoFar = () => page.evaluate(() => window.__drift.notes);
+const n0 = await notesSoFar();
+const normal = await peakRms(WINDOW);          // same window length as recovery,
+const n1 = await notesSoFar();                 // so both get the same chance at a downbeat
+check('the menu loop is playing before we break its clock', normal > SILENT * 20 && n1 > n0,
+  `rms ${normal.toExponential(2)}, ${n1 - n0} notes`);
+
+// Two minutes of hidden-tab drift, imposed in one go.
+await page.evaluate(() => {
+  const g = window.__llmaci;
+  window.__drift.before = g.music.step;
+  g.music.nextTime = g.audio.now - 120;
+});
+const recovering = await peakRms(WINDOW);
+const drift = await page.evaluate(() => {
+  const g = window.__llmaci; const m = g.music; const d = window.__drift;
+  d.undo.forEach((u) => u());
+  return {
+    past: d.past.length,
+    worst: d.past.length ? Math.min(...d.past) : 0,
+    notes: d.notes,
+    resynced: m.nextTime >= g.audio.now,
+    advanced: m.step !== d.before,
+    playing: m.playing,
+  };
+});
+const during = drift.notes - n1;
+const before = n1 - n0;
+
+check('120s of drift schedules nothing in the past', drift.past === 0,
+  drift.past ? `${drift.past} notes, worst ${drift.worst.toFixed(2)}s late` : `${drift.notes} notes, all ahead`);
+check('the transport resyncs instead of catching up', drift.resynced && drift.advanced && drift.playing,
+  `nextTime ${drift.resynced ? 'ahead' : 'BEHIND'}, step ${drift.advanced ? 'moving' : 'STUCK'}`);
+/* A catch-up loop would fire 64 steps of notes per 25ms tick until it closed a
+ * 120s gap — hundreds of times the normal rate, for tens of seconds. 2x is a
+ * generous bound that still leaves two orders of magnitude of daylight. */
+check('recovery does not dump a wall of notes', during < before * 2,
+  `${during} notes in ${WINDOW}ms vs ${before} normal`);
+// Pre-limiter tap, so a dump reads as a genuinely enormous number rather than
+// being flattened to look normal by the limiter a player would hear.
+check('recovery does not spike the master bus', recovering < normal * 6,
+  `rms ${recovering.toExponential(2)} vs ${normal.toExponential(2)} normal`);
+
+/* Now the second defence on its own: make every voice throw the exact error
+ * that was measured, and confirm the transport keeps its footing. */
+const thrown = await page.evaluate(async (voices) => {
+  const g = window.__llmaci; const m = g.music;
+  const saved = {}; let hits = 0;
+  for (const name of voices) {
+    saved[name] = g.audio[name];
+    g.audio[name] = () => {
+      hits++;
+      throw new RangeError('Time must be a finite non-negative number: -118.973');
+    };
+  }
+  const before = m.step;
+  await new Promise((r) => setTimeout(r, 1400));
+  for (const name of voices) g.audio[name] = saved[name];
+  return { hits, advanced: m.step !== before, playing: m.playing, ahead: m.nextTime > g.audio.now };
+}, VOICES);
+check('a throwing voice is actually reached', thrown.hits > 0, `${thrown.hits} throws`);
+check('one bad note does not kill the scheduler', thrown.advanced && thrown.playing && thrown.ahead,
+  `step ${thrown.advanced ? 'moving' : 'STUCK'}, nextTime ${thrown.ahead ? 'ahead' : 'BEHIND'}`);
+check('nothing escaped the scheduler', pageErrors.length === 0,
+  pageErrors.length ? pageErrors[0].slice(0, 120) : '');
+
+// And it is still audible afterwards, i.e. we restored the voices and the
+// transport did not merely survive in silence.
+await page.waitForTimeout(600);
+const after = await peakRms(1200);
+check('the music is still there when the errors stop', after > SILENT * 20,
+  `rms ${after.toExponential(2)}`);
+
 await browser.close();
 await server.close();
 console.log(fail ? `\n${fail} FAILED` : '\nsilence is silent and zero is zero');

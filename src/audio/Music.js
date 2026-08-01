@@ -55,7 +55,18 @@ export class Music {
     this.playing = false;
   }
 
-  setIntensity(v) { this._targetIntensity = clamp(v, 0, 1); }
+  /**
+   * @param {boolean} [snap] jump there instead of gliding.
+   *
+   * The glide is 6% of the remaining gap per 25ms tick, so a drop from a
+   * finished stage's 1.0 to the menu's 0.35 takes about a second — a second in
+   * which the menu plays the full stage arrangement. Snap when the CONTEXT
+   * changes; glide when only the moment does.
+   */
+  setIntensity(v, snap = false) {
+    this._targetIntensity = clamp(v, 0, 1);
+    if (snap) this.intensity = this._targetIntensity;
+  }
   setHurry(on) { this.hurrying = on; }
 
   get stepDuration() {
@@ -67,10 +78,62 @@ export class Music {
     const e = this.engine;
     if (!e.ready || !this.playing) return;
     this.intensity += (this._targetIntensity - this.intensity) * 0.06;
+
+    /* ⚠ NEVER SCHEDULE IN THE PAST. RESYNC INSTEAD OF CATCHING UP.
+     *
+     * This scheduler runs on a 25ms `setInterval` and walks `nextTime` forward
+     * in step-sized increments. Browsers throttle timers in a hidden tab to
+     * roughly one per second, while `AudioContext.currentTime` keeps running —
+     * so a player who switches away for two minutes comes back to a `nextTime`
+     * that is 120 SECONDS behind, about a thousand steps.
+     *
+     * Web Audio fires a source scheduled at a past timestamp immediately. So
+     * the catch-up loop below, which is capped at 64 steps per tick, then dumps
+     * 64 x ~8 voices of notes AT ONCE, every 25ms, until it closes the gap:
+     * several thousand overlapping notes into a limiter. That is precisely
+     * "the background music got crackly and then stopped entirely", and it
+     * explains why starting a new round fixed it — `play()` resets `nextTime`
+     * from the current clock.
+     *
+     * ⚠ AND THE MENU IS WHERE IT BITES, because the menu is the only place a
+     * player leaves the game sitting while they do something else.
+     *
+     * Skipping ahead loses a few bars of a looping theme, which is
+     * imperceptible. The alternative is not "hear those bars late" — it is
+     * hear all of them simultaneously.
+     */
+    if (this.nextTime < e.now) {
+      this.nextTime = e.now + 0.05;
+      // Keep the bar boundary, so the resync lands on a downbeat rather than
+      // halfway through a phrase.
+      this.step = this.step - (this.step % 16);
+    }
+
     const horizon = e.now + SCHEDULE_AHEAD;
     let guard = 0;
     while (this.nextTime < horizon && guard++ < 64) {
-      this._scheduleStep(this.step, this.nextTime);
+      /* ⚠ ONE BAD NOTE MUST NOT KILL THE SCHEDULER FOREVER.
+       *
+       * This runs inside a `setInterval`, so an exception escaping here aborts
+       * the tick — and since `nextTime` is only advanced AFTER the schedule
+       * call, the very next tick tries the same step, throws again, and the
+       * music is dead for the rest of the session with the interval still
+       * firing forty times a second.
+       *
+       * That is not hypothetical. Before the resync above existed, a drifted
+       * `nextTime` could go negative in absolute terms, and `setValueAtTime`
+       * rejects a negative time with a RangeError: measured, 60 of them in a
+       * second and a half, one per tick, permanently. The player saw it as the
+       * music going "crackly and then stopped entirely", recovering only when
+       * a new round called `play()` and reset the clock.
+       *
+       * The resync makes that particular arithmetic impossible. This makes the
+       * FAILURE MODE impossible, which is the more durable of the two: any
+       * future slip in any of eleven voices costs one dropped note instead of
+       * all remaining music. */
+      try {
+        this._scheduleStep(this.step, this.nextTime);
+      } catch { /* drop the note, keep the transport */ }
       this.nextTime += this.stepDuration;
       this.step = (this.step + 1) % (this.song.bars * 16);
     }
