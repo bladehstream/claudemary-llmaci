@@ -35,7 +35,7 @@
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
 import {
-  gradedDisc, ring, shell, jet, prominence, swarm, wisps, core,
+  gradedDisc, ring, shell, sheet, jet, prominence, swarm, wisps, core,
 } from './spacekit.js';
 
 const TAU = Math.PI * 2;
@@ -255,15 +255,27 @@ function oval(b, Z, a, h, w, col) {
  * the biggest ball the stage can grow is a thing you roll under.
  */
 function arc(b, span, rise, thick, r, colA, colB, n = 11) {
+  const A = span * 0.5;
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const a = t * Math.PI;
-    const rr = thick * (0.62 + Math.sin(a) * 0.55);
-    b.sphere(rr, i % 2 ? colA : colB, {
-      x: -Math.cos(a) * span * 0.5,
+    // the tangent of the semi-ellipse here, so the element lies ALONG the curve
+    const dx = Math.sin(a) * A, dy = Math.cos(a) * rise;
+    const seg = (Math.hypot(dx, dy) * Math.PI) / n * 0.66;
+    const rr = thick * (0.72 + Math.sin(a) * 0.36);
+    /* ⚠ GRADED ALONG THE CURVE, NOT ALTERNATED ELEMENT BY ELEMENT. Alternating
+       two colours down a tube is what turns it back into beads — the eye reads
+       the colour change as a join. Hot at the footpoints where the gas is
+       dense, cooler at the apex where it has expanded, which is both what a
+       real one looks like and a gradient rather than a stripe. */
+    const heat = Math.sin(a);
+    b.ellip(rr, Math.max(seg, rr * 1.1), rr, heat > 0.86 ? colB : colA, {
+      x: -Math.cos(a) * A,
       y: Math.sin(a) * rise + thick * 0.5,
-      z: Math.sin(t * 6.2 + r()) * thick * 0.7,
-    }, 7, 5);
+      z: Math.sin(t * 6.2 + r()) * thick * 0.5,
+      rz: -Math.atan2(dx, dy),
+      ghost: true,
+    }, 6, 4);
   }
 }
 
@@ -588,12 +600,22 @@ P({ id: 'sol_magnetotail', name: 'Magnetotail', sizeMul: 2.1661, fill: 0.7114, v
       }
       // the neutral sheet, between the lobes
       d.ellip(Z * 2.1, Z * 0.03, Z * 0.26, S.aurora, { x: Z * 2.2, y: Z * 0.62 }, 6, 4);
-      // the bow shock, a real curved sheet standing off the sunward side
-      shell(d, Z * 0.95, S.wind, { y: Z * 0.62, th: 0.05, open: 0.62, rx: -1.5708, sx: 0.42 }, 16);
+      /* ⚠ The bow shock was a `shell` turned on its side and squashed, and it
+         rendered as a flat disc with a bar through it — the prop read as a
+         barbell. A shell is a shape of revolution about Y; lay it on its side
+         and it is a tube seen end-on, not a sheet. Built as an actual arc of
+         flattened elements instead, which is what a standing shock is. */
+      for (let i = 0; i < 9; i++) {
+        const a = -1.15 + (i / 8) * 2.3;
+        d.ellip(Z * 0.05, Z * (0.62 - Math.abs(a) * 0.16), Z * 0.3, i % 2 ? S.wind : S.windDim, {
+          x: -Z * (0.72 + Math.cos(a) * 0.22), y: Z * 0.62,
+          z: Z * Math.sin(a) * 0.78, ry: a,
+        }, 5, 4);
+      }
     });
   } });
 
-P({ id: 'sol_sunspot', name: 'Sunspot Group', fill: 0.3, variants: 2, weight: 5,
+P({ id: 'sol_sunspot', name: 'Sunspot Group', sizeMul: 0.98777, fill: 0.2891, variants: 2, weight: 5,
   build(b, r, v) {
     const Z = SZ.sunspot;
     /* A piece of photosphere with the spots still in it — a MOUND, not a
@@ -601,91 +623,126 @@ P({ id: 'sol_sunspot', name: 'Sunspot Group', fill: 0.3, variants: 2, weight: 5,
        width, and this is one of the widest things in the middle of the ladder. */
     b.dome(Z, S.photo, {}, 11);
     b.ellip(Z * 0.98, Z * 0.3, Z * 0.9, S.photo, { y: -Z * 0.02 }, 11, 5);
-    // granulation
-    for (let i = 0; i < 12; i++) {
+    /* ⚠ THE GRANULATION WAS TWELVE SPHERES SITTING ON TOP OF THE DOME, and a
+       sphere on a surface is a boulder, not a convection cell. The Sun itself
+       already had this right — `sol_sun` lays its granulation as thin discs
+       flat ON the surface, and the same trick works here. Mottling, not
+       cobbles.
+
+       And the spots were too small to be the subject. This prop is called
+       Sunspot Group; the spots should be the first thing you see, so they are
+       now half again as wide with a clear penumbra round each dark umbra,
+       which is the structure everybody recognises from a photograph. */
+    for (let i = 0; i < 14; i++) {
       const a = i * 2.399963 + v;
-      const d = Z * 0.86 * Math.sqrt((i + 0.5) / 12);
-      b.sphere(Z * 0.16, i % 3 ? S.photoHot : S.limb,
-        { x: Math.cos(a) * d, y: Z * 0.5 + Math.cos(d / Z) * Z * 0.42, z: Math.sin(a) * d }, 6, 4);
+      const d = Z * 0.88 * Math.sqrt((i + 0.5) / 14);
+      const y = Z * 0.5 + Math.cos(d / Z) * Z * 0.44;
+      const tilt = d / Z * 0.55;
+      b.cyl(Z * 0.15, Z * 0.15, Z * 0.02, i % 3 ? S.photoHot : S.limb, {
+        x: Math.cos(a) * d, y, z: Math.sin(a) * d,
+        rz: -Math.cos(a) * tilt, rx: Math.sin(a) * tilt,
+      }, 7);
     }
-    // umbra and penumbra, the spots themselves
+    // umbra and penumbra, the spots themselves, and they are the subject
     for (let i = 0; i < 4; i++) {
-      const a = 1.1 + i * 1.5 + v, d = Z * (0.2 + (i % 3) * 0.2);
-      const rr = Z * (0.15 + (i % 2) * 0.1);
+      const a = 1.1 + i * 1.5 + v, d = Z * (0.18 + (i % 3) * 0.21);
+      const rr = Z * (0.2 + (i % 2) * 0.12);
       const y = Z * 0.55 + Math.cos(d / Z) * Z * 0.46;
-      b.cyl(rr * 1.7, rr * 1.7, Z * 0.05, S.penumbra,
-        { x: Math.cos(a) * d, y, z: Math.sin(a) * d }, 8);
-      b.cyl(rr, rr, Z * 0.07, S.umbra,
-        { x: Math.cos(a) * d, y: y + Z * 0.02, z: Math.sin(a) * d }, 8);
+      const tilt = d / Z * 0.55;
+      const lay = { rz: -Math.cos(a) * tilt, rx: Math.sin(a) * tilt };
+      b.cyl(rr * 1.75, rr * 1.75, Z * 0.035, S.penumbra,
+        { x: Math.cos(a) * d, y, z: Math.sin(a) * d, ...lay }, 9);
+      b.cyl(rr, rr, Z * 0.05, S.umbra,
+        { x: Math.cos(a) * d, y: y + Z * 0.02, z: Math.sin(a) * d, ...lay }, 9);
     }
   } });
 
-P({ id: 'sol_bowshock', name: 'Bow Shock', fill: 0.06, variants: 2, weight: 5,
+P({ id: 'sol_bowshock', name: 'Bow Shock', sizeMul: 1.3666, fill: 0.1531, variants: 2, weight: 5,
   surface: 'air', flyHeight: 0.2,
   build(b, r, v) {
-    const Z = SZ.bowshock;
-    /* Where the wind piles up against a magnetosphere: a crescent standing on
-       edge. Standing, so the span is height rather than floor.
+    /* ⚠ IT WAS A ROW OF VERTICAL SLABS ON AN ARC, AND IT READ AS A SCALLOP.
+       The comment above the old version is a good one — it explains that
+       eighteen thin BOXES read as scaffolding and that rounded forms fix it —
+       and it is fixing the wrong axis. The problem was never box-versus-
+       ellipsoid. It is that twenty tall thin elements standing side by side
+       flute, whatever their cross-section, and alternating two colours down
+       the row turns every join into an edge.
 
-       DRAWN IN ROUNDED FORMS, NOT SLABS. The first version was eighteen thin
-       boxes along the arc, and a row of boxes reads as scaffolding however you
-       colour it — the shot came back looking like a stack of blue shelves
-       floating over the deck. Overlapping flattened ellipsoids give the same
-       silhouette and read as gas, which is what this is. They also cannot be
-       coplanar with each other, so the shimmer goes with them. */
-    for (let i = 0; i <= 9; i++) {
-      const a = -1.15 + (i / 9) * 2.3;
-      const ca = Math.cos(a);
-      const h = Z * (0.76 - Math.abs(a) * 0.24);
-      b.ellip(Z * 0.09, h, Z * 0.3, i % 2 ? S.wind : S.windDim, {
-        x: Z * (ca * 0.5 - 0.1), y: h, z: Z * Math.sin(a) * 0.85, ry: a,
-      }, 7, 6);
-      b.ellip(Z * 0.06, h * 0.72, Z * 0.22, S.wind, {
-        x: Z * (ca * 0.5 - 0.32), y: h * 0.86, z: Z * Math.sin(a) * 0.92, ry: a,
-      }, 6, 5);
-    }
-    for (let i = 0; i < 6; i++) {
-      const a = -0.9 + (i / 5) * 1.8;
-      b.sphere(Z * 0.15, S.aurora, { x: Z * Math.cos(a) * 0.35, y: Z * 1.5, z: Z * Math.sin(a) * 0.7 }, 6, 4);
-    }
+       A bow shock is a SHEET: one continuous curved surface standing in the
+       flow. Ghost lets it be one, so it is six wide overlapping panels rather
+       than twenty narrow ones, graded from the nose outwards instead of
+       striped, and curved in both directions — the middle stands tallest and
+       the wings fall away, which is what a standing shock does. */
+    const Z = SZ.bowshock;
+    core(b, Z * 0.44, Z * 0.62, Z * 0.62, S.windDim, { y: Z * 0.62, k: 0.92 });
+    b.decor((d) => {
+      // ONE surface, not six panels — see `sheet` in spacekit.js
+      sheet(d, Z * 0.72, Z * 0.95, 2.5, S.wind, { y: Z * 0.08, t: 0.05, bow: 0.16 }, 20);
+      sheet(d, Z * 0.56, Z * 0.7, 2.2, S.windDim, { y: Z * 0.16, t: 0.05, bow: 0.2 }, 18);
+      // the wind piling into the nose, and the glow where it does
+      for (let i = 0; i < 5; i++) {
+        const a = -0.85 + (i / 4) * 1.7;
+        d.sphere(Z * 0.14, S.aurora,
+          { x: Z * Math.cos(a) * 0.34, y: Z * 1.5, z: Z * Math.sin(a) * 0.66 }, 6, 4);
+        d.ellip(Z * 0.36, Z * 0.05, Z * 0.05, S.windDim, {
+          x: -Z * (1.0 + (i % 3) * 0.3), y: Z * (0.45 + (i % 4) * 0.35),
+          z: Z * Math.sin(a) * 0.8, rz: 0.12,
+        }, 5, 4);
+      }
+    });
   } });
 
-P({ id: 'sol_loop', name: 'Coronal Loop', fill: 0.08, variants: 3, weight: 4,
+P({ id: 'sol_loop', name: 'Coronal Loop', sizeMul: 1.6491, fill: 0.3588, variants: 3, weight: 4,
   surface: 'air', flyHeight: 0.32,
   build(b, r, v) {
+    /* A field line drawn in glowing gas — so it is a TUBE, and it was a string
+       of beads. `arc` now welds overlapping elements along the tangent instead
+       of dropping spheres on a curve, which is the same fix the galaxy's
+       spiral arms needed and for the same reason: you count beads, you read a
+       line. Ghost, because a loop is hollow and thin and always was. */
     const Z = SZ.loop;
-    // a field line drawn in glowing gas, and taller than it is wide
-    arc(b, Z * 1.6, Z * 2.5, Z * 0.16, r, S.plasmaPl, S.corona, 11);
-    for (const s of [-1, 1]) {
-      b.cyl(Z * 0.28, Z * 0.4, Z * 0.24, S.limb, { x: s * Z * 0.8, y: Z * 0.12 }, 8);
-    }
-    if (v) arc(b, Z * 1.1, Z * 1.8, Z * 0.1, r, S.corona, S.plasmaPl, 9);
+    core(b, Z * 0.62, Z * 0.9, Z * 0.4, S.limb, { y: Z * 0.62, k: 0.9 });
+    b.decor((d) => {
+      arc(d, Z * 1.7, Z * 2.6, Z * 0.15, r, S.plasmaPl, S.corona, 14);
+      if (v) arc(d, Z * 1.15, Z * 1.9, Z * 0.09, r, S.corona, S.plasmaPl, 12);
+      for (const s of [-1, 1]) {
+        d.cyl(Z * 0.26, Z * 0.38, Z * 0.24, S.limb, { x: s * Z * 0.85, y: Z * 0.12 }, 8);
+      }
+    });
   } });
 
-P({ id: 'sol_flare', name: 'Flare', fill: 0.06, variants: 3, weight: 3,
+P({ id: 'sol_flare', name: 'Flare', sizeMul: 2.4088, fill: 0.8386, variants: 3, weight: 3,
   surface: 'air', flyHeight: 0.4,
   build(b, r, v) {
+    /* ⚠ NINE CONES RADIATING FROM A BALL IS A SEA URCHIN. This project has
+       already learned that once, on the galaxy's `corona()`, and thrown the
+       helper away for it: "a ring of discrete cones at gameplay distance is a
+       sea urchin". This prop was the same drawing in a different palette.
+
+       A flare is not a starburst. It is an eruption off ONE spot — a bright
+       compact footpoint, two or three broad ribbons of plasma arching out of
+       it in roughly the same direction, and a spray thrown clear above. The
+       asymmetry is the whole read: something happened HERE, and went THAT
+       way. */
     const Z = SZ.flare;
-    /* A burst, drawn as a fan of tongues going UP. Everything about this prop
-       is vertical: it is 6% fill and the box is what the ladder measures. */
-    b.sphere(Z * 0.4, S.photoHot, { y: Z * 0.42 }, 9, 6);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * TAU + v * 0.4;
-      const lean = 0.35 + (i % 3) * 0.2;
-      const len = Z * (1.6 + (i % 4) * 0.5);
-      b.cone(Z * (0.16 + (i % 2) * 0.06), len, i % 2 ? S.plasma : S.plasmaPl, {
-        x: Math.cos(a) * Z * (0.3 + lean * len / Z * 0.28),
-        y: Z * 0.5 + len * 0.44,
-        z: Math.sin(a) * Z * (0.3 + lean * len / Z * 0.28),
-        rz: -Math.cos(a) * lean * 0.5, rx: Math.sin(a) * lean * 0.5,
-      }, 6);
-    }
-    for (let i = 0; i < 7; i++) {
-      const a = i * 2.399963 + v;
-      b.sphere(Z * 0.14, S.corona, {
-        x: Math.cos(a) * Z * 0.5, y: Z * (1.9 + (i % 3) * 0.5), z: Math.sin(a) * Z * 0.5,
-      }, 6, 4);
-    }
+    core(b, Z * 0.62, Z * 0.62, Z * 0.62, S.photoHot, { y: Z * 0.55, k: 0.86 });
+    b.decor((d) => {
+      d.ellip(Z * 0.5, Z * 0.3, Z * 0.5, S.corona, { y: Z * 0.3 }, 8, 5);
+      const lean = 0.5 + v * 0.35;
+      for (let i = 0; i < 3; i++) {
+        const t = i / 2;
+        arc(d, Z * (1.5 + t * 0.9), Z * (1.9 + t * 0.7), Z * (0.17 - t * 0.03),
+          r, i % 2 ? S.plasma : S.plasmaPl, S.corona, 12);
+      }
+      // the spray, thrown clear and off to one side rather than evenly around
+      for (let i = 0; i < 7; i++) {
+        const a = lean + (i % 3) * 0.5;
+        d.sphere(Z * (0.15 - (i % 3) * 0.03), S.corona, {
+          x: Math.cos(a) * Z * (0.4 + i * 0.16), y: Z * (2.1 + (i % 4) * 0.42),
+          z: Math.sin(a) * Z * (0.3 + i * 0.1),
+        }, 6, 4);
+      }
+    });
   } });
 
 /* ==================================================================
@@ -830,50 +887,61 @@ P({ id: 'sol_ring', name: 'Ring System', sizeMul: 1.6702, fill: 0.4193, variants
    THE OUTER LIMITS AND THE STAR   (1Gm100Mm - 1Gm392Mm)
    ================================================================== */
 
-P({ id: 'sol_prominence', name: 'Prominence Arc', fill: 0.08, variants: 2, weight: 2,
+P({ id: 'sol_prominence', name: 'Prominence Arc', sizeMul: 1.9623, fill: 0.6045, variants: 2, weight: 2,
   build(b, r, v) {
+    /* A CURTAIN, which is the word the old comment used and the shape it could
+       not draw. Three nested arches at slightly different spans make a sheet
+       rather than a wire, the feet are the solid part standing on the
+       photosphere, and the whole thing no longer has to be taller than it is
+       wide to keep its collision radius down. */
     const Z = SZ.prominence;
-    /* A curtain of plasma hanging off the star, torn loose and drifting. The
-       arch is 2.8 units tall against 1.9 wide on purpose — see `arc`. */
-    arc(b, Z * 1.9, Z * 2.6, Z * 0.2, r, S.plasma, S.plasmaPl, 12);
-    arc(b, Z * 1.3, Z * 1.9, Z * 0.13, r, S.limb, S.corona, 10);
     for (const s of [-1, 1]) {
       b.dome(Z * 0.44, S.photo, { x: s * Z * 0.95 }, 10);
       b.cyl(Z * 0.3, Z * 0.44, Z * 0.3, S.limb, { x: s * Z * 0.95, y: Z * 0.15 }, 9);
     }
-    if (v) for (let i = 0; i < 6; i++) {
-      b.sphere(Z * 0.12, S.corona,
-        { x: (r() - 0.5) * Z * 1.6, y: Z * (2.7 + r() * 0.5), z: (r() - 0.5) * Z * 0.5 }, 6, 4);
-    }
+    b.decor((d) => {
+      arc(d, Z * 2.1, Z * 2.7, Z * 0.19, r, S.plasma, S.plasmaPl, 14);
+      arc(d, Z * 1.75, Z * 2.4, Z * 0.15, r, S.plasmaPl, S.plasma, 13);
+      arc(d, Z * 1.3, Z * 1.9, Z * 0.12, r, S.limb, S.corona, 11);
+      if (v) for (let i = 0; i < 6; i++) {
+        d.sphere(Z * 0.12, S.corona,
+          { x: (r() - 0.5) * Z * 1.8, y: Z * (2.8 + r() * 0.5), z: (r() - 0.5) * Z * 0.6 }, 6, 4);
+      }
+    });
   } });
 
-P({ id: 'sol_heliopause', name: 'Heliopause Fragment', fill: 0.09, variants: 2, weight: 2,
+P({ id: 'sol_heliopause', name: 'Heliopause Fragment', sizeMul: 1.5607, fill: 0.3422, variants: 2, weight: 2,
   build(b, r, v) {
+    /* Where the wind finally loses. Same fix as `sol_bowshock` and for the
+       same reason — twelve tall elements in a row fluted into a palisade, and
+       "stands rather than lies, so the biggest thing in the outer belt is not
+       also the widest" was a collision constraint rather than a description of
+       anything. It is a WALL: one wide curved sheet leaning back under the
+       pressure, with the interstellar field combed across its face and the
+       wind piling into the inside of the curve. */
     const Z = SZ.heliopause;
-    /* Where the wind finally loses. A piece of the shock front, standing on
-       edge like a sail: a curved wall of ionised gas with the interstellar
-       field combed across it. Stands rather than lies, so the biggest thing in
-       the outer belt is not also the widest. */
-    for (let i = 0; i <= 11; i++) {
-      const a = -1.2 + (i / 11) * 2.4;
-      const h = Z * (1.3 - Math.abs(a) * 0.36);
-      // rounded, and overlapping its neighbours — a row of boxes reads as
-      // scaffolding, see the note on `sol_bowshock`
-      b.ellip(Z * 0.12, h, Z * 0.34, i % 2 ? S.field : S.fieldDim, {
-        x: Z * Math.cos(a) * 0.75, y: h + Z * 0.04, z: Z * Math.sin(a) * 1.0, ry: a,
-      }, 7, 6);
-    }
-    // ripples in the front, and the wind piling into it
-    for (let i = 0; i < 7; i++) {
-      const a = -1.0 + (i / 6) * 2.0;
-      b.sphere(Z * 0.2, i % 2 ? S.wind : S.aurora, {
-        x: Z * Math.cos(a) * 0.62, y: Z * (2.1 + Math.cos(a * 2) * 0.4), z: Z * Math.sin(a) * 0.9,
-      }, 7, 5);
-      b.cyl(Z * 0.04, Z * 0.1, Z * 0.5, S.windDim, {
-        x: Z * (Math.cos(a) * 0.75 - 0.5), y: Z * (0.5 + (i % 3) * 0.5), z: Z * Math.sin(a) * 0.95,
-        rz: 1.35,
-      }, 6);
-    }
+    core(b, Z * 0.5, Z * 0.86, Z * 0.72, S.fieldDim, { y: Z * 0.86, k: 0.94 });
+    b.decor((d) => {
+      // ONE surface, not seven pods — see `sheet` in spacekit.js
+      sheet(d, Z * 0.95, Z * 1.85, 2.7, S.field, { t: 0.04, bow: 0.2 }, 22);
+      sheet(d, Z * 0.72, Z * 1.5, 2.4, S.fieldDim, { y: Z * 0.1, t: 0.045, bow: 0.24 }, 20);
+      // the field combed across the face
+      for (let i = 0; i < 6; i++) {
+        const a = -1.0 + (i / 5) * 2.0;
+        d.ellip(Z * 0.03, Z * 0.62, Z * 0.03, S.aurora, {
+          x: Z * Math.cos(a) * 0.86, y: Z * (0.5 + (i % 3) * 0.62),
+          z: Z * Math.sin(a) * 1.1, ry: a, rz: 1.35,
+        }, 5, 4);
+      }
+      // and the wind arriving
+      for (let i = 0; i < 6; i++) {
+        const a = -0.95 + (i / 5) * 1.9;
+        d.sphere(Z * 0.17, i % 2 ? S.wind : S.aurora, {
+          x: Z * Math.cos(a) * 0.56, y: Z * (2.0 + Math.cos(a * 2) * 0.36),
+          z: Z * Math.sin(a) * 0.92,
+        }, 6, 4);
+      }
+    });
   } });
 
 /* THE LARGEST SINGLE RUNG, AND IT HAS TO BE EDIBLE.
@@ -894,7 +962,7 @@ P({ id: 'sol_heliopause', name: 'Heliopause Fragment', fill: 0.09, variants: 2, 
  * shipped a continent, before `balance` learned to print "too big to ever
  * collect". Read that line before touching either number here.
  */
-P({ id: 'sol_sun', name: 'The Sun', fill: 0.6, variants: 1, weight: 1,
+P({ id: 'sol_sun', name: 'The Sun', sizeMul: 1.0712, fill: 0.7376, variants: 1, weight: 1,
   build(b, r) {
     const Z = SZ.sun;
     b.sphere(Z, S.photo, { y: Z }, 12, 9);
@@ -914,28 +982,69 @@ P({ id: 'sol_sun', name: 'The Sun', fill: 0.6, variants: 1, weight: 1,
       b.cyl(rr, rr, Z * 0.05, S.umbra, {
         x: s.x * Z * 1.01, y: Z + s.y * Z * 1.01, z: s.z * Z * 1.01, rx: s.rx, rz: s.rz }, 8);
     }
-    /* The corona: a fringe of broad tongues around the equator.
-     *
-     * Sixteen narrow spikes all over the sphere made a hedgehog, not a star.
-     * Wide, short and low — kept to the equatorial band where a real corona
-     * streams from, so the silhouette is a disc with a burr on it rather than a
-     * ball of quills. */
-    for (let i = 0; i < 11; i++) {
-      const s = surf((i / 11) * TAU + 0.2, 1.28 + ((i * 5) % 7) * 0.1);
-      const len = Z * (0.24 + ((i * 3) % 5) * 0.07);
-      b.cone(Z * 0.3, len, i % 2 ? S.corona : S.plasmaPl, {
-        x: s.x * (Z + len * 0.4), y: Z + s.y * (Z + len * 0.4), z: s.z * (Z + len * 0.4),
-        rx: s.rx, rz: s.rz }, 8);
+    /* ⚠ THE CORONA WAS ELEVEN CONES STUCK ROUND THE EQUATOR, and the comment
+       above them admitted what that reads as: "the silhouette is a disc with a
+       burr on it". It had already been walked back once from sixteen spikes
+       all over the sphere, which "made a hedgehog, not a star". Both versions
+       were fighting the same constraint — anything long was a fence — and both
+       lost, because a corona is by definition the part that reaches a long way
+       out and is almost nothing.
+
+       Ghost is exactly the tool for that. What anybody actually pictures is an
+       eclipse: broad equatorial STREAMERS two or three radii out, fine PLUMES
+       at the poles, and a prominence standing at the limb.
+
+       ⚠ BUT THE BOX HAS TO SURVIVE IT, and this is the one prop in the stage
+       where it nearly does not. `fill` is already 0.6. Measured: a bare sphere
+       gives boxVol 1.533 against the 1.618 of `volume` this has to carry, so
+       ghosting the whole corona would need `fill` 1.056 and clamp. So the
+       INNER corona stays solid — four low dense mounds at the limb, which is
+       honest, since the inner corona is the dense part — and they pin the box.
+       Read the note at the top of this prop before touching either number. */
+    for (let i = 0; i < 4; i++) {
+      const s = surf((i / 4) * TAU + 0.3, 1.42 + (i % 2) * 0.18);
+      b.ellip(Z * 0.36, Z * 0.17, Z * 0.36, S.corona, {
+        x: s.x * Z, y: Z + s.y * Z, z: s.z * Z, rx: s.rx, rz: s.rz }, 7, 5);
     }
-    for (let k = 0; k < 2; k++) {
-      const s = surf(1.1 + k * 3.0, 1.1 + k * 0.5);
-      for (let i = 0; i <= 8; i++) {
-        const t = i / 8;
-        const h = Math.sin(t * Math.PI) * Z * 0.38;
-        const along = (t - 0.5) * Z * 0.5;
-        b.sphere(Z * (0.05 + h / Z * 0.1), i % 2 ? S.plasma : S.plasmaPl, {
-          x: s.x * (Z + h) - s.z * along, y: Z + s.y * (Z + h), z: s.z * (Z + h) + s.x * along,
-        }, 6, 4);
+    b.decor((d) => {
+      /* ⚠ THERE IS NO CORONA HERE, AND THAT IS THE ANSWER, NOT A GAP.
+         Four attempts are now on record and every one of them read as a
+         different object:
+
+           sixteen narrow spikes over the sphere   a hedgehog
+           eleven broad cones round the equator    a disc with a burr on it
+           nine long ghost streamers + plumes      a sea urchin with wings
+           a graded equatorial disc                A RINGED PLANET
+
+         The last one is the instructive failure. It is a good shape, made
+         with the helper that works elsewhere, and it turned the Sun into
+         something the player would read as `sol_ring` — a worse outcome than
+         the burr, because it is confidently the wrong object rather than
+         vaguely the right one.
+
+         A corona is diffuse light with no surface. This renderer has one
+         opaque material and flat shading; there is no honest low-poly
+         silhouette for "a faint glow that fades out", and every shape that
+         approximates one is already the silhouette of something else. So the
+         Sun is what a star at this poly count can actually be: a big mottled
+         photosphere with granulation, real sunspots with penumbrae, an
+         uneven bright limb, and prominences standing off the edge. That
+         reads as the Sun. It is also, not coincidentally, what the stage's
+         own terrain and lighting already say about where the light comes
+         from.
+
+         ⚠ THE GENERAL RULE, WHICH COST FOUR TRIES TO LEARN: when every shape
+         you can make for a thing is already the shape of some OTHER thing,
+         the thing has no silhouette at this budget and belongs left out. Do
+         not keep substituting. */
+      for (let k = 0; k < 2; k++) {
+        const a = 1.1 + k * 3.0;
+        d.ellip(Z * 0.06, Z * 0.34, Z * 0.06, S.plasma, {
+          x: Math.cos(a) * Z * 1.02, y: Z * 1.3, z: Math.sin(a) * Z * 1.02,
+          rz: -Math.cos(a) * 0.5 }, 5, 4);
+        d.ellip(Z * 0.05, Z * 0.3, Z * 0.05, S.plasmaPl, {
+          x: Math.cos(a) * Z * 1.16, y: Z * 1.14, z: Math.sin(a) * Z * 1.16,
+          rz: -Math.cos(a) * 0.95 }, 5, 4);
       }
-    }
+    });
   } });

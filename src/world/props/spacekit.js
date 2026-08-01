@@ -350,6 +350,41 @@ export function pillars(b, R, H, n, dark, lit, rnd, o = {}) {
 }
 
 /**
+ * A curved WALL — a shock front, a heliopause, a lensed arc, a shell fragment.
+ *
+ * ⚠ THE SHAPE THIS KIT WAS MISSING, AND THE REASON EVERY WALL IN THE PROJECT
+ * USED TO BE A ROW OF PODS. A sheet standing in a flow is one continuous
+ * surface, and a union of overlapping ellipsoids is not one however far they
+ * overlap: flat shading with a single material keeps every blob's own
+ * silhouette, so the row flutes and reads as a palisade or a scallop. Both
+ * `sol_bowshock` and `sol_heliopause` carried comments saying they had ALREADY
+ * been rebuilt once to fix exactly this — from thin boxes to rounded forms —
+ * and both were still fluting, because the fix was on the wrong axis. It was
+ * never box-versus-ellipsoid. It was many-things-versus-one-thing.
+ *
+ * A partial lathe is one thing: `arcSpan` radians of a cylinder of radius `R`,
+ * `H` tall, closed in section so it has an outer face, an inner face and two
+ * rims — because a one-sided surface is invisible from its concave side under
+ * `THREE.FrontSide`, which is the trap `annulus` fell into.
+ *
+ * `bow` leans the top inwards, so the wall bends back under the pressure
+ * instead of standing up straight like a fence.
+ */
+export function sheet(b, R, H, arcSpan, col, o = {}, seg = 18) {
+  const t = R * (o.t ?? 0.035);
+  const bow = o.bow ?? 0;
+  const prof = [
+    [R - t, 0], [R + t, 0], [R + t - bow * R, H], [R - t - bow * R, H], [R - t, 0],
+  ];
+  b.lathe(prof, col, {
+    ...o, y: o.y ?? 0, ghost: !o.solid,
+    phi0: (o.phi0 ?? 0) - arcSpan * 0.5, phiLen: arcSpan,
+  }, S(seg));
+  return b;
+}
+
+
+/**
  * A thin bright ring — a photon ring, a shock front, a lensed arc.
  *
  * ⚠ `rx` MEANS TILT AWAY FROM FLAT, exactly as it does for `annulus` and

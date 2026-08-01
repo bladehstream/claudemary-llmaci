@@ -218,10 +218,22 @@ export class GeomBuilder {
     return this.push(new THREE.CapsuleGeometry(r, len, 3, seg), color, opts);
   }
 
-  /** Lathe from a 2D profile [[x,y], ...] — vases, lamps, bottles. */
+  /**
+   * Lathe from a 2D profile [[x,y], ...] — vases, lamps, bottles.
+   *
+   * `opts.phi0` and `opts.phiLen` revolve only PART of the way round, which is
+   * how you get a curved wall rather than a closed body of revolution. Without
+   * them every "shock front", "shell fragment" and "wall" in this project had
+   * to be a row of separate blobs on an arc — and a row of blobs under flat
+   * shading with one material is a palisade, because each one keeps its own
+   * silhouette however far they overlap. One partial lathe is one surface.
+   */
   lathe(profile, color, opts = {}, seg = 14) {
     const pts = profile.map(([x, y]) => new THREE.Vector2(Math.max(1e-5, x), y));
-    return this.push(new THREE.LatheGeometry(pts, seg), color, opts);
+    return this.push(
+      new THREE.LatheGeometry(pts, seg, opts.phi0 ?? 0, opts.phiLen ?? Math.PI * 2),
+      color, opts,
+    );
   }
 
   /** Thin plate standing upright in XY (signs, screens). */
