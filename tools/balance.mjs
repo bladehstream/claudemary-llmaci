@@ -476,30 +476,68 @@ for (const stage of [quantumStage, atomStage, microbeStage, houseStage, townStag
      * exactly what it is, and it looks like a physics bug rather than an
      * arithmetic error in one landmark.
      *
-     * The ceiling is measured WITHOUT the object in question, since you have to
-     * be big enough before you can eat it and it cannot contribute to that. */
+     * ⚠ AND IT IS A FIXED POINT, NOT A SUBTRACTION. The first version of this
+     * check asked, of each prop, "if you ate EVERYTHING ELSE, could you eat
+     * this?" — which is optimistic in exactly the way that lets a whole GROUP
+     * of stranded giants pass. Each one's test assumes the others were eaten,
+     * and none of them can be. Reported by a player against the universe:
+     * *"it is impossible to fully roll up the universe; there are 3 large
+     * round items which are too big to roll up even after rolling everything
+     * else"* — while this check happily printed "too big to ever collect:
+     * none".
+     *
+     * So simulate an infinitely patient, perfect player instead: eat
+     * everything you are currently big enough for, grow, and look again. Repeat
+     * until nothing new becomes edible. Whatever is left at that fixed point is
+     * unreachable in principle, however long the clock is. That is the real
+     * question and it is three lines more work than the wrong one. */
     const f = world.field;
+    const diaOf = (vol) => Math.cbrt((6 * vol) / Math.PI);
+    const volOf = (dia) => (Math.PI / 6) * dia * dia * dia;
+
+    const eaten = new Uint8Array(f.n);
+    let vol = volOf(stage.startSize);          // the ball you are handed
+    let rounds = 0, ate = 0;
+    for (;;) {
+      const limit = diaOf(vol) * TUNING.pickupRatio;
+      let grew = 0;
+      for (let i = 0; i < f.n; i++) {
+        if (eaten[i] || f.pickup[i] > limit) continue;
+        eaten[i] = 1; ate++;
+        grew += f.arch[i].volume * TUNING.packing;
+      }
+      if (grew <= 0) break;
+      vol += grew;
+      rounds++;
+      if (rounds > 400) break;                 // cannot happen; not going to loop forever
+    }
+    const ceiling = diaOf(vol);
+
     let total = 0;
     for (let i = 0; i < f.n; i++) total += f.arch[i].volume;
-    const diaOf = (vol) => Math.cbrt((6 * vol) / Math.PI);
     const bad = new Map();
     for (let i = 0; i < f.n; i++) {
-      const reachable = diaOf((total - f.arch[i].volume) * TUNING.packing);
+      if (eaten[i]) continue;
       const needs = f.pickup[i] / TUNING.pickupRatio;
-      if (needs <= reachable) continue;
       const prev = bad.get(f.arch[i].id);
-      if (!prev || needs > prev.needs) bad.set(f.arch[i].id, { needs, reachable, pickup: f.pickup[i] });
+      if (!prev) bad.set(f.arch[i].id, { needs, pickup: f.pickup[i], n: 1 });
+      else { prev.n++; if (needs > prev.needs) { prev.needs = needs; prev.pickup = f.pickup[i]; } }
     }
-    console.log(`  size ceiling   : ${formatSizeShort(diaOf(total * TUNING.packing), stage.unit)}`
-      + `   (eat everything and this is how big you get)`);
+    console.log(`  size ceiling   : ${formatSizeShort(ceiling, stage.unit)}`
+      + `   (grow as far as the ladder allows, ${rounds} rungs, ${ate} of ${f.n} props)`);
+    console.log(`  if all mass ate: ${formatSizeShort(diaOf(total * TUNING.packing), stage.unit)}`
+      + `   (theoretical, ignores whether you can reach it)`);
     if (!bad.size) {
-      console.log('  too big to ever collect : none');
+      console.log('  stranded props : none — every prop is reachable from the start size');
     } else {
-      console.log(`  TOO BIG TO EVER COLLECT : ${bad.size} kind(s) — THIS STAGE CANNOT BE CLEARED`);
-      for (const [id, b] of [...bad].sort((x, y) => y[1].needs - x[1].needs).slice(0, 5)) {
-        console.log(`      ${id.padEnd(18)} pickup ${formatSizeShort(b.pickup, stage.unit).padStart(10)}`
+      let n = 0;
+      for (const [, b] of bad) n += b.n;
+      console.log(`  STRANDED PROPS : ${n} object(s), ${bad.size} kind(s) — THIS STAGE CANNOT BE CLEARED`);
+      for (const [id, b] of [...bad].sort((x, y) => y[1].needs - x[1].needs).slice(0, 6)) {
+        console.log(`      ${id.padEnd(18)} x${String(b.n).padStart(3)}`
+          + `  pickup ${formatSizeShort(b.pickup, stage.unit).padStart(10)}`
           + `  needs ${formatSizeShort(b.needs, stage.unit).padStart(10)}`
-          + `  most you can be ${formatSizeShort(b.reachable, stage.unit)}`);
+          + `  you can only reach ${formatSizeShort(ceiling, stage.unit)}`);
       }
     }
   }
