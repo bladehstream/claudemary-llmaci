@@ -77,42 +77,60 @@ const P = (def) => defineProp({ cat: 'universe', tags: ['universe'], unit: U, ..
    the same tin as the props standing on them. Nothing else should reach for it.
    ------------------------------------------------------------------ */
 export const U_ = {
-  /* the dark */
+  /* ⚠ THE DARK END IS FOR THE FLOOR, NOT FOR OBJECTS.
+   *
+   * Reported: *"the last 2 stages should be dark because space is dark, but
+   * the items within them should be bright enough to see rather than black on
+   * black."* Measured with `npm run contrast`: six kinds of large structure had
+   * a brightest part below 0.01 relative luminance — under #1a1a1a — against a
+   * floor of 0.0007. Those are not dark objects, they are unlit ones, and no
+   * amount of shadow or shading brings them back.
+   *
+   * `space` and `ink` stay near-black because they ARE the void: the base
+   * platform and the sky are painted from them and the player explicitly wants
+   * that dark. Everything an object is made of has been raised to somewhere it
+   * can catch a light. The stage still reads as deep space — the floor is
+   * unchanged at 0.0007 — but the things standing on it now have a silhouette.
+   */
+
+  /* the dark — floor and sky only */
   space:     0x04030a,
-  spaceLit:  0x0a0816,
   ink:       0x07060e,
-  slate:     0x14131d,
-  slateLit:  0x1e1d2a,
+
+  /* the dark, as OBJECTS are made of it */
+  spaceLit:  0x312952,
+  slate:     0x494766,
+  slateLit:  0x68648b,
 
   /* the voids — a little violet, and nothing else */
-  hollow:    0x100b1e,
-  hollowRim: 0x1b1233,
-  violet:    0x2e1d55,
-  violetDim: 0x190f30,
+  hollow:    0x3d2c66,
+  hollowRim: 0x6347a0,
+  violet:    0x7e50e2,
+  violetDim: 0x57369c,
 
   /* old, red, finished */
   gold:      0xa8813a,
-  goldDim:   0x6b5127,
+  goldDim:   0xb68a42,
   goldPale:  0xd8bb79,
   amber:     0xc99a45,
-  red:       0x7d3527,
-  redDim:    0x4b2018,
+  red:       0xd45a42,
+  redDim:    0x803629,
   ember:     0xb4552e,
 
   /* young, hot */
   blue:      0x7fa8cf,
   bluePale:  0xcfe2f5,
-  blueDim:   0x36536f,
-  cyan:      0x4a8b9c,
+  blueDim:   0x5c8dbd,
+  cyan:      0x7eecff,
   ice:       0xeaf2ff,
 
   /* what you cannot see */
-  halo:      0x1a2233,
-  haloLit:   0x28344b,
+  halo:      0x4b6390,
+  haloLit:   0x6e96ce,
   shock:     0xc4703c,
   glow:      0xf3f7ff,
   jet:       0x9fd4e8,
-  radio:     0x5b4a86,
+  radio:     0x9b7ee4,
 };
 
 /* ------------------------------------------------------------------
@@ -154,7 +172,16 @@ const SP = {
   wall: 1040.3,         // 1380
   supercluster: 1088.1, // 1550
   attractor: 1159.4,    // 1750
-  complex: 1609.4,      // 2350
+  /* ⚠ 1470, NOT 1609. At 1609 this measured a pickup of 2343Mpc, which needs a
+     ball of 2343/0.88 = 2663Mpc — against a reachable ceiling of 2507. All
+     three of them stood there at the end of every run, and because there are
+     THREE the old "could you eat this if you ate everything else" check passed
+     them: each one's test assumed the other two were gone. Reported by a
+     player as "it is impossible to fully roll up the universe; there are 3
+     large round items which are too big to roll up even after rolling
+     everything else". `balance` now runs a growth fixed point instead and
+     names them. 1470 gives ~2140Mpc, needing 2432 — comfortably under. */
+  complex: 1470,        // 2140
 };
 
 /* ------------------------------------------------------------------
