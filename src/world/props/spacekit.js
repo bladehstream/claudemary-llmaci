@@ -80,17 +80,43 @@ const S = (n) => Math.max(3, Math.round(n * LOD.seg));
    ------------------------------------------------------------------ */
 
 /**
- * A flat annulus in the XZ plane: inner radius `r0`, outer `r1`.
+ * A thin annular SLAB in the XZ plane: inner radius `r0`, outer `r1`.
  *
- * Built as a lathe of a two-point profile, so it is exactly two triangles per
- * segment and genuinely flat — 48 triangles at 24 segments, against 256 for
- * the thinnest torus that would read the same. Ghost, always: this is the
- * shape the old `disc()` had to break into eight lumps to be safe.
+ * ⚠ THIS USED TO BE A ZERO-THICKNESS PLANE AND THE BLACK HOLE WAS INVISIBLE
+ * FROM TWO ANGLES OUT OF THREE. Rendered the contact sheet and looked at it:
+ * `g_blackhole` — the one prop the player asked for by name — was a plain
+ * black ball with a stick through it in two of `propsheet`'s three views, and
+ * showed its disc only in the one that happened to look down on it.
+ *
+ * Two causes, and a single-surface lathe has both. The scene runs ONE
+ * `MeshLambertMaterial` with `side: THREE.FrontSide` (Scene.js:31) — the flat
+ * poster look depends on it — so a one-sided ribbon simply is not there when
+ * you are under it. And a plane of zero thickness is zero pixels edge-on,
+ * which is exactly where a camera a few thousand light years up sits relative
+ * to a disc tilted 0.34 rad.
+ *
+ * So the profile is now a CLOSED loop — bottom, outer rim, top, inner rim —
+ * which is what a thin disc physically is. It is visible from either side
+ * because it has both, and it reads as a bright line rather than vanishing
+ * when the camera drops into its plane.
+ *
+ * COST, measured rather than guessed: four quads per segment instead of one,
+ * which is **+283k triangles across the galaxy stage** (2,291k -> 2,574k).
+ * Only four archetypes use it, and the bill is almost all instance count
+ * rather than the black hole itself — g_binary +360 x 227, g_protostar
+ * +360 x 202, g_planetary +576 x 153, and g_blackhole, the reason for the
+ * change, only +624 x 66 = 40k. Against the 2x ceiling of 3,216k that leaves
+ * 642k, and the nine props still to rebuild are 293k today, so they can grow
+ * 3.19x collectively. Affordable. If it ever stops being affordable, `LOD.seg`
+ * scales every segment count from one place.
+ *
+ * `t` is the half-thickness, defaulting to 1.2% of the outer radius.
  */
 export function annulus(b, r0, r1, col, o = {}, seg = 24) {
   const y = o.y ?? 0;
-  const t = o.t ?? 0;                      // thickness; 0 is a true plane
-  b.lathe([[r0, -t], [r1, t]], col, { ...o, y, ghost: true }, S(seg));
+  const t = o.t ?? r1 * 0.012;
+  b.lathe([[r0, -t], [r1, -t], [r1, t], [r0, t], [r0, -t]],
+    col, { ...o, y, ghost: true }, S(seg));
   return b;
 }
 
