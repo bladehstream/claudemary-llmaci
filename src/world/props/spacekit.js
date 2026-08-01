@@ -349,10 +349,29 @@ export function pillars(b, R, H, n, dark, lit, rnd, o = {}) {
   return b;
 }
 
-/** A thin bright ring — a photon ring, a shock front, a lensed arc. */
+/**
+ * A thin bright ring — a photon ring, a shock front, a lensed arc.
+ *
+ * ⚠ `rx` MEANS TILT AWAY FROM FLAT, exactly as it does for `annulus` and
+ * `gradedDisc`. It did not used to, and that cost two props.
+ *
+ * `b.torus` authors in the XY plane — upright — while `b.lathe`, which every
+ * disc here is built from, authors in XZ — flat. So the same `rx` on a ring
+ * and on the disc it belongs to left them NINETY DEGREES APART, and both
+ * places it was used got it wrong in opposite directions: the black hole's
+ * photon rings stood on edge through their own accretion disc, and the
+ * planetary nebula's ejected shell sat parallel to the polar lobes it is
+ * supposed to be squeezed between. Neither was visible as an error, because
+ * a ring at a strange angle still looks like a ring.
+ *
+ * Two primitives with two different natural planes and one shared parameter
+ * name is a trap, so the trap is gone: the pre-rotation lives here, `rx: 0`
+ * is flat, and a ring and a disc handed the same tilt lie in the same plane.
+ */
 export function ring(b, R, col, o = {}, seg = 22) {
   const tube = R * (o.tube ?? 0.045);
-  b.torus(R, tube, col, { ...o, y: o.y ?? 0, ghost: true }, S(5), S(seg));
+  b.torus(R, tube, col,
+    { ...o, rx: (o.rx ?? 0) + Math.PI / 2, y: o.y ?? 0, ghost: true }, S(5), S(seg));
   return b;
 }
 

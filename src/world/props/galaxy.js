@@ -14,40 +14,48 @@
    twenty-two small spheres and an emission nebula is fifteen
    blobs. Detail spent below that is vertices thrown away.
 
-   THREE RULES SHAPED EVERY SHAPE IN THIS FILE, and each of them
-   cost somebody a run.
+   ⚠ THREE RULES USED TO SHAPE EVERY SHAPE IN THIS FILE. TWO OF
+   THEM ARE RETIRED, and they are written out here because the
+   file still reads as if they bind, and because the reason they
+   are gone is the most useful thing to know before adding a prop.
 
-   1. NOTHING BIG IS WIDER THAN IT IS TALL. `pickup` is the cube
-      root of the bounding box while the collision radius is half
-      the longest HORIZONTAL span — and a nebula, a dust lane and
-      an accretion disc all *want* to be wide and flat. Authored
-      that way they read to the player as something small and to
-      the physics as a fence a third of a region across.
-      Measured: at 0.5 the first draft of this stage put 66% of
-      the arm's surface inside some obstacle's footprint and a
-      250ly katamari spent three minutes wedged on it, growing by
-      nothing.
-      So everything from a black hole upwards is stretched
-      VERTICALLY instead — a dust chimney, a jet, a pillar, a
-      stream looping out of the plane. Growth counts
-      `boxVol * fill` and boxVol is pickup cubed whatever the
-      aspect, so a 1.24:1 stretch costs no mass at all and takes
-      a fifth off the radius and a third off the footprint. Ratios
-      run from 0.83x to 1.45x of pickup per axis, tall on Y.
+   1. RETIRED — "nothing big is wider than it is tall". `pickup`
+      is the cube root of the bounding box and the collision
+      radius is half the longest HORIZONTAL span, so a disc, a
+      dust lane and a ring all read as small mouthfuls and behaved
+      as fences a third of a region across. Measured at the time:
+      66% of the arm fragment's surface sat inside some obstacle's
+      footprint and a 250ly katamari spent three minutes wedged on
+      it. Everything was therefore stretched vertically instead.
+      `{ ghost: true }` measures nothing, so a shape can now be as
+      wide and as flat as the thing it is a picture of. What still
+      holds is that the SOLID part — the `core` — should stay
+      compact and roughly cubic, for exactly the old reason.
 
-   2. SIX ANCHOR BLOBS PIN THE BOX. A cloud drawn out of random
-      blobs measures differently on every variant, `pickup` is
-      measured across all of them, and the rung drifts. `puff`
-      and `band` put one blob tangent to each face of the
-      intended box and let the rest fall where they like, so the
-      measured size IS the authored size.
+   2. STILL BINDING — the box has to be pinned by something. A
+      cloud drawn from random blobs measures differently on every
+      variant, `pickup` is measured across all of them, and the
+      rung drifts. `core` pins it now instead of six anchor blobs:
+      one honest ellipsoid, the same on every variant.
 
-   3. WIDE THINGS ARE BUILT OUT OF SEPARATE LUMPS. Collision uses
-      one box per primitive (see `collisionParts` in index.js),
-      capped at 14 — so a disc built as eight arcs has seven real
-      gaps in it and a ball can roll between them, where the same
-      disc built as one annulus is a solid plate. Nothing here is
-      a long horizontal plate floating at its own mid-height.
+   3. RETIRED — "wide things are built out of separate lumps".
+      Collision uses one box per primitive, capped at 14, so a disc
+      built as eight arcs had seven real gaps a ball could roll
+      through where one annulus was a solid plate. Ghost geometry
+      is not in `partBoxes` at all, so a single flat annulus is now
+      the cheap AND the safe way to draw a disc — it was only ever
+      the pretty one.
+
+   ⚠ AND THE RULE THAT REPLACED THEM. Ghosting a prop's body
+   shrinks the box the game measures, and `pickup` and `volume`
+   both come off that box — the supernova remnant's fell 90% and
+   99.9% on the first pass. So every prop whose identity is ghost
+   needs a solid `core`, and every change to one needs
+   `node tools/reghost.mjs tools/catalogue-baseline.txt --only=galaxy`
+   to say the numbers did not move. `fill` is the lever for making
+   a small core carry its mass, not `k`: a core big enough to
+   satisfy the mass directly is a core big enough to hide the prop
+   behind, which has now cost two rebuilds.
 
    `fill` is honest: a star is nearly a sphere at 0.5, a shell of
    gas with a hundred light years of nothing in it is 0.05. Growth
@@ -139,116 +147,25 @@ export const G = {
 };
 
 /* ------------------------------------------------------------------
-   Shared builders. A dark nebula, an emission nebula and a molecular cloud
-   are the same drawing three times over in different colours at different
-   sizes, and writing that out three times is how the three of them end up
-   subtly inconsistent — and how one of them quietly measures 12% off its
-   rung.
+   THE FOUR LOCAL BUILDERS THAT USED TO LIVE HERE ARE ALL GONE, and it is
+   worth being specific about why, because every one of them was a workaround
+   for the same thing and not one of them was about how anything looked.
+
+     puff      a cloud had to be a bag of separate lumps
+     band      a lane had to be a row of them
+     lumpDisc  a disc had to be broken into arcs
+     jetCone   a jet had to be fat, or it measured as nothing
+
+   All four existed because collision measured every triangle a prop drew, so
+   the shape a thing wanted and the shape it could afford were different
+   shapes. `ghost` retired the reason for all four at once, and their
+   replacements in spacekit.js — `wisps`, `shell`, `spiralArm`, `gradedDisc`,
+   `jet` — say the same things with a direction, a cavity, a curve and an
+   honest thinness.
+
+   Only `spot` and `belt` are still local, and both are additions rather than
+   compromises: a marking laid tangent to a surface, and a latitude band.
    ------------------------------------------------------------------ */
-
-/**
- * A cloud of `n` blobs filling the ellipsoid (RX, RY, RZ) centred at
- * (0, y, 0).
- *
- * THE FIRST SIX ARE ANCHORS, one tangent to each face of that box. Without
- * them the box is whatever the random blobs happened to reach, which differs
- * per variant and is measured across all of them, so `pickup` — and therefore
- * the rung this archetype occupies in the growth ladder — moves whenever the
- * seed changes. With them the box is exact and the shape is still free.
- *
- *   shell  keep the filler outside this radial fraction (a remnant, a bubble)
- *   pack   radial bias for the filler; 0.34 is uniform, higher concentrates
- *   lo/hi  blob radius as a fraction of the SHORTEST semi-axis
- *
- * A HOLLOW SHELL IS A CAGE, and a cage the size of a region is a lost run.
- * Collision is one box per blob, so a ring of blobs has gaps a small ball can
- * roll in through and a bigger one cannot roll out of — and it does not have to
- * grow much to stop fitting. Measured: a katamari rolled into a hypernova shell
- * at 300ly across and sat inside it, pinned, for the last five minutes of the
- * round, `balance` reporting 698 stalls and half the clock near-stopped. So
- * anything big enough to swallow a ball whole is either solid or has something
- * solid filling the middle; `shell` above about 0.5 belongs only on props small
- * enough that the ball which would fit inside is smaller than the one you start
- * the stage with.
- */
-function puff(b, RX, RY, RZ, n, cols, rnd, o = {}) {
-  const yc = o.y ?? RY;
-  const m = Math.min(RX, RY, RZ);
-  const lo = (o.lo ?? 0.18) * m, hi = (o.hi ?? 0.32) * m;
-  const seg = o.seg ?? 7, hseg = o.hseg ?? 5;
-  const shell = o.shell ?? 0;
-  const pack = o.pack ?? 0.34;
-  const AX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-  for (let i = 0; i < n; i++) {
-    const rr = lo + rnd() * (hi - lo);
-    let fx, fy, fz;
-    if (i < 6) {
-      fx = AX[i][0]; fy = AX[i][1]; fz = AX[i][2];
-    } else {
-      const u = rnd() * 2 - 1, ph = rnd() * Math.PI * 2, s = Math.sqrt(1 - u * u);
-        const t = shell ? shell + rnd() * (1 - shell) : Math.pow(rnd(), pack);
-      fx = Math.cos(ph) * s * t; fy = u * t; fz = Math.sin(ph) * s * t;
-    }
-    b.sphere(rr, cols[(rnd() * cols.length) | 0],
-      { x: fx * (RX - rr), y: yc + fy * (RY - rr), z: fz * (RZ - rr) }, seg, hseg);
-  }
-}
-
-/**
- * A band of chunks running DIAGONALLY across the box (RX, RY, RZ): a dust lane,
- * a tidal stream, a fragment of arm. Corner to corner, with a gentle bow.
- *
- * EVERY CHUNK REACHES THE FULL HEIGHT OF THE BOX, tapering towards the ends.
- * Drawn as a flat ribbon instead it would be a long horizontal plate sitting at
- * its own mid-height, which reads as a girder through the middle of the
- * katamari — the same defect `npm run decals` exists to catch in terrain.
- *
- * IT IS A WALL AND NOT A HORSESHOE, and that took a whole afternoon to learn.
- * The first version swept the chunks round an arc that entered and left the box
- * on the same side, which is a shape wrapping better than 180 degrees — and the
- * collision boxes go round with it. A katamari that rolled into the bay while it
- * was small could not get back out through the mouth once it had grown, the
- * resolver pushed it off one chunk into the next in a three-cycle that netted
- * zero, and the run ended standing still. One run in five died that way, in the
- * middle of the map, nowhere near a wall. A diagonal has no bay: the ball hits
- * it and drives round either end.
- *
- * The two ends pin X and Z (they sit in opposite corners) and the middle chunk
- * pins Y — so `n` must be ODD.
- */
-function band(b, RX, RY, RZ, n, cols, rnd, o = {}) {
-  const yc = o.y ?? RY;
-  const seg = o.seg ?? 8, hseg = o.hseg ?? 5;
-  const bow = o.bow ?? 0.34;                          // sideways sag, well under 1
-  const rz = RZ * (o.thick ?? 0.16);
-  const rx = (RX / n) * (o.grain ?? 1.6);
-  for (let i = 0; i < n; i++) {
-    const t = (i / (n - 1)) * 2 - 1;                  // -1 .. 1, corner to corner
-    const px = t;
-    const pz = t + bow * (1 - t * t);
-    const ry = RY * (0.56 + 0.44 * Math.cos(t * Math.PI * 0.5));
-    // heading of the band right here, so each chunk lies along it
-    const a = -Math.atan2(1 - 2 * bow * t, 1);
-    /* The chunk is turned to follow the band, so its footprint is wider than its
-       own radii; take that off the reach or the ends overshoot the box. This is
-       the exact support of a rotated ellipsoid, not the sum of the two radii —
-       the sum is a whole 4% too pessimistic at this angle, which quietly put
-       the dust lane, the stream and the arm fragment each a rung low. */
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const ex = Math.hypot(rx * ca, rz * sa), ez = Math.hypot(rx * sa, rz * ca);
-    b.ellip(rx, ry, rz, cols[i % cols.length],
-      { x: px * (RX - ex), y: yc, z: pz * (RZ - ez), ry: a }, seg, hseg);
-    if (o.knot && i % 2 === 1) {
-      b.sphere(rz * 0.5, o.knot, { x: px * (RX - ex) * 0.94, y: yc + ry * 0.5, z: pz * (RZ - ez) * 0.9 }, 6, 4);
-    }
-  }
-}
-
-/* `lumpDisc` and `jetCone` lived here and are gone. Both existed only to work
-   around collision: a disc had to be built out of separate arcs because one
-   annulus was a wall, and a jet had to be a fat cone because a thin one
-   measured as nothing. `ghost` retired the reason for both, and `g_smbh` was
-   the last prop using either — see `gradedDisc` and `jet` in spacekit.js. */
 
 /* ==================================================================
    THINGS WITH A SURFACE — a planet and the main sequence
@@ -356,7 +273,7 @@ P({ id: 'g_star', name: 'Main-Sequence Star', cat: 'star', sizeMul: 0.984, fill:
     const skin = [G.gold, G.white, G.blueWhite, G.amber][v];
     const cool = [G.amber, G.blueWhite, G.cyan, G.ember][v];
     b.sphere(R, skin, { y: R }, 13, 9);
-    b.decor((d) => ring(d, R * 1.13, cool, { y: R, rx: 1.42, tube: 0.022 }, 22));
+    b.decor((d) => ring(d, R * 1.13, cool, { y: R, rx: 0.15, tube: 0.022 }, 22));
     prominence(b, R, G.ember, 1.0, 0.3, { y: R, lift: 0.4 });
     prominence(b, R, cool, 4.0, 0.22, { y: R, lift: -0.2, tilt: 0.7 });
     // granulation: a scatter of faint cells, so the surface is not a flat fill
@@ -412,8 +329,8 @@ P({ id: 'g_supergiant', name: 'Blue Supergiant', cat: 'star', sizeMul: 0.984, fi
     // A wind RING, not a wind shell: a shell round a star is just a bigger
     // star, and an opaque one hides the thing it is decorating.
     b.decor((d) => {
-      ring(d, R * 1.22, G.cyan, { y: R * 1.02, rx: 1.35, tube: 0.022 }, 22);
-      ring(d, R * 1.34, G.halo, { y: R * 1.0, rx: 1.5, rz: 0.4, tube: 0.016 }, 22);
+      ring(d, R * 1.22, G.cyan, { y: R * 1.02, rx: 0.22, tube: 0.022 }, 22);
+      ring(d, R * 1.34, G.halo, { y: R * 1.0, rx: 0.07, rz: 0.4, tube: 0.016 }, 22);
     });
     for (let i = 0; i < 5; i++) spot(b, R, (i / 5) * TAU, 0.5 + (i % 3) * 0.7, 0.16, G.blue);
   } });
@@ -439,16 +356,29 @@ P({ id: 'g_protostar', name: 'Protostar', cat: 'birth', sizeMul: 1.5819, fill: 0
     });
   } });
 
-P({ id: 'g_bok', name: 'Bok Globule', cat: 'birth', fill: 0.35, variants: 3, weight: 9,
+P({ id: 'g_bok', name: 'Bok Globule', cat: 'birth', sizeMul: 1.1771, fill: 0.5708, variants: 3, weight: 9,
   build(b, r, v) {
+    /* ⚠ 171 INSTANCES — THE LEANEST PROP IN THE STAGE'S BUDGET. It is 6% of
+       every triangle the galaxy draws, more than the black hole and the
+       supermassive hole put together, so anything spent here is spent 171
+       times. It goes to `wisps` not for detail but because directional shards
+       cost fewer triangles than round blobs at the same apparent size, and a
+       globule that is drifting reads better than a heap that is not.
+
+       What it IS: a small dark cloud silhouetted against something bright,
+       being boiled away from one side. So it is dark, it has a heading, and
+       the erosion is rim-lighting on the windward face — three cheap facts. */
     const R = 60;
-    puff(b, R, R, R, 12, [G.void, G.dust, G.ash], r, { lo: 0.26, hi: 0.4 });
-    // rim-lit on the side facing whatever is eating it away
-    for (let i = 0; i < 3; i++) {
-      const a = -1.2 + i * 0.9;
-      b.sphere(R * 0.15, [G.rose, G.amber, G.magenta][v],
-        { x: Math.cos(a) * R * 0.78, y: R + (i - 1) * R * 0.34, z: Math.sin(a) * R * 0.6 }, 6, 4);
-    }
+    const lit = [G.rose, G.amber, G.magenta][v];
+    wisps(b, R, R * 0.94, R, 9, [G.void, G.dust, G.ash], r,
+      { y: R, head: 0.5 + v * 1.3, spread: 0.75, solid: true });
+    b.decor((d) => {
+      for (let i = 0; i < 3; i++) {
+        const a = (0.5 + v * 1.3) + (i - 1) * 0.55;
+        d.sphere(R * 0.13, lit,
+          { x: Math.cos(a) * R * 0.82, y: R + (i - 1) * R * 0.3, z: Math.sin(a) * R * 0.82 }, 6, 4);
+      }
+    });
   } });
 
 P({ id: 'g_planetary', name: 'Planetary Nebula', cat: 'death', sizeMul: 1.7001, fill: 0.4914, variants: 3, weight: 9,
@@ -462,9 +392,9 @@ P({ id: 'g_planetary', name: 'Planetary Nebula', cat: 'death', sizeMul: 1.7001, 
     core(b, R, R, R, hot, { y: R, k: 0.6 });
     b.sphere(R * 0.13, G.white, { y: R }, 9, 7);
     b.decor((d) => {
-      ring(d, R * 0.3, G.rose, { y: R, rx: 1.15, tube: 0.05 }, 22);
+      ring(d, R * 0.3, G.rose, { y: R, rx: 0.42, tube: 0.05 }, 22);
       gradedDisc(d, R * 0.42, R * 0.96, [G.cyan, hot, G.magenta, G.violet],
-        { y: R, rx: 1.15, warp: 0.12 }, 4, 24);
+        { y: R, rx: 0.42, warp: 0.12 }, 4, 24);
       for (const s of [1, -1]) {
         d.ellip(R * 0.28, R * 0.44, R * 0.28, hot, { y: R + s * R * 0.5, ghost: true }, 8, 5);
       }
@@ -511,26 +441,43 @@ P({ id: 'g_neutron', name: 'Neutron Star', cat: 'death', surface: 'air', flyHeig
     core(b, HX, HY, HX, G.void, { y: HY, k: 0.6 });
     b.sphere(13, G.xray, { y: HY }, 9, 7);
     b.decor((d) => {
-      ring(d, HX * 0.92, [G.cyan, G.teal, G.halo][v], { y: HY, rx: 0.2, tube: 0.03 }, 24);
-      ring(d, HX * 0.62, G.halo, { y: HY, rx: 0.2, rz: 0.3, tube: 0.02 }, 22);
+      ring(d, HX * 0.92, [G.cyan, G.teal, G.halo][v], { y: HY, rx: 0.18, tube: 0.03 }, 24);
+      ring(d, HX * 0.62, G.halo, { y: HY, rx: 0.1, rz: 0.3, tube: 0.02 }, 22);
       jet(d, HY + 12, HY * 0.92, G.blueWhite, { up: 1, r: 0.022, knots: 3, hot: G.white });
       jet(d, HY - 12, HY * 0.92, G.blueWhite, { up: -1, r: 0.022, knots: 3, hot: G.white });
     });
   } });
 
 P({ id: 'g_pulsar', name: 'Pulsar', cat: 'death', surface: 'air', flyHeight: 120,
-  fill: 0.06, variants: 3, weight: 7,
+  sizeMul: 1.9665, fill: 0.4563, variants: 3, weight: 7,
   build(b, r, v) {
-    const HX = 102.2, HY = 155.2;
-    puff(b, HX, HY * 0.4, HX, 10, [G.indigo, G.violet, [G.teal, G.plum, G.blueDeep][v]], r,
-      { y: HY, lo: 0.22, hi: 0.34 });
-    b.sphere(15, G.white, { y: HY }, 8, 6);
-    // two beams off the spin axis; their tips are what pin the box vertically
-    const ph = 0.32, L = HY / Math.cos(ph);
-    b.cyl(24, 1, L, G.cyan,
-      { x: Math.sin(ph) * L * 0.5, y: HY + Math.cos(ph) * L * 0.5, rz: -ph }, 8);
-    b.cyl(24, 1, L, G.cyan,
-      { x: -Math.sin(ph) * L * 0.5, y: HY - Math.cos(ph) * L * 0.5, rz: Math.PI - ph }, 8);
+    /* ⚠ 97 INSTANCES, SO THIS ONE GETS CHEAPER, NOT RICHER. The budget in this
+       stage is instance count, not archetype count: the supermassive hole is
+       placed three times and can afford to be lavish, this is placed
+       ninety-seven and cannot. It went 704 -> ~470 triangles and reads better,
+       because ten blobs of magnetosphere were spending most of that on the
+       part nobody looks at.
+
+       All the drama in a pulsar is a RATIO — a city-sized object throwing
+       beams a light year long — so the dot stays small and the beams stay
+       thin. They are cones rather than `jet`s on purpose: a pulsar's beams are
+       emission opening out from the magnetic poles, not collimated matter, and
+       they are the one place in this file where a cone is the honest shape. */
+    const HX = 102.2, HY = 155.2, K = 0.62;
+    const tint = [G.teal, G.plum, G.blueDeep][v];
+    core(b, HX, HY * 0.62, HX, G.indigo, { y: HY, k: K });
+    b.sphere(11, G.white, { y: HY }, 8, 6);
+    b.decor((d) => {
+      const ph = 0.34, L = HY * 1.5;
+      for (const s of [1, -1]) {
+        d.cyl(HX * 0.13, 0.8, L, G.cyan, {
+          x: s * Math.sin(ph) * L * 0.5, y: HY + s * Math.cos(ph) * L * 0.5,
+          rz: s > 0 ? -ph : Math.PI - ph, ghost: true,
+        }, 7);
+      }
+      // the field, edge-on to the beams
+      ring(d, HX * 0.86, tint, { y: HY, rx: 0.14, tube: 0.022 }, 18);
+    });
   } });
 
 /* THE DISC IS EIGHT ARCS, NOT A PLATE. See `disc` above; a single annulus
@@ -567,7 +514,7 @@ P({ id: 'g_blackhole', name: 'Black Hole', cat: 'exotic', sizeMul: 1.8438, fill:
     const HX = 123.75, HY = 169.8, R = HX * 0.62, TILT = 0.34;
     core(b, HX, HY * 0.72, HX, G.event, { y: HY, k: 0.62 });
     b.decor((d) => {
-      ring(d, R * 1.05, C.chrome, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.03 }, 24);
+      ring(d, R * 1.05, C.chrome, { y: HY, rx: TILT, tube: 0.03 }, 24);
       gradedDisc(d, R * 1.16, HX * 1.16, [G.glare, G.gold, G.amber, [G.ember, G.rose, G.cyan][v]],
         { y: HY, rx: TILT, warp: 0.16, rise: 6 }, 4, 26);
       jet(d, HY + R * 0.5, HY * 0.9, G.xray, { up: 1, r: 0.02, knots: 3, hot: G.white });
@@ -608,19 +555,36 @@ P({ id: 'g_opencluster', name: 'Open Cluster', cat: 'cluster', sizeMul: 1.4404, 
       { y: HY, lo: 0.05, hi: 0.1, bias: 1.1 });
   } });
 
-P({ id: 'g_nursery', name: 'Star Nursery', cat: 'birth', fill: 0.15, variants: 3, weight: 6,
+P({ id: 'g_nursery', name: 'Star Nursery', cat: 'birth', sizeMul: 1.0913, fill: 0.1949, variants: 3, weight: 6,
   build(b, r, v) {
-    const HX = 198, HY = 271.7;
-    puff(b, HX, 150, HX, 11, [G.dustWarm, G.dust, [G.plum, G.indigo, G.rose][v]], r,
-      { y: 150, lo: 0.24, hi: 0.36 });
-    // a pillar standing out of the cloud, and it is what pins the top face
-    b.taperOn(26, 62, HY * 2 - 150, G.dustLit, { y: 150 }, 8);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * 6.28 + v;
-      b.sphere(HY * 0.075, i % 2 ? G.white : G.gold,
-        { x: Math.cos(a) * HX * 0.56, y: 170 + (i % 3) * 64, z: Math.sin(a) * HX * 0.56 }, 7, 5);
-    }
-    b.sphere(HX * 0.2, G.rose, { x: -HX * 0.3, y: 190, z: HX * 0.24 }, 7, 5);
+    /* ONE pillar was standing in for the shape everybody knows from a
+       photograph, and one pillar is a chimney. `pillars` is in spacekit for
+       exactly this: a stand of them, tapered, leaning away from whatever is
+       eating them, each with a lit tip where the gas is being boiled off.
+       That, the cloud they rise out of and the cluster doing the boiling are
+       the three things that make a nursery recognisable.
+
+       The cloud stays SOLID — it is a lumpy solid and always was safe as one,
+       and ghosting it would need a core big enough to hide the pillars. Only
+       the pillars and the young stars are decoration. */
+    const HX = 198, HY = 271.7, FLOOR = 150;
+    const tint = [G.plum, G.indigo, G.rose][v];
+    wisps(b, HX, FLOOR * 0.62, HX, 10, [G.dustWarm, G.dust, tint], r,
+      { y: FLOOR * 0.8, head: 0.6 + v, spread: 0.85, solid: true });
+    // one solid stack, so the top face of the box is pinned by something real
+    b.taperOn(24, 58, HY * 2 - FLOOR, G.dustLit, { y: FLOOR }, 8);
+    b.decor((d) => {
+      pillars(d, HX * 0.78, HY * 1.25, 5, G.dustLit, G.glare, r, { y: FLOOR * 0.7 });
+      // the cluster doing the eating, above the stand
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + v;
+        d.sphere(HY * (0.055 + (i % 3) * 0.016), i % 2 ? G.white : G.gold, {
+          x: Math.cos(a) * HX * 0.5, y: HY * 1.24 + (i % 3) * HY * 0.16, z: Math.sin(a) * HX * 0.5,
+        }, 6, 5);
+      }
+      d.ellip(HX * 0.22, HX * 0.15, HX * 0.22, G.rose,
+        { x: -HX * 0.3, y: HY * 1.1, z: HX * 0.24 }, 7, 5);
+    });
   } });
 
 /* ==================================================================
@@ -666,15 +630,34 @@ P({ id: 'g_emission', name: 'Emission Nebula', cat: 'nebula', sizeMul: 1.2966, f
   } });
 
 P({ id: 'g_reflection', name: 'Reflection Nebula', cat: 'nebula', surface: 'air', flyHeight: 250,
-  fill: 0.06, variants: 3, weight: 5,
+  sizeMul: 1.1702, fill: 0.09615, variants: 3, weight: 5,
   build(b, r, v) {
+    /* The only nebula in the catalogue that is not lit from within: this is
+       plain dust that happens to be next to a bright star, scattering its
+       light back at you — which is why they are blue, and why the star is
+       OUTSIDE the cloud rather than buried in it. So the star sits proud on
+       one flank, the near side is bright and the far side falls away to the
+       dust it actually is. Fourteen even spheres could say none of that.
+
+       Solid, like the other clouds: lumpy and safe as one. */
     const HX = 299.2, HY = 438.6;
-    puff(b, HX, HY, HX, 14, [G.blue, G.halo, [G.cyan, G.indigo, G.blueDeep][v]], r,
-      { lo: 0.2, hi: 0.32 });
-    for (let i = 0; i < 4; i++) {
-      const a = r() * 6.28, d = HX * 0.55 * r();
-      b.sphere(HX * 0.07, G.white, { x: Math.cos(a) * d, y: HY + (r() - 0.5) * HY, z: Math.sin(a) * d }, 6, 4);
-    }
+    const tint = [G.cyan, G.indigo, G.blueDeep][v];
+    wisps(b, HX, HY * 0.86, HX, 13, [G.blue, G.halo, tint], r,
+      { y: HY, head: 0.4 + v * 1.2, spread: 0.8, solid: true });
+    b.decor((d) => {
+      // the illuminating star, off to one side and outside the gas
+      const a = 0.6 + v * 2.1;
+      const sx = Math.cos(a) * HX * 1.45, sz = Math.sin(a) * HX * 1.45;
+      d.sphere(HX * 0.15, G.white, { x: sx, y: HY * 1.3, z: sz }, 9, 7);
+      d.sphere(HX * 0.27, G.halo, { x: sx, y: HY * 1.3, z: sz }, 7, 5);
+      // the lit face, brightest nearest the star
+      for (let i = 0; i < 5; i++) {
+        const t = i / 4, aa = a + (t - 0.5) * 1.5;
+        d.ellip(HX * 0.2, HX * 0.13, HX * 0.2, i % 2 ? G.halo : G.blue, {
+          x: Math.cos(aa) * HX * 0.66, y: HY * (0.9 + t * 0.3), z: Math.sin(aa) * HX * 0.66,
+        }, 6, 5);
+      }
+    });
   } });
 
 P({ id: 'g_molecular', name: 'Molecular Cloud', cat: 'nebula', sizeMul: 1.2805, fill: 0.168, variants: 3, weight: 5,
@@ -693,11 +676,41 @@ P({ id: 'g_molecular', name: 'Molecular Cloud', cat: 'nebula', sizeMul: 1.2805, 
     });
   } });
 
-P({ id: 'g_dustlane', name: 'Dust Lane', cat: 'structure', fill: 0.07, variants: 3, weight: 4,
+P({ id: 'g_dustlane', name: 'Dust Lane', cat: 'structure', sizeMul: 2.3782, fill: 0.9416, variants: 3, weight: 4,
   build(b, r, v) {
-    const HX = 418.6, HY = 536.9;
-    band(b, HX, HY, HX, 9, [G.void, G.voidDeep, G.dust, [G.ash, G.wallDust, G.dustWarm][v]], r,
-      { thick: 0.16, grain: 1.6, knot: G.amber });
+    /* ⚠ THE PROP RULE 1 OF THE OLD HEADER WAS WRITTEN ABOUT. A dust lane is
+       the definitive wide-and-flat object — it is a lane, it has no business
+       being as tall as it is broad — and the whole reason it was nine fat
+       lumps in a row is that a genuinely flat one would have been a wall
+       across a fifth of a region. `ghost` is what that rule was waiting for.
+
+       So it is what it is now: a long thin ribbon of dark dust lying across
+       the plane, silhouetted, with the far-side starlight it is blocking
+       showing through the gaps. Its collision is a compact core, and a ball
+       rolls straight over the lane instead of along it. */
+    /* ⚠ THE CORE HAS TO BE SMALL ENOUGH THAT THE LANE IS THE SILHOUETTE.
+       First pass used k 0.5, and a 209-unit dark ball next to a 469-unit dark
+       lane is not a lane, it is a ball with a wisp on it — the same "opaque
+       core hides the prop" fault as the hypernova, in its third costume.
+       `fill` is the lever: 0.43 puts the core at 180 against a lane 795 long,
+       a ratio of four and a half to one, and 0.43 is as small as it goes
+       before `fill` passes 1. */
+    const HX = 418.6, HY = 536.9, K = 0.43;
+    const tint = [G.ash, G.wallDust, G.dustWarm][v];
+    core(b, HX, HY, HX, G.voidDeep, { y: HY, k: K });
+    b.decor((d) => {
+      // the lane: long, thin, and lying across the plane rather than in it
+      wisps(d, HX * 1.9, HY * 0.15, HX * 0.3, 18,
+        [G.void, G.voidDeep, G.dust, tint], r, { y: HY, head: 0.2, spread: 0.16 });
+      // the starlight it is standing in front of, showing through the gaps
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        d.sphere(HX * (0.05 + (i % 3) * 0.02), i % 3 ? G.amber : G.gold, {
+          x: (t - 0.5) * HX * 3.1, y: HY + Math.sin(t * 5 + v) * HY * 0.2,
+          z: Math.cos(t * 3.5) * HX * 0.34, ghost: true,
+        }, 5, 4);
+      }
+    });
   } });
 
 P({ id: 'g_hii', name: 'HII Region', cat: 'nebula', sizeMul: 1.4076, fill: 0.1952, variants: 3, weight: 4,
@@ -729,28 +742,61 @@ P({ id: 'g_hii', name: 'HII Region', cat: 'nebula', sizeMul: 1.4076, fill: 0.195
    ================================================================== */
 
 P({ id: 'g_stream', name: 'Stellar Stream', cat: 'structure', surface: 'air', flyHeight: 420,
-  fill: 0.04, variants: 3, weight: 3,
+  sizeMul: 1.9703, fill: 0.3060, variants: 3, weight: 3,
   build(b, r, v) {
-    const HX = 542.8, HY = 696.2;
-    band(b, HX, HY, HX, 9, [G.gold, G.amber, G.white, [G.blueWhite, G.rose, G.glare][v]], r,
-      { thick: 0.11, grain: 1.4, knot: G.white });
+    /* A tidal stream is a dwarf galaxy that came too close and got pulled out
+       into a thread — so it is a CURVE, and a curve is the one thing nine
+       lumps in a row cannot be. `spiralArm` walks a logarithmic spiral and
+       turns each element to lie along the tangent, which is the entire shape.
+       Two arcs, one long and one short, because a stream has a leading and a
+       trailing arm either side of what is left of the progenitor.
+
+       Its elements are stars here rather than the dust lumps the helper was
+       written for, so they are small and bright: `w: 0.045` against the 0.1
+       default. This is `spiralArm`'s first use anywhere — it was written for
+       the universe's galaxies and has sat unexercised since. */
+    const HX = 542.8, HY = 696.2, K = 0.52;
+    const hot = [G.blueWhite, G.rose, G.glare][v];
+    core(b, HX, HY, HX, G.dust, { y: HY, k: K });
+    b.decor((d) => {
+      spiralArm(d, HX * 0.24, HX * 1.16, 0.4, 2.5, [G.gold, G.white, hot, G.amber],
+        { y: HY, w: 0.045, h: 0.9 }, 20);
+      spiralArm(d, HX * 0.2, HX * 0.82, 0.4 + Math.PI, 1.9, [G.amber, hot, G.gold],
+        { y: HY * 1.06, w: 0.04, h: 0.9 }, 14);
+      d.ellip(HX * 0.12, HX * 0.09, HX * 0.12, G.white, { y: HY, ghost: true }, 8, 6);
+    });
   } });
 
 /* 0.1 rather than a nebula's 0.05: this is not a cloud, it is a piece of the
    galaxy — dust, gas and a few million stars — and it is the closest thing this
    catalogue has to the world stage's continents, which is to say it is where a
    quarter of the mass of the whole level lives. */
-P({ id: 'g_spiralarm', name: 'Spiral-Arm Fragment', cat: 'structure', fill: 0.1, variants: 3, weight: 3,
+P({ id: 'g_spiralarm', name: 'Spiral-Arm Fragment', cat: 'structure', sizeMul: 1.8235, fill: 0.6063, variants: 3, weight: 3,
   build(b, r, v) {
-    const HX = 625.6, HY = 802.4;
-    band(b, HX, HY, HX, 9, [G.dust, G.dustLit, G.indigo, [G.plum, G.blueDeep, G.violet][v]], r,
-      { thick: 0.2, grain: 1.7, knot: G.rose });
-    // the arm's own stars, strung along the inside of the curve
-    for (let i = 0; i < 4; i++) {
-      const t = -0.75 + i * 0.5;
-      b.sphere(HX * 0.11, i % 2 ? G.blueWhite : G.gold,
-        { x: t * HX * 0.8, y: HY * 0.9, z: HX * (0.3 - t * t * 0.7) }, 7, 5);
-    }
+    /* The thing this is a fragment OF is a spiral, so the fragment is a piece
+       of spiral: one heavy dust arc with a second, fainter one inside it, and
+       the arm's own star formation strung along the leading edge where the
+       compression happens. That last detail is the whole reason an arm is
+       bright — it is not more stars, it is younger ones, in a line. */
+    const HX = 625.6, HY = 802.4, K = 0.56;
+    const tint = [G.plum, G.blueDeep, G.violet][v];
+    core(b, HX, HY, HX, G.dust, { y: HY, k: K });
+    b.decor((d) => {
+      spiralArm(d, HX * 0.3, HX * 1.1, 0.2, 1.75, [G.dust, G.dustLit, tint, G.indigo],
+        { y: HY, w: 0.15, h: 0.44 }, 18);
+      spiralArm(d, HX * 0.26, HX * 0.86, 0.2 + 2.6, 1.5, [G.dust, G.indigo, tint],
+        { y: HY * 0.94, w: 0.11, h: 0.4 }, 14);
+      // young clusters on the leading edge, and the HII they light
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5, a = 0.34 + 1.6 * t, dd = HX * (0.34 + 0.72 * Math.pow(t, 0.78));
+        d.sphere(HX * (0.055 - t * 0.018), i % 2 ? G.blueWhite : G.white,
+          { x: Math.cos(a) * dd, y: HY * 1.02, z: Math.sin(a) * dd, ghost: true }, 6, 5);
+        if (i % 2) {
+          d.ellip(HX * 0.075, HX * 0.05, HX * 0.075, G.rose,
+            { x: Math.cos(a) * dd * 0.94, y: HY * 1.02, z: Math.sin(a) * dd * 0.94, ghost: true }, 6, 4);
+        }
+      }
+    });
   } });
 
 P({ id: 'g_hypernova', name: 'Hypernova Shell', cat: 'death', sizeMul: 2.3917, fill: 0.8209, variants: 2, weight: 2,
@@ -795,7 +841,7 @@ P({ id: 'g_hypernova', name: 'Hypernova Shell', cat: 'death', sizeMul: 2.3917, f
       shell(d, LOBE * 0.7, tint, { y: HY - OFF * 0.92, th: 0.05, open: 0.5 }, 16);
       /* The waist. A ring here is only possible because a ring is no longer a
          fence — this is the exact shape rule 3 of the old header forbade. */
-      ring(d, HX * 1.0, G.glare, { y: HY, rx: Math.PI / 2 + 0.16, tube: 0.03 }, 30);
+      ring(d, HX * 1.0, G.glare, { y: HY, rx: 0.16, tube: 0.03 }, 30);
       gradedDisc(d, HX * 0.88, HX * 1.14, [tint, G.ember, G.emberDk],
         { y: HY, rx: 0.16, warp: 0.06 }, 3, 28);
       jet(d, HY + HX * 0.95, HY * 0.7, G.xray,
@@ -860,8 +906,8 @@ P({ id: 'g_smbh', name: 'Supermassive Black Hole', cat: 'exotic', sizeMul: 1.589
     const HX = 801, HY = 1099.2, K = 0.72, R = HX * K, TILT = 0.26;
     core(b, HX, HY * 0.72, HX, G.event, { y: HY, k: K });
     b.decor((d) => {
-      ring(d, R * 1.04, C.chrome, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.02 }, 30);
-      ring(d, R * 1.1, G.glare, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.01 }, 30);
+      ring(d, R * 1.04, C.chrome, { y: HY, rx: TILT, tube: 0.02 }, 30);
+      ring(d, R * 1.1, G.glare, { y: HY, rx: TILT, tube: 0.01 }, 30);
       gradedDisc(d, R * 1.2, HX * 1.42,
         [G.glare, G.white, G.gold, G.amber, [G.ember, G.rose][v]],
         { y: HY, rx: TILT, warp: 0.13, rise: 30 }, 5, 32);
