@@ -201,7 +201,15 @@ export function buildCatalog() {
     const prof = new Float32Array(NSLICE);
     for (const g of p.geos) {
       const pos = g.attributes.position;
+      /* ⚠ SKIP DECORATION. `ghostTri` marks the triangles of primitives pushed
+         with `{ ghost: true }` — a galaxy's disc, an accretion ring, a pair of
+         jets. Those are drawn and nothing else. The profile is the cheap radial
+         reject that the broadphase AND the pickup test both run on, so letting
+         a ghost disc into it would restore the exact "wide thing you cannot
+         swallow" problem the flag exists to remove. See `push()` in geom.js. */
+      const ghostTri = g.userData.hasGhost ? g.userData.ghostTri : null;
       for (let t = 0; t + 2 < pos.count; t += 3) {
+        if (ghostTri && ghostTri[t / 3]) continue;
         let yMin = Infinity, yMax = -Infinity, rMax = 0;
         for (let k = 0; k < 3; k++) {
           const y = pos.getY(t + k);

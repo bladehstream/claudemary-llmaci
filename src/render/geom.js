@@ -50,15 +50,55 @@ function paint(geo, color) {
 }
 
 export class GeomBuilder {
-  constructor() { this.parts = []; }
+  constructor() { this.parts = []; this.ghost = []; }
 
-  /** Push an already-made geometry (it will be consumed). */
+  /**
+   * Push an already-made geometry (it will be consumed).
+   *
+   * ⚠ `opts.ghost` MAKES A PRIMITIVE DECORATION: drawn, never collided with,
+   * and invisible to every measurement the game takes of the prop.
+   *
+   * The reason this exists: a prop's collision radius is `max(w, d) / 2` off
+   * its bounding box, and its pickup size is the cube root of that box. So a
+   * shape that is wide and thin — a galaxy's disc, an accretion disc, a
+   * planet's rings — gets a LARGE collision radius and a SMALL pickup size at
+   * the same time. It fences off the map while reading as something you should
+   * be able to swallow. That arithmetic is why every object in the last three
+   * stages was authored as a spheroid, and why a player said they "degrade into
+   * random misshapen blobs and bear no relation to the thing they're
+   * describing… a galaxy should not look like a galaxy [sic — should look like
+   * a galaxy]. It should look like a galaxy."
+   *
+   * Marking the disc, the arms, the ring and the jets as ghost lets the shape
+   * be honest while the physics keeps a compact core. Ghost parts are excluded
+   * from `rawSize` (so `dims`, `radius`, `pickup` and `volume` never see them),
+   * from `partBoxes` (so the obstacle test never sees them), and are flagged in
+   * `userData.ghostTri` so the per-slice radial profile can skip them too.
+   *
+   * ⚠ THE ALIGNMENT IS DONE ON THE SOLID PARTS. Ground-aligning on the union
+   * would let a downward jet lift the whole object off the floor. So a ghost
+   * that reaches below the solid's base WILL sink into the ground — which is
+   * usually what you want for a disc, and is a thing to check for a jet.
+   */
   push(geo, color, opts = {}) {
     geo.deleteAttribute('uv');
     geo.clearGroups();
     applyOpts(geo, opts);
     paint(geo, color);
     this.parts.push(geo);
+    this.ghost.push(!!opts.ghost);
+    return this;
+  }
+
+  /**
+   * Everything pushed inside `fn` is decoration. Sugar for the common case,
+   * where a whole feature — a disc, a set of arms, a corona — is ghost and
+   * threading `{ ghost: true }` through every call is noise that gets missed.
+   */
+  decor(fn) {
+    const from = this.parts.length;
+    fn(this);
+    for (let i = from; i < this.parts.length; i++) this.ghost[i] = true;
     return this;
   }
 
@@ -280,6 +320,15 @@ export class GeomBuilder {
     return this;
   }
 
+  /** Indices of the parts the game is allowed to measure and collide with. */
+  _solidIdx() {
+    const out = [];
+    for (let i = 0; i < this.parts.length; i++) if (!this.ghost[i]) out.push(i);
+    // A prop that is ALL decoration would otherwise have no size and no
+    // collision at all, which is never what the author meant.
+    return out.length ? out : this.parts.map((_, i) => i);
+  }
+
   /* ---------------- finish ---------------- */
 
   /**
@@ -295,6 +344,10 @@ export class GeomBuilder {
    */
   build({ groundAlign = true, centerXZ = true, keepParts = false, separate = false } = {}) {
     this.partBoxes = null;
+    const ghost = this.ghost.slice();
+    const solidIdx = this._solidIdx();
+    const isSolid = new Uint8Array(this.parts.length);
+    for (const i of solidIdx) isSolid[i] = 1;
     if (this.parts.length === 0) {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
@@ -345,7 +398,12 @@ export class GeomBuilder {
     if (separate) {
       const bb = new THREE.Box3();
       const tmp = new THREE.Box3();
-      for (const p of parts) { p.computeBoundingBox(); tmp.copy(p.boundingBox); bb.union(tmp); }
+      // SOLID PARTS ONLY — a ghost disc must not inflate `dims`, and therefore
+      // must not touch `radius`, `pickup` or `volume`. See the note on `ghost`
+      // above `push()`.
+      for (const i of solidIdx) {
+        parts[i].computeBoundingBox(); tmp.copy(parts[i].boundingBox); bb.union(tmp);
+      }
       /* The size BEFORE the nudge, for the game to measure itself against.
        *
        * The bias is a rendering fix and must not move a single gameplay number.
@@ -385,16 +443,42 @@ export class GeomBuilder {
     }
 
     // Grab each primitive's box BEFORE merging — afterwards they are one
-    // undifferentiated vertex soup and the gaps are unrecoverable.
+    // undifferentiated vertex soup and the gaps are unrecoverable. Ghost parts
+    // are left out: they are what the obstacle test must NOT see.
     const boxes = keepParts
-      ? parts.map((p) => { p.computeBoundingBox(); return p.boundingBox.clone(); })
+      ? solidIdx.map((i) => { parts[i].computeBoundingBox(); return parts[i].boundingBox.clone(); })
       : null;
+
+    /* One flag per TRIANGLE of the merged geometry, so `buildCatalog`'s radial
+       profile — which is sampled per triangle off the merged soup — can skip
+       decoration. Without this a ghost disc would still widen the cheap radial
+       reject that the broadphase and the pickup test both run on, and half the
+       point of the flag would be lost. */
+    let tri = 0;
+    const triCounts = parts.map((p) => p.attributes.position.count / 3);
+    const totalTri = triCounts.reduce((s, n) => s + n, 0);
+    const ghostTri = new Uint8Array(totalTri);
+    for (let k = 0; k < parts.length; k++) {
+      if (!isSolid[k]) ghostTri.fill(1, tri, tri + triCounts[k]);
+      tri += triCounts[k];
+    }
+
+    /* ⚠ ALIGN ON THE SOLID PARTS, NOT THE UNION. A black hole with jets above
+       and below would otherwise be lifted until the lower jet's tip sat on the
+       floor, leaving the hole itself hanging in the air. Taken from the parts'
+       own boxes before the merge, which is the same local space. */
+    const bb = new THREE.Box3();
+    {
+      const tmp = new THREE.Box3();
+      for (const i of solidIdx) {
+        parts[i].computeBoundingBox(); tmp.copy(parts[i].boundingBox); bb.union(tmp);
+      }
+    }
 
     const merged = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
     this.parts.length = 0;
+    this.ghost.length = 0;
 
-    merged.computeBoundingBox();
-    const bb = merged.boundingBox;
     const dx = centerXZ ? -(bb.min.x + bb.max.x) / 2 : 0;
     const dy = groundAlign ? -bb.min.y : 0;
     const dz = centerXZ ? -(bb.min.z + bb.max.z) / 2 : 0;
@@ -404,6 +488,8 @@ export class GeomBuilder {
       for (const b of boxes) b.translate(off);
     }
     this.partBoxes = boxes;
+    merged.userData.ghostTri = ghostTri;
+    merged.userData.hasGhost = ghost.some(Boolean);
 
     merged.computeBoundingBox();
     merged.computeBoundingSphere();
