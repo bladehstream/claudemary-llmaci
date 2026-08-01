@@ -222,6 +222,27 @@ export class Game {
        with their own handlers, so hammering DASH does not accidentally unlock
        anything. */
     canvas.addEventListener('pointerdown', () => this._secretTap());
+
+    /* ⚠ THE FIRST GESTURE ANYWHERE STARTS THE AUDIO.
+     *
+     * No browser will let a page make a sound before the player has interacted
+     * with it, so the title theme cannot simply play on load — that part is not
+     * a bug and cannot be fixed. What WAS a bug is that the only things which
+     * called `_ensureAudio` were Start Rolling, Play With a Friend, beginning a
+     * round and clicking the canvas with a mouse. So a player who opened the
+     * page, moved the mouse, read the title, clicked How to Play, went into
+     * Options and came back had made a dozen gestures and still had silence,
+     * and the game looked broken until they happened to press the one button
+     * that worked. Reported as "the background audio doesn't load when the page
+     * initially loads; i need to click on Start Rolling to trigger it".
+     *
+     * `once: true` — this is a bootstrap, not a policy. Everything afterwards
+     * goes through `_ensureAudio`, which is idempotent, and `AudioEngine` keeps
+     * its own document-level hook for waking a context iOS has interrupted. */
+    const boot = () => this._ensureAudio();
+    for (const ev of ['pointerdown', 'keydown', 'touchend']) {
+      document.addEventListener(ev, boot, { once: true, passive: true });
+    }
   }
 
   /**
@@ -502,6 +523,22 @@ export class Game {
     this.screens.buildStageCards(STAGES, this.save);
     this.screens.setEndingAvailable(this.save.cleared.includes(STAGES[STAGES.length - 1].id));
     this.screens.show('title');
+    /* ⚠ RESET THE ARRANGEMENT, NOT JUST THE SONG.
+     *
+     * `intensity` and `hurry` are stage state, and nothing was putting them
+     * back. `_stepPlaying` drives intensity up to 1.0 as you approach the goal
+     * and `setHurry(true)` fires at 30 seconds left — so the menu theme was
+     * playing at MAXIMUM density (every layer, the octave doubling, the scat
+     * line and the brass) and 8% fast, for as long as you sat there, having
+     * inherited both from the round you just finished. `loadStage` resets them,
+     * which is why starting a new round "went back to normal".
+     *
+     * Reported as the menu music going "crackly and then stopped entirely"
+     * after finishing the universe. A menu is supposed to be the sparse,
+     * unhurried version of the theme; it had become the loudest thing in the
+     * game and left running indefinitely. */
+    this.music.setHurry(false);
+    this.music.setIntensity(0.35, true);
     if (this.audio.ready) this.music.play('menu');
   }
 
