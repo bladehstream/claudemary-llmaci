@@ -108,14 +108,27 @@ export const universeStage = {
   unit: 'cosmic',
   seed: 13787000,
   startSize: 50,
-  goal: 1600,
-  /* 13:30, the longest stage in the game, and the same reasoning as the
-     galaxy's clock (see the note there): the bot got to the goal at 8:04 of
-     11:00 — 73% of the clock, tighter than anywhere else in the ladder — on a
-     map 25,600 units across, and the one cost it cannot charge itself is the
-     time a player spends looking. This is also the finale, so it is allowed to
-     be the long one. */
-  time: 810,
+  goal: 1900,
+  /* 10:30, cut from 13:30, with the goal raised from 1600 to 1900.
+     Report: "i got to the end of the universe with about 4 minutes to spare".
+
+     Two things made it loose. The clock was the game's longest because this is
+     the finale; and the three u_complex props were unreachable (see the note on
+     SP.complex in props/universe.js), so a player who had eaten everything else
+     had nothing left to do but watch the timer run out.
+
+     Fixing the second one also made the stage FASTER, because those three are
+     enormous and now feed the growth curve instead of sitting there: the sweeper
+     bot reaches the goal at 6:58, EARLIER than it did against the old, lower
+     goal. That is why the clock had to come down three minutes and not one.
+
+     Measured after the cut: goal at 6:58 of 10:30 — 66% of the clock, against
+     the galaxy's 71% and a ladder median of 49% — and the goal is 63% of what
+     a median run finishes at, inside the 60-75% band. 79 of 3360 props are
+     still standing at the whistle, which is the right amount left to chase;
+     at 12:00 there were none. Joint longest stage in the game with the galaxy,
+     which is the shape the last two should have. */
+  time: 630,
   speed: 330,
   density: 1,
   spread: 1,

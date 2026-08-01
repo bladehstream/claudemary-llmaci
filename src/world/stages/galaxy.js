@@ -74,7 +74,7 @@ export const galaxyStage = {
   unit: 'light',
   seed: 19900424,
   startSize: 50,
-  goal: 1600,
+  goal: 1800,
   /* 11:30, not the 10:00 the balance bot signs off on.
    *
    * The bot reached the goal at 6:24 of 10:00 here — comfortably inside the
@@ -87,7 +87,20 @@ export const galaxyStage = {
    * completing even the first area", and it cost two rounds of retuning. The
    * extra 90s puts a human at roughly the fraction of the clock the stages
    * nobody has complained about actually use. */
-  time: 690,
+  /* 10:30, cut from 11:30, and the goal raised from 1600 to 1800.
+     ⚠ THE PADDING ABOVE THE BOT'S NUMBER IS STILL HERE, just smaller, and the
+     note it replaces explains why it existed: the bot knows where every prop
+     is, so the one cost it can never charge itself is SEARCH, and this map is
+     one of the two largest in the game. Removing that allowance entirely is
+     what once produced "there is no chance of completing even the first area".
+     But two things have since eaten most of the search cost it was buying —
+     the end-of-round finder, which points at the last stragglers, and magnet
+     mode, which forgives the approach. And a player reported the result:
+     "i could roll up the galaxy with 3:10 to spare". Measured across the whole
+     ladder, the median stage uses 49% of its clock to reach the goal; this one
+     was at 56% and is the CLIMAX, so it should be tighter than the middle of
+     the game rather than looser. */
+  time: 630,
   speed: 330,
   density: 1,
   spread: 1,
