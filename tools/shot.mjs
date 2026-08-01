@@ -29,10 +29,10 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 const errs = [];
 page.on('pageerror', e => errs.push(e.message));
 await page.goto('http://localhost:5201/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 await page.screenshot({ path: path.join(OUT, 'final-title.png') });
 await page.evaluate(s => window.__llmaci.onAction('pick-stage', { dataset: { stage: s } }), stage);
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(600);
 // hand-place a grown katamari with attached objects so the shot is representative

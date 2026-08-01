@@ -28,11 +28,11 @@ const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.goto('http://localhost:5205/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 
 async function startHouse() {
   await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { stage: 'house' } }));
-  await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 120000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
   await page.evaluate(() => window.__llmaci.begin());
   await page.waitForTimeout(250);
 }
@@ -79,11 +79,11 @@ const stripped = await page.evaluate(() => {
  * allowed and there is no problem at all. Under that CPU load they did not fit.
  * Do not run this concurrently with the balance sweep, and do not believe a
  * failure here that was measured while something else was saturating the cores. */
-await page.waitForFunction(() => window.__llmaci.exhausted === true, { timeout: 120000 })
+await page.waitForFunction(() => window.__llmaci.exhausted === true, null, { timeout: 120000 })
   .then(() => check('empty stage is detected', true,
     `${stripped.total - stripped.live}/${stripped.total} props, ${stripped.timeLeft.toFixed(0)}s still on the clock`))
   .catch(() => check('empty stage is detected', false, 'never flagged exhausted'));
-await page.waitForFunction(() => window.__llmaci.state === 'results', { timeout: 300000 })
+await page.waitForFunction(() => window.__llmaci.state === 'results', null, { timeout: 300000 })
   .then(() => check('stripped stage ends the round', true))
   .catch(() => check('stripped stage ends the round', false, 'still playing'));
 
@@ -112,7 +112,7 @@ await page.evaluate(() => {
     if (!got) break;
   }
 });
-await page.waitForFunction(() => window.__llmaci.goalMet === true, { timeout: 10000 }).catch(() => {});
+await page.waitForFunction(() => window.__llmaci.goalMet === true, null, { timeout: 10000 }).catch(() => {});
 const goalMet = await page.evaluate(() => window.__llmaci.goalMet);
 check('goal flag set after passing the goal', goalMet === true);
 await page.keyboard.press('Enter');
@@ -130,7 +130,7 @@ check('Enter is ignored before the goal',
 
 /* ---- 4. the clock still works ---- */
 await page.evaluate(() => { window.__llmaci.timeLeft = 0.05; });
-await page.waitForFunction(() => window.__llmaci.state === 'results', { timeout: 10000 })
+await page.waitForFunction(() => window.__llmaci.state === 'results', null, { timeout: 10000 })
   .then(() => check('clock still ends the round', true))
   .catch(() => check('clock still ends the round', false));
 

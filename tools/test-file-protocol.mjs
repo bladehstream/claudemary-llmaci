@@ -20,7 +20,7 @@ page.on('request', r => { if (!r.url().startsWith('file://') && !r.url().startsW
 
 await page.goto(FILE, { waitUntil: 'load' });
 try {
-  await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 45000 });
+  await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 45000 });
 } catch (e) {
   console.log('BOOT FAILED');
   console.log('errors:', errors.length ? errors : '(none captured)');
@@ -50,7 +50,7 @@ console.log('AudioContext constructible:', await page.evaluate(() => {
 
 // play a stage for real
 await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { stage: 'house' } }));
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(500);
 await page.evaluate(() => {

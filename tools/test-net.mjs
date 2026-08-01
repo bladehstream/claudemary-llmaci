@@ -465,6 +465,14 @@ await page.close();
    app's first line runs, so the count is a fact about the loaded
    game rather than about what its code appears to say.
    ============================================================ */
+/* ⚠ EVERY TIMEOUT HERE IS EXPLICIT AND IN THE THIRD ARGUMENT. Playwright's
+   signature is waitForFunction(pageFunction, arg, options) — passing the
+   options object second makes it the page function's ARGUMENT and silently
+   leaves the 30s default in place. That was true of every timed wait in
+   fifteen files here, and it only surfaced when four harnesses were queued
+   back to back and a world build crossed 30s: a `{timeout: 90000}` wait
+   died at exactly 30000ms. A wait that reports the wrong number in its own
+   error message is worse than one with no timeout at all. */
 console.log('\n=== the panel, in two tabs ===');
 
 const spy = () => {
@@ -482,9 +490,57 @@ const open = async () => {
   p.on('pageerror', (e) => errors.push(String(e.message)));
   await p.addInitScript(spy);
   await p.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+  await p.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
+  /* ⚠ A TEST-ENVIRONMENT CONCESSION, in the same category as the mDNS flag
+     above — and it is about the HARNESS, not about the game.
+     Playwright refuses to click until an element's bounding box has been
+     STABLE across two consecutive animation frames. This panel has a 240ms
+     screen fade, a 90ms hover transform on every button, and a panel that can
+     scroll when a textarea takes focus. On an idle machine all of that settles
+     between two frames; with several pages of swiftshader competing for two
+     cores it does not, and the failure is a bare 30-second timeout whose
+     message says only that it waited — indistinguishable from a disabled
+     button or a panel that had moved on.
+     Three runs went into that ambiguity. The diagnostic below finally pinned
+     the state (enabled, visible, 209x79, phase host-manual) and Playwright's
+     own log named the cause: "element is not stable".
+     Only motion is removed. Every static style still applies, so the phone
+     layout measurements in section 8 measure exactly what a player sees. */
+  await p.addStyleTag({
+    content: '*, *::before, *::after { animation: none !important; transition: none !important; }',
+  });
   return p;
 };
+
+/**
+ * Press a button by dispatching the event the game actually listens for.
+ *
+ * ⚠ DELIBERATELY NOT `page.click`, and this is a scope decision rather than a
+ * workaround. Playwright's click waits for the target's bounding box to be
+ * STABLE across two consecutive animation frames before it will fire. With two
+ * full game loops rendering under swiftshader on two cores, this panel's box
+ * never satisfies that, and the result is a bare 30-second timeout whose
+ * message says only that it waited — indistinguishable from a disabled button
+ * or a panel that had moved on. Four runs went into that ambiguity; the
+ * diagnostic below and Playwright's own log eventually named it as
+ * "element is not stable", with the button enabled, visible and 209x79 the
+ * whole time.
+ *
+ * What this section asserts is the co-op STATE MACHINE — that pressing host
+ * produces an invite, that pasting it builds the right world, that the two
+ * tabs converge. Whether a button is hit-testable is a LAYOUT question, and it
+ * is already asserted properly in section 8, which measures every control's
+ * real geometry at phone size. Dispatching the same bubbling click the game's
+ * own delegated listener handles tests the thing this section is about without
+ * making it hostage to frame timing on a loaded machine.
+ */
+const tap = (p, selector) => p.evaluate((sel) => {
+  const el = document.querySelector(sel);
+  if (!el) throw new Error(`no element for ${sel}`);
+  if (el.disabled) throw new Error(`${sel} is disabled`);
+  if (el.classList.contains('hidden')) throw new Error(`${sel} is hidden`);
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+}, selector);
 
 const A = await open();
 const B = await open();
@@ -499,8 +555,8 @@ const booted = await conns(A);
 check('booting the game opens no peer connection', booted.rtc === 0, `${booted.rtc} constructed`);
 check('booting the game opens no signalling socket', booted.rooms === 0);
 
-await A.click('[data-action="coop"]');
-await A.waitForFunction(() => window.__llmaci.state === 'coop');
+await tap(A, '[data-action="coop"]');
+await A.waitForFunction(() => window.__llmaci.state === 'coop', null, { timeout: 60000 });
 const onPanel = await conns(A);
 check('opening the panel still opens nothing', onPanel.rtc === 0 && onPanel.rooms === 0);
 
@@ -515,18 +571,18 @@ check('room codes are hidden with no signalling worker configured',
   await A.evaluate(() => document.getElementById('coop-room-block').classList.contains('hidden')));
 
 /* ---- host ---- */
-await A.click('[data-action="coop-host"]');
+await tap(A, '[data-action="coop-host"]');
 await A.waitForSelector('#coop-stage:not(.hidden)');
 const offered = await A.evaluate(() =>
   [...document.getElementById('coop-stage-sel').options].map((o) => o.value));
 check('the stage list offers only unlocked stages', offered.length === 1 && offered[0] === 'quantum',
   offered.join(','));
 
-await A.click('[data-action="coop-make"]');
+await tap(A, '[data-action="coop-make"]');
 await A.waitForFunction(() => {
   const t = document.getElementById('coop-out');
   return t && t.value.length > 40;
-}, { timeout: 60000 });
+}, null, { timeout: 60000 });
 const invite = await A.evaluate(() => document.getElementById('coop-out').value);
 const afterMake = await conns(A);
 check('an invite is produced', invite.length > 40, `${invite.length} chars`);
@@ -536,16 +592,16 @@ check('the host world is built before the invite exists',
   await A.evaluate(() => !!window.__llmaci.world && window.__llmaci.stage.id === 'quantum'));
 
 /* ---- join ---- */
-await B.click('[data-action="coop"]');
-await B.waitForFunction(() => window.__llmaci.state === 'coop');
-await B.click('[data-action="coop-join"]');
+await tap(B, '[data-action="coop"]');
+await B.waitForFunction(() => window.__llmaci.state === 'coop', null, { timeout: 60000 });
+await tap(B, '[data-action="coop-join"]');
 await B.waitForSelector('#coop-in-block:not(.hidden)');
 await B.evaluate((v) => { document.getElementById('coop-in').value = v; }, invite);
-await B.click('[data-action="coop-go"]');
+await tap(B, '[data-action="coop-go"]');
 await B.waitForFunction(() => {
   const t = document.getElementById('coop-out');
   return t && !t.closest('.hidden') && t.value.length > 40;
-}, { timeout: 90000 });
+}, null, { timeout: 90000 });
 const reply = await B.evaluate(() => document.getElementById('coop-out').value);
 check('the joiner loads the stage the invite named',
   await B.evaluate(() => window.__llmaci.stage && window.__llmaci.stage.id === 'quantum'));
@@ -553,10 +609,29 @@ check('the joiner produces a reply', reply.length > 40, `${reply.length} chars`)
 
 /* ---- connect ---- */
 await A.evaluate((v) => { document.getElementById('coop-in').value = v; }, reply);
-await A.click('[data-action="coop-go"]');
+/* ⚠ SAY WHY, DO NOT JUST TIME OUT. Playwright's `click` waits for visible +
+   enabled + stable and then reports only that it waited — which under load is
+   indistinguishable between "the panel moved on without us", "the button is
+   disabled" and "something is still animating". That ambiguity has already
+   cost two full runs of this harness. */
+const goState = await A.evaluate(() => {
+  const el = document.getElementById('coop-go');
+  const r = el.getBoundingClientRect();
+  const c = window.__llmaci.coop;
+  return {
+    disabled: el.disabled, hidden: el.classList.contains('hidden'),
+    w: Math.round(r.width), h: Math.round(r.height),
+    phase: c.phase, locked: c.locked, linked: c.linked,
+    status: document.getElementById('coop-status').textContent.slice(0, 60),
+    net: window.__llmaci.net && window.__llmaci.net.status,
+  };
+});
+check('the host Connect button is live when the reply comes back',
+  !goState.disabled && !goState.hidden && goState.w > 0, JSON.stringify(goState));
+await tap(A, '[data-action="coop-go"]');
 
 const linked = (p) => p.waitForFunction(
-  () => window.__llmaci.net && window.__llmaci.net.synced === true, { timeout: 90000 })
+  () => window.__llmaci.net && window.__llmaci.net.synced === true, null, { timeout: 90000 })
   .then(() => true).catch(() => false);
 const bothLinked = (await Promise.all([linked(A), linked(B)])).every(Boolean);
 /* If this fails, the reason is on screen and in the peer — say so rather than
@@ -609,8 +684,8 @@ if (bothLinked) {
 
   await A.evaluate(() => window.__llmaci.begin());
   await B.evaluate(() => window.__llmaci.begin());
-  await A.waitForFunction(() => window.__llmaci.state === 'playing');
-  await B.waitForFunction(() => window.__llmaci.state === 'playing');
+  await A.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 60000 });
+  await B.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 60000 });
 
   // A ghost appears on B once A has sent a few state packets.
   const sawGhost = await B.waitForFunction(() => {
@@ -618,7 +693,7 @@ if (bothLinked) {
     if (!n || !n.ghosts.size) return false;
     for (const [, g] of n.ghosts) if (g.mesh.visible) return true;
     return false;
-  }, { timeout: 20000 }).then(() => true).catch(() => false);
+  }, null, { timeout: 20000 }).then(() => true).catch(() => false);
   check("the other player's katamari shows up", sawGhost);
 
   /* THE MARKER, which is what makes it co-op rather than two people in the
@@ -714,7 +789,7 @@ if (bothLinked) {
   check('quitting to the title tears the session down',
     await A.evaluate(() => window.__llmaci.net === null));
   const bDropped = await B.waitForFunction(
-    () => window.__llmaci.net && window.__llmaci.net.peers.length === 0, { timeout: 20000 })
+    () => window.__llmaci.net && window.__llmaci.net.peers.length === 0, null, { timeout: 20000 })
     .then(() => true).catch(() => false);
   check('and the other side notices', bDropped);
 }
@@ -750,9 +825,18 @@ const P2 = await browser.newPage({
 });
 P2.on('pageerror', (e) => errors.push(String(e.message)));
 await P2.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
-await P2.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
-await P2.click('[data-action="coop"]');
-await P2.waitForFunction(() => window.__llmaci.state === 'coop');
+await P2.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
+// Same concession as `open()` above: motion only, static layout untouched.
+await P2.addStyleTag({
+  content: '*, *::before, *::after { animation: none !important; transition: none !important; }',
+});
+/* `tap`, not `click`, for the same reason as the two-tab section — and the
+   hit-testing claim is not weakened by it. What proves this panel is usable
+   with a thumb is the MEASUREMENT below: every control at least 34px tall,
+   inside the panel box, no horizontal overflow. The click is only how we
+   navigate to the thing being measured. */
+await tap(P2, '[data-action="coop"]');
+await P2.waitForFunction(() => window.__llmaci.state === 'coop', null, { timeout: 60000 });
 
 const phone = await P2.evaluate(() => {
   const panel = document.querySelector('#coop-screen .panel');

@@ -36,7 +36,7 @@ page.on('pageerror', (e) => errors.push(String(e.message)));
 page.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|ERR_INTERNET/.test(m.text())) errors.push(m.text()); });
 
 await page.goto('http://localhost:5211/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 const stages = await page.evaluate(() => window.__llmaci.stageIds());
 let fail = 0;
@@ -53,7 +53,7 @@ for (const id of stages) {
     if (g.state !== 'title') g.toTitle();
     g.onAction('pick-stage', { dataset: { stage: s } });
   }, id);
-  await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
   await page.evaluate(() => window.__llmaci.begin());
   await page.waitForTimeout(400);
 

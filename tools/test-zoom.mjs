@@ -53,7 +53,7 @@ const page = await browser.newPage({ viewport: { width: 900, height: 620 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message)));
 await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 /* ⚠ THE STAGE HAS TO BE BIGGER THAN ITS OWN FOG, and the first version of this
    file was not. It used the house for speed, and every optics assertion passed
@@ -69,9 +69,9 @@ await page.evaluate(() => {
   g.setOption('shadows', false);
   g.onAction('pick-stage', { dataset: { stage: 'town' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => window.__llmaci.begin());
-await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 20000 });
+await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 20000 });
 
 /**
  * Settle at a zoom and read the optics.
@@ -276,7 +276,7 @@ await page.evaluate(() => {
   g.toTitle();
   g.onAction('pick-stage', { dataset: { stage: 'quantum' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 const kept = await page.evaluate(() => ({
   rig: window.__llmaci.rig.zoom, saved: window.__llmaci.options.zoom,
 }));

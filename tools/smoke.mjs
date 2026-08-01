@@ -39,7 +39,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + 
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 5).join('\n')));
 
 await page.goto(url, { waitUntil: 'load' });
-await page.waitForFunction(() => window.__katamari && window.__katamari.state === 'title', { timeout: 60000 });
+await page.waitForFunction(() => window.__katamari && window.__katamari.state === 'title', null, { timeout: 60000 });
 console.log('booted, catalog build ms =', await page.evaluate(() => Math.round(window.__katamari.buildTime)));
 await page.screenshot({ path: `${OUT}/00-title.png` });
 
@@ -52,7 +52,7 @@ const stages = await page.evaluate(() => window.__llmaci.stageIds());
 for (const id of stages) {
   const t0 = Date.now();
   await page.evaluate((sid) => window.__katamari.onAction('pick-stage', { dataset: { stage: sid } }), id);
-  await page.waitForFunction(() => window.__katamari.state === 'intro', { timeout: 120000 });
+  await page.waitForFunction(() => window.__katamari.state === 'intro', null, { timeout: 120000 });
   const buildMs = Date.now() - t0;
   const info = await page.evaluate(() => ({ props: window.__katamari.world.totalProps }));
   console.log(`${id}: build ${buildMs}ms, props ${info.props}`);
@@ -85,7 +85,7 @@ for (const id of stages) {
   console.log(`  fps (software GL): ${fps}`);
 
   await page.evaluate(() => { window.__katamari.timeLeft = 0.05; });
-  await page.waitForFunction(() => window.__katamari.state === 'results', { timeout: 20000 });
+  await page.waitForFunction(() => window.__katamari.state === 'results', null, { timeout: 20000 });
   await page.screenshot({ path: `${OUT}/${id}-results.png` });
   await page.evaluate(() => window.__katamari.toTitle());
   await page.waitForTimeout(200);

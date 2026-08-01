@@ -21,7 +21,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 1100, height: 660 } });
 await page.goto('http://localhost:5217/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 const shot = async (name) => {
   await page.screenshot({ path: path.join(OUT, `ui-${name}.png`) });
@@ -30,7 +30,7 @@ const shot = async (name) => {
 
 /* ---- the quit chip, at rest and mid-hold, with the finish chip above it ---- */
 await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { stage: 'house' } }));
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(600);
 await shot('01-quit-chip-idle');
@@ -57,7 +57,7 @@ await page.evaluate(() => {
   g.save.cleared = g.stageIds();
   g.onAction('pick-stage', { dataset: { stage: 'galaxy' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(900);
 await shot('03b-quit-chip-dark-stage');
@@ -73,7 +73,7 @@ await page.evaluate(() => {
   g.toTitle();
   g.onAction('pick-stage', { dataset: { stage: 'house' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => {
   const g = window.__llmaci, k = g.kat, f = g.world.field;
   g.begin();
@@ -118,7 +118,7 @@ await page.evaluate(() => {
   g.save.cleared = g.stageIds().slice(0, -1);
   g.onAction('pick-stage', { dataset: { stage: 'universe' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => {
   const g = window.__llmaci;
   g.begin();
@@ -162,7 +162,7 @@ await shot('09-ending-card');
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2 });
   const p = await phone.newPage();
   await p.goto('http://localhost:5217/', { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+  await p.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
   await p.addStyleTag({ content: '*{animation:none!important;transition:none!important}' });
   for (const [name, action] of [['how', 'how'], ['options', 'options']]) {
     await p.evaluate((a) => window.__llmaci.onAction(a), action);

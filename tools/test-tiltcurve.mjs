@@ -60,18 +60,18 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message)));
 await page.goto('http://localhost:5233/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 await page.evaluate(() => {
   const g = window.__llmaci;
   g.onAction('pick-stage', { dataset: { stage: 'house' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(async () => {
   await window.__llmaci.touch.requestTilt();
   window.__llmaci.begin();
 });
-await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 20000 });
+await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 20000 });
 await page.evaluate(() => new Promise((r) => { let n = 0; const t = () => (++n > 8 ? r() : requestAnimationFrame(t)); requestAnimationFrame(t); }));
 
 /* Neutral at 50, and pin it there so a stray reading cannot re-zero mid-sweep.

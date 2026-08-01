@@ -46,7 +46,7 @@ page.on('pageerror', (e) => errors.push(String(e.message)));
 page.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|ERR_INTERNET/.test(m.text())) errors.push(m.text()); });
 
 await page.goto('http://localhost:5213/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -61,9 +61,9 @@ async function startRound(stageId = 'quantum') {
     if (g.state !== 'title') g.toTitle();
     g.onAction('pick-stage', { dataset: { stage: s } });
   }, stageId);
-  await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
 }
 
 /* THE HOLD IS MEASURED IN GAME TIME, NOT WALL TIME, and this harness learned
@@ -144,9 +144,9 @@ await page.evaluate(() => {
   g.toTitle();
   g.onAction('pick-stage', { dataset: { stage: 'quantum' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.keyboard.down('Enter');                  // dismisses the intro
-await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
 /* ...and keeps being held. `gameSeconds` cannot be used here: it measures off
    `quitHold`, which is exactly the thing that must stay pinned at zero. Twenty
    frames is plenty — the threshold is 0.85s and a single clamped frame is 0.1s. */
@@ -227,7 +227,7 @@ await page.evaluate(async () => {
   g.save.cleared = g.stageIds().slice(0, -1);
   g.onAction('pick-stage', { dataset: { stage: 'universe' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => {
   const g = window.__llmaci;
   g.begin();

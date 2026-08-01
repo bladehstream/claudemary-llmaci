@@ -14,9 +14,9 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
   args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-dev-shm-usage'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 660 } });
 await page.goto('http://localhost:5215/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 await page.evaluate(s => window.__llmaci.onAction('pick-stage', { dataset: { stage: s } }), stage);
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(500);
 await page.evaluate(([dm, p]) => { if (dm) window.__dist = dm; if (p) window.__pitch = p; },

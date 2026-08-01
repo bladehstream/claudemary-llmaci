@@ -32,7 +32,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 640, height: 420 } });
 await page.goto('http://localhost:5213/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -91,7 +91,7 @@ await page.evaluate(() => {
   g.setOption('music', 0.6);
   g.onAction('pick-stage', { dataset: { stage: 'house' } });
 });
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 await page.evaluate(() => window.__llmaci.begin());
 // roll for real so the continuous voice is wide open when we leave
 await page.evaluate(() => {

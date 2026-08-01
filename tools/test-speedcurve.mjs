@@ -22,7 +22,7 @@ const check = (name, ok, extra = '') => {
 };
 
 await page.goto('http://localhost:5209/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 
 const def = await page.evaluate(() => ({
   opt: window.__llmaci.options.speedCurve, set: window.__llmaci.options.speedCurveSet,
@@ -50,7 +50,7 @@ check('note quotes a crossing time', /takes \d+s/.test(after.note), after.note.s
 // Reload: the value must survive AND be pushed back into TUNING, not just
 // restored into the options object.
 await page.reload({ waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 const restored = await page.evaluate(() => ({
   opt: window.__llmaci.options.speedCurve,
   tuning: window.__llmaci.tuning.speedP,
@@ -72,7 +72,7 @@ await page.evaluate(() => {
   localStorage.setItem(k, JSON.stringify(d));
 });
 await page.reload({ waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 const migrated = await page.evaluate(() => ({
   opt: window.__llmaci.options.speedCurve, tuning: window.__llmaci.tuning.speedP,
 }));
@@ -82,7 +82,7 @@ check('an untouched saved default adopts the new shipped one',
 
 // And it has to reach the katamari that actually gets built.
 await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { stage: 'house' } }));
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(400);
 // `kat.topSpeed` is only written inside `step`, so drive a few real frames

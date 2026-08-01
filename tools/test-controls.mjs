@@ -27,9 +27,9 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 await page.goto('http://localhost:5203/', { waitUntil: 'load' });
-await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 90000 });
+await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 90000 });
 await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { stage: 'house' } }));
-await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 120000 });
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
 await page.evaluate(() => window.__llmaci.begin());
 await page.waitForTimeout(300);
 

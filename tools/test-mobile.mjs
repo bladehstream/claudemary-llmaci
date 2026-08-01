@@ -124,7 +124,7 @@ async function openPhone(grant) {
   page.on('pageerror', (e) => errors.push(String(e.message)));
   page.on('console', (m) => { if (m.type() === 'error' && !/ERR_TUNNEL|ERR_INTERNET/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:5231/', { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__llmaci?.state === 'title', { timeout: 120000 });
+  await page.waitForFunction(() => window.__llmaci?.state === 'title', null, { timeout: 120000 });
   return { ctx, page, errors };
 }
 
@@ -135,7 +135,7 @@ async function toIntro(page, stage = 'quantum') {
     if (g.state !== 'title') g.toTitle();
     g.onAction('pick-stage', { dataset: { stage: s } });
   }, stage);
-  await page.waitForFunction(() => window.__llmaci.state === 'intro', { timeout: 180000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
 }
 
 /* ============================================================
@@ -246,7 +246,7 @@ console.log('\n=== the iOS permission handshake ===');
 
   // Tap it for real, so the gesture is genuine rather than a synthetic call.
   await page.tap('#intro-tilt');
-  await page.waitForFunction(() => window.__llmaci.touch.tilt !== 'idle', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.touch.tilt !== 'idle', null, { timeout: 10000 });
   const after = await page.evaluate(() => ({
     asked: window.__tilt.asked,
     gesture: window.__tilt.gesture,
@@ -264,7 +264,7 @@ console.log('\n=== the iOS permission handshake ===');
      against `tiltLive === false` and shows the no-sensor fallback. Unless
      something re-checks when the reading lands, a player ends up with working
      tilt AND the drive buttons, permanently. */
-  await page.waitForFunction(() => window.__llmaci.touch.tiltLive, { timeout: 5000 });
+  await page.waitForFunction(() => window.__llmaci.touch.tiltLive, null, { timeout: 5000 });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const live = await page.evaluate(() => ({
     recentre: !document.getElementById('mc-recentre').classList.contains('hidden'),
@@ -283,13 +283,13 @@ console.log('\n=== tilt drives the katamari ===');
   const { ctx, page } = await openPhone(true);
   await toIntro(page);
   await page.tap('#intro-tilt');
-  await page.waitForFunction(() => window.__llmaci.touch.tilt === 'granted', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.touch.tilt === 'granted', null, { timeout: 10000 });
 
   // Hold it at a natural reading angle, then start. Calibration happens in
   // begin(), so this angle must come out as ZERO thrust.
   await page.evaluate(() => window.__setBeta(52));
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
 
   const held = await page.evaluate(() => {
     const t = window.__llmaci.touch;
@@ -399,9 +399,9 @@ console.log('\n=== the thumb buttons ===');
      without it `turnByTilt` is false and `read().turn` quietly falls back to the
      buttons — which reads as "tilt steering is broken" when it was never on. */
   await page.tap('#intro-tilt');
-  await page.waitForFunction(() => window.__llmaci.touch.tiltLive, { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.touch.tiltLive, null, { timeout: 10000 });
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   /* Arrows first, so put turning on buttons. With the default (tilt) the arrows
      are hidden on purpose, and `boundingBox()` on a hidden element is null. */
   await page.evaluate(() => window.__llmaci.setOption('turn', 'buttons'));
@@ -510,7 +510,7 @@ console.log('\n=== the thumb buttons ===');
 
   /* ---- a way out, which the touch build did not have ---- */
   await page.evaluate(() => window.__llmaci.resume());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   const quitBox = await page.locator('#mc-quit').boundingBox();
   check('the quit button is on screen and thumb-sized', !!quitBox && quitBox.width >= 40,
     quitBox ? `${Math.round(quitBox.width)}x${Math.round(quitBox.height)} at y=${Math.round(quitBox.y)}` : 'missing');
@@ -524,14 +524,14 @@ console.log('\n=== the thumb buttons ===');
   check('holding it starts the timer and fills', arming.held && /scaleY\(0\.[0-9]*[1-9]/.test(arming.fill),
     `${arming.fill || '(none)'}`);
   check('a brief touch does not quit', arming.state === 'playing');
-  await page.waitForFunction(() => window.__llmaci.state === 'title', { timeout: 30000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'title', null, { timeout: 30000 });
   await touchAt('touchEnd', 0, 0);
   check('holding it through quits to the title', true);
 
   // And it must not latch: a touch that slides off leaves nothing held.
   await toIntro(page);
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   const q2 = await page.locator('#mc-quit').boundingBox();
   await touchAt('touchStart', q2.x + q2.width / 2, q2.y + q2.height / 2);
   await touchAt('touchMove', q2.x - 180, q2.y + 300);
@@ -719,7 +719,7 @@ console.log('\n=== "Don\'t Allow" is still playable ===');
   const { ctx, page } = await openPhone(false);
   await toIntro(page);
   await page.tap('#intro-tilt');
-  await page.waitForFunction(() => window.__llmaci.touch.tilt === 'denied', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.touch.tilt === 'denied', null, { timeout: 10000 });
   const ui = await page.evaluate(() => ({
     tilt: window.__llmaci.touch.tilt,
     recentre: !document.getElementById('mc-recentre').classList.contains('hidden'),
@@ -730,7 +730,7 @@ console.log('\n=== "Don\'t Allow" is still playable ===');
   check('and it says so', /No tilt/i.test(ui.note), `"${ui.note}…"`);
 
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   const drove = await page.evaluate(async () => {
     const g = window.__llmaci;
     const el = document.querySelector('[data-mc="drive-fwd"]');
@@ -753,7 +753,7 @@ console.log('\n=== the portrait camera ===');
   const { ctx, page } = await openPhone(true);
   await toIntro(page);
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   await page.evaluate(() => new Promise((res) => { let n = 0; const t = () => (++n > 6 ? res() : requestAnimationFrame(t)); requestAnimationFrame(t); }));
 
   const cam = await page.evaluate(() => {
@@ -784,7 +784,7 @@ console.log('\n=== the portrait camera ===');
   await page.evaluate(() => { const g = window.__llmaci; g.toTitle(); g.save.cleared = g.stageIds(); });
   await toIntro(page, 'house');
   await page.evaluate(() => window.__llmaci.begin());
-  await page.waitForFunction(() => window.__llmaci.state === 'playing', { timeout: 10000 });
+  await page.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 10000 });
   await page.evaluate(() => { const g = window.__llmaci; g.goalMet = true; g.hud.setCanFinish(true); });
   await frames2(page, 8);
   await page.screenshot({ path: path.join(ROOT, 'tools', 'shots', 'mobile-house.png') });
