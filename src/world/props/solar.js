@@ -34,6 +34,9 @@
 
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
+import {
+  gradedDisc, ring, shell, jet, prominence, swarm, wisps, core,
+} from './spacekit.js';
 
 const TAU = Math.PI * 2;
 
@@ -323,25 +326,43 @@ P({ id: 'sol_rubble', name: 'Rubble-Pile Asteroid', fill: 0.4, variants: 3, weig
     }
   } });
 
-P({ id: 'sol_comet', name: 'Comet Nucleus', fill: 0.18, variants: 3, weight: 10,
+P({ id: 'sol_comet', name: 'Comet Nucleus', sizeMul: 1.3986, fill: 0.4925, variants: 3, weight: 10,
   build(b, r, v) {
+    /* ⚠ A COMET IS ITS TAIL, and the tail was the one thing this could not
+       have. The old comment: "a fan of grains lifting AWAY from the ground
+       rather than lying along it. Laid flat it would triple the collision
+       radius for a fifth of the pickup size." So the most recognisable object
+       in the sky was drawn as a snowball with a puff of crumbs going upwards.
+
+       Ghost measures nothing, so it gets both real tails, laid back where
+       tails lie: the ION tail straight, narrow and blue, blown dead away from
+       the star, and the DUST tail broader, warmer and CURVED, because the
+       grains are heavier and lag behind the nucleus along its orbit. Two
+       tails at different angles is the whole silhouette; one is a smudge.
+
+       ⚠ 137 instances, so it had to get cheaper doing it: 612 -> ~540. The
+       nine-sphere crumb fan is gone, and the nucleus drops a lobe. */
     const Z = SZ.comet;
-    // a dirty snowball with two jets, and a tail that is mostly nothing
-    lump(b, Z, r, S.crater, S.basalt, 3);
-    b.sphere(Z * 0.3, S.icePale, { x: -Z * 0.4, y: Z * 1.2, z: Z * 0.25 }, 6, 4);
-    for (let i = 0; i < 2; i++) {
-      b.cyl(Z * 0.02, Z * 0.26, Z * 1.1, S.ice,
-        { x: Z * (0.2 - i * 0.5), y: Z * 1.5, z: Z * 0.1, rz: 0.4 - i * 0.9, rx: 0.2 }, 6);
-    }
-    /* The tail: a fan of grains lifting AWAY from the ground rather than lying
-       along it. Laid flat it would triple the collision radius for a fifth of
-       the pickup size, which is the wide-flat-prop trap. */
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      b.sphere(Z * (0.2 - t * 0.13), i % 2 ? S.ice : S.ammonia, {
-        x: -Z * (0.7 + t * 1.9), y: Z * (0.9 + t * 1.5), z: Z * Math.sin(t * 4 + v) * 0.3,
-      }, 5, 4);
-    }
+    lump(b, Z, r, S.crater, S.basalt, 2);
+    b.decor((d) => {
+      d.ellip(Z * 0.66, Z * 0.58, Z * 0.62, S.icePale, { y: Z * 0.92 }, 6, 4);
+      // ion tail — straight, thin, and much longer than the box
+      for (let i = 0; i < 2; i++) {
+        const t = i;
+        d.ellip(Z * (1.7 - t * 0.2), Z * (0.15 - t * 0.045), Z * (0.15 - t * 0.045), S.wind, {
+          x: -Z * (1.7 + t * 3.1), y: Z * (1.0 + t * 0.22),
+        }, 6, 4);
+      }
+      // dust tail — broader, warmer, and swept off the orbit
+      for (let i = 0; i < 3; i++) {
+        const t = i / 2;
+        d.ellip(Z * (1.15 - t * 0.2), Z * (0.28 - t * 0.07), Z * (0.32 - t * 0.08),
+          i % 2 ? S.ice : S.ammonia, {
+            x: -Z * (1.25 + t * 2.3), y: Z * (0.86 + t * 0.08),
+            z: Z * (0.3 + t * 1.0), ry: -0.34 - t * 0.4,
+          }, 6, 4);
+      }
+    });
   } });
 
 /* ==================================================================
@@ -384,20 +405,29 @@ P({ id: 'sol_moonlet', name: 'Small Moon', fill: 0.52, variants: 3, weight: 9,
     craters(b, Z * 0.92, r, 6, S.crater, S.rockLt);
   } });
 
-P({ id: 'sol_wind', name: 'Solar-Wind Stream', fill: 0.05, variants: 3, weight: 8,
+P({ id: 'sol_wind', name: 'Solar-Wind Stream', sizeMul: 1.5802, fill: 0.1973, variants: 3, weight: 8,
   surface: 'air', flyHeight: 0.055,
   build(b, r, v) {
+    /* "Kept SHORT: a stream long enough to look like a stream is a fence."
+       It is no longer a fence, so it is no longer short. A solar-wind stream
+       is a long thin ribbon of charged gas with the field frozen into it,
+       curling as the star rotates under it — the Parker spiral. That curl is
+       the only thing that distinguishes it from a smear, and it needs length
+       to be visible at all. */
     const Z = SZ.wind;
-    /* Charged gas on its way out, drawn as a short run of darts. Kept SHORT:
-       a stream long enough to look like a stream is a fence, and this thing is
-       0.05 of a fill — nearly all of its bounding box is vacuum. */
-    for (let i = 0; i < 7; i++) {
-      const t = i / 6;
-      const y = Z * (0.5 + Math.sin(t * 3 + v) * 0.35);
-      b.cone(Z * (0.2 - t * 0.08), Z * (0.5 - t * 0.16), i % 2 ? S.wind : S.windDim,
-        { x: Z * (-1.1 + t * 2.2), y, z: Z * Math.cos(t * 4 + v) * 0.3, rz: -1.35 }, 6);
-    }
-    b.sphere(Z * 0.16, S.corona, { x: -Z * 1.15, y: Z * 0.5 }, 6, 4);
+    core(b, Z * 0.5, Z * 0.5, Z * 0.5, S.windDim, { y: Z * 0.5, k: 0.86 });
+    b.decor((d) => {
+      for (let i = 0; i < 11; i++) {
+        const t = i / 10;
+        const a = -0.5 + t * 1.15;                    // the spiral's curl
+        d.ellip(Z * (0.42 - t * 0.14), Z * (0.16 - t * 0.05), Z * (0.13 - t * 0.04),
+          i % 2 ? S.wind : S.windDim, {
+            x: Z * (-1.2 + t * 5.2), y: Z * (0.5 + Math.sin(t * 3 + v) * 0.22),
+            z: Z * (Math.sin(a) * 1.3 - 0.4), ry: -a,
+          }, 6, 4);
+      }
+      d.sphere(Z * 0.2, S.corona, { x: -Z * 1.5, y: Z * 0.5 }, 6, 4);
+    });
   } });
 
 P({ id: 'sol_centaur', name: 'Centaur', fill: 0.45, variants: 2, weight: 8,
@@ -528,30 +558,39 @@ P({ id: 'sol_dwarf', name: 'Dwarf Planet', fill: 0.55, variants: 3, weight: 6,
    FIELDS AND PLASMA   (400Mm - 950Mm)
    ================================================================== */
 
-P({ id: 'sol_magnetotail', name: 'Magnetotail', fill: 0.07, variants: 2, weight: 5,
+P({ id: 'sol_magnetotail', name: 'Magnetotail', sizeMul: 2.1661, fill: 0.7114, variants: 2, weight: 5,
   build(b, r, v) {
+    /* ⚠ THE OLD COMMENT SAID WHY IT WAS WRONG AND THEN DID IT ANYWAY: "the
+       lobes go UP and back, not out along the floor: a tail drawn honestly
+       along the ground is three times the collision radius for the same
+       mouthful." A magnetotail that goes upwards is not a magnetotail. It is
+       a plume.
+
+       Drawn honestly now, because ghost is not measured: the planet is the
+       solid body, the two lobes stream away downwind along the plane, the
+       neutral sheet lies between them where it belongs, and the bow shock
+       stands off the sunward side as a real curved sheet rather than five
+       boxes on a fan. The tail reaches four times the box, which is still
+       short for the real thing. */
     const Z = SZ.magnetotail;
-    /* A planet's field, stretched downwind into two lobes. The lobes go UP and
-       back, not out along the floor: a tail drawn honestly along the ground is
-       three times the collision radius for the same mouthful. */
     b.sphere(Z * 0.42, S.fieldDim, { y: Z * 0.62 }, 9, 6);
     b.sphere(Z * 0.3, S.rock, { y: Z * 0.62 }, 8, 6);
-    for (const s of [-1, 1]) {
-      for (let i = 0; i < 7; i++) {
-        const t = i / 6;
-        b.ellip(Z * (0.3 - t * 0.16), Z * (0.2 - t * 0.09), Z * (0.16 - t * 0.07),
-          i % 2 ? S.field : S.fieldDim, {
-            x: Z * (0.5 + t * 1.7), y: Z * (0.66 + t * 0.7 + s * t * 0.3),
-            z: s * Z * (0.16 + t * 0.34),
-          }, 7, 5);
+    b.decor((d) => {
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 6; i++) {
+          const t = i / 5;
+          d.ellip(Z * (0.42 + t * 0.5), Z * (0.2 - t * 0.08), Z * (0.2 - t * 0.06),
+            i % 2 ? S.field : S.fieldDim, {
+              x: Z * (0.9 + t * 3.1), y: Z * (0.62 + s * (0.16 + t * 0.1)),
+              z: s * Z * (0.1 + t * 0.16),
+            }, 6, 4);
+        }
       }
-    }
-    // the bow shock standing off the sunward side
-    for (let i = 0; i < 5; i++) {
-      const a = -0.9 + (i / 4) * 1.8;
-      b.box(Z * 0.07, Z * 0.5, Z * 0.24, S.wind,
-        { x: -Z * (0.62 + Math.cos(a) * 0.1), y: Z * 0.62, z: Z * Math.sin(a) * 0.62, ry: a });
-    }
+      // the neutral sheet, between the lobes
+      d.ellip(Z * 2.1, Z * 0.03, Z * 0.26, S.aurora, { x: Z * 2.2, y: Z * 0.62 }, 6, 4);
+      // the bow shock, a real curved sheet standing off the sunward side
+      shell(d, Z * 0.95, S.wind, { y: Z * 0.62, th: 0.05, open: 0.62, rx: -1.5708, sx: 0.42 }, 16);
+    });
   } });
 
 P({ id: 'sol_sunspot', name: 'Sunspot Group', fill: 0.3, variants: 2, weight: 5,
@@ -735,40 +774,56 @@ P({ id: 'sol_gasgiant', name: 'Gas Giant', fill: 0.5, variants: 3, weight: 3,
     b.sphere(Z * 1.025, S.cloudWarm, { y: Z }, 12, 8);
   } });
 
-P({ id: 'sol_ring', name: 'Ring System', fill: 0.09, variants: 3, weight: 3,
+P({ id: 'sol_ring', name: 'Ring System', sizeMul: 1.6702, fill: 0.4193, variants: 3, weight: 3,
   build(b, r, v) {
     const Z = SZ.ring;
-    /* A RING IS THE WORST SHAPE IN THE GAME IF YOU LAY IT FLAT: collision
-       radius is half the longest horizontal span and pickup is the cube root
-       of the box, so a flat annulus fences off the map while reading as a
-       snack. Tilted 38 degrees, the same span buys height instead — and it is
-       what a ringed planet actually looks like from anywhere but directly
-       above. */
-    const tilt = Math.PI / 2 - 0.66;
-    const P0 = Z * 0.4;                    // the planet inside the rings
-    const C0 = Z * 0.62;                   // centre height: rings just clear the floor
+    /* ⚠ THE PROP THIS STAGE'S HEADER RULE WAS WRITTEN ABOUT, AND THE RULE IS
+       RETIRED. The old comment here read: "A RING IS THE WORST SHAPE IN THE
+       GAME IF YOU LAY IT FLAT: collision radius is half the longest horizontal
+       span and pickup is the cube root of the box, so a flat annulus fences
+       off the map while reading as a snack." True, and the answer was to tilt
+       the whole system 38 degrees so the span bought height instead — a
+       compromise that put every ringed planet in the solar system on its side.
+
+       Ghost geometry measures nothing, so the rings can lie where rings lie.
+       The planet is the solid body and the only thing the game collides with;
+       the rings are a picture, four graded annuli with a gap cut in them,
+       tilted a few degrees because that is what looks right rather than
+       because the physics demands it.
+
+       ⚠ The planet is 0.47 Z rather than the old 0.40 because it is now the
+       ONLY solid part, and `reghost` clamps at `fill: 1` below about 0.44 —
+       the mass of the whole system has to fit inside the planet. And the rings
+       now reach 1.45 Z, well past the box, which they could never do before:
+       that is a real ring system's proportion, three times the planet's
+       radius, not the 2.4 the old collision box could afford. */
+    const TILT = 0.24;
+    const P0 = Z * 0.47;                   // the planet — and the whole solid body
+    const C0 = Z * 0.62;                   // held up, so the rings clear the floor
     b.sphere(P0, S.band, { y: C0 }, 11, 8);
-    /* The planet's own belts are written out rather than taken from `belts()`,
-       which centres a body at y = radius — right for something sitting on the
-       ground, wrong for a planet held up inside its rings. */
-    for (const h of [-0.52, 0, 0.52]) {
-      b.torus(Math.sqrt(1 - h * h) * P0, P0 * 0.06, h ? S.bandDk : S.bandPale,
-        { y: C0 + h * P0, rx: Math.PI / 2 }, 4, 12);
-    }
-    for (const [rr, tube, col] of [
-      [0.62, 0.055, S.bandPale], [0.75, 0.04, S.cloudWarm], [0.86, 0.05, S.bandDk],
-      [0.97, 0.03, S.bandPale],
-    ]) {
-      b.torus(Z * rr, Z * tube, col, { y: C0, rx: tilt }, 5, 14);
-    }
-    // shepherds sitting in the gaps
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * TAU + v;
-      b.sphere(Z * 0.07, S.icePale, {
-        x: Math.cos(a) * Z * 0.81, y: C0 + Math.sin(a) * Z * 0.81 * Math.cos(tilt),
-        z: Math.sin(a) * Z * 0.81 * Math.sin(tilt),
-      }, 6, 4);
-    }
+    b.decor((d) => {
+      /* The planet's own belts are written out rather than taken from
+         `belts()`, which centres a body at y = radius — right for something
+         sitting on the ground, wrong for a planet held up inside its rings. */
+      for (const h of [-0.52, 0, 0.52]) {
+        d.torus(Math.sqrt(1 - h * h) * P0, P0 * 0.06, h ? S.bandDk : S.bandPale,
+          { y: C0 + h * P0, rx: Math.PI / 2, ghost: true }, 4, 12);
+      }
+      // the bright inner system, the Cassini gap, then the faint outer sheet
+      gradedDisc(d, Z * 0.66, Z * 1.06, [S.bandPale, S.cloudWarm, S.bandPale],
+        { y: C0, rx: TILT, warp: 0.03 }, 3, 30);
+      gradedDisc(d, Z * 1.16, Z * 1.45, [S.bandDk, S.bandPale],
+        { y: C0, rx: TILT, warp: 0.02 }, 2, 30);
+      ring(d, Z * 1.11, S.icePale, { y: C0, rx: TILT, tube: 0.006 }, 28);
+      // shepherds sitting in the gap, in the plane of the rings
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * TAU + v, rr = Z * 1.11;
+        d.sphere(Z * 0.05, S.icePale, {
+          x: Math.cos(a) * rr, y: C0 + Math.sin(a) * rr * Math.sin(TILT),
+          z: Math.sin(a) * rr * Math.cos(TILT),
+        }, 6, 4);
+      }
+    });
   } });
 
 /* ==================================================================
