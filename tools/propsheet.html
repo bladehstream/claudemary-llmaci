@@ -1,0 +1,112 @@
+<!doctype html>
+<!--
+  A contact sheet of every prop in a stage.
+
+  Nobody working on this game can look at it, and "the objects degrade into
+  random misshapen blobs and bear no relation to the thing they're describing"
+  is a complaint that can only be answered by looking. So: render every
+  archetype in isolation, three angles each, on a neutral background with the
+  game's own lighting rig, and lay them out in a labelled grid.
+
+  Neutral grey on purpose. The space stages are near-black by design and a
+  screenshot of one is a bad instrument for judging SHAPE — that is what
+  `npm run contrast` is for. This sheet answers one question only: does the
+  silhouette read as the thing it is named after.
+
+  Driven by tools/propsheet.mjs.
+-->
+<html>
+  <head><meta charset="utf-8"><title>prop sheet</title>
+  <style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+  <body>
+    <script type="module">
+      import * as THREE from 'three';
+      import { buildCatalog, ARCHETYPES } from '/src/world/props/index.js';
+      import '/src/world/props/quantum.js';
+      import '/src/world/props/atom.js';
+      import '/src/world/props/microbe.js';
+      import '/src/world/props/house.js';
+      import '/src/world/props/town.js';
+      import '/src/world/props/city.js';
+      import '/src/world/props/country.js';
+      import '/src/world/props/world.js';
+      import '/src/world/props/solar.js';
+      import '/src/world/props/galaxy.js';
+      import '/src/world/props/universe.js';
+      import '/src/world/props/nature.js';
+      import '/src/world/props/ai.js';
+
+      buildCatalog();
+
+      const TILE = 220;          // px per angle
+      const ANGLES = [0.6, 2.2, 4.0];
+
+      window.__sheet = async (tag, cols) => {
+        const props = ARCHETYPES.filter((p) => p.tags.includes(tag) && !p.scenery)
+          .sort((a, b) => a.pickup - b.pickup);
+        const perRow = cols;
+        const cellW = TILE * ANGLES.length;
+        const cellH = TILE + 22;
+        const rows = Math.ceil(props.length / perRow);
+
+        const out = document.createElement('canvas');
+        out.width = cellW * perRow;
+        out.height = cellH * rows;
+        const ctx = out.getContext('2d');
+        ctx.fillStyle = '#3a3f45';
+        ctx.fillRect(0, 0, out.width, out.height);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(TILE, TILE, false);
+        renderer.setClearColor(0x3a3f45);
+
+        const scene = new THREE.Scene();
+        // The game's rig, so a colour that works here works there.
+        const hemi = new THREE.HemisphereLight(0xdff0ff, 0x6f8a55, 1.15);
+        const sun = new THREE.DirectionalLight(0xfff4dd, 1.05);
+        sun.position.set(0.5, 1, 0.35).normalize();
+        const fill = new THREE.DirectionalLight(0xbcd9ff, 0.32);
+        fill.position.set(-0.6, 0.4, -0.5).normalize();
+        scene.add(hemi, sun, fill);
+
+        const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const cam = new THREE.PerspectiveCamera(32, 1, 0.01, 1e7);
+
+        for (let i = 0; i < props.length; i++) {
+          const p = props[i];
+          const g = p.geos[0];
+          const mesh = new THREE.Mesh(g, mat);
+          scene.add(mesh);
+          g.computeBoundingSphere();
+          const R = g.boundingSphere.radius;
+          const cy = (g.boundingBox.min.y + g.boundingBox.max.y) / 2;
+
+          const col = i % perRow, row = Math.floor(i / perRow);
+          for (let a = 0; a < ANGLES.length; a++) {
+            const th = ANGLES[a];
+            // A low camera, because that is where the player's camera lives.
+            const d = R * 3.2;
+            cam.position.set(Math.cos(th) * d, cy + R * 0.85, Math.sin(th) * d);
+            cam.lookAt(0, cy, 0);
+            cam.updateProjectionMatrix();
+            renderer.render(scene, cam);
+            ctx.drawImage(renderer.domElement,
+              col * cellW + a * TILE, row * cellH + 22, TILE, TILE);
+          }
+          scene.remove(mesh);
+
+          ctx.fillStyle = '#e8eef5';
+          ctx.font = 'bold 14px monospace';
+          ctx.fillText(`${p.id}  ${p.name}`, col * cellW + 6, row * cellH + 16);
+          ctx.fillStyle = '#8fa2b5';
+          ctx.font = '12px monospace';
+          const tris = Math.round(g.attributes.position.count / 3);
+          ctx.fillText(`${tris}t`, col * cellW + cellW - 44, row * cellH + 16);
+        }
+        renderer.dispose();
+        return out.toDataURL('image/png');
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>
