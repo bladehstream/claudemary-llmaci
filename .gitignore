@@ -30,6 +30,11 @@ tools/audio/
 _to_delete/
 .gittest/
 
+# Session handoff notes. Working state for resuming a task across sessions, not
+# part of the product. Kept out of history deliberately -- but note it therefore
+# only survives on the device clone, never in the ephemeral container.
+HANDOFF.md
+
 # Editor and OS droppings. The host is Windows, so Thumbs.db and desktop.ini are
 # the ones that actually turn up here; .DS_Store is for anyone on a Mac.
 .vscode/
