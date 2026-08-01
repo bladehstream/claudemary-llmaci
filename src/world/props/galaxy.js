@@ -67,6 +67,10 @@
 
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
+import {
+  TAU, corona, prominence, shell, jet, ring, annulus, gradedDisc,
+  spiralArm, swarm, wisps, pillars, core,
+} from './spacekit.js';
 
 const U = 'light';
 
@@ -249,7 +253,7 @@ function band(b, RX, RY, RZ, n, cols, rnd, o = {}) {
  * thickness, and the same silhouette. `n` divisible by four so a chunk sits on
  * each axis and the box is exact.
  */
-function disc(b, R, rr, ry, yc, cols, warp, n) {
+function lumpDisc(b, R, rr, ry, yc, cols, warp, n) {
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     b.ellip(rr, ry, rr, cols[i % cols.length],
@@ -258,7 +262,7 @@ function disc(b, R, rr, ry, yc, cols, warp, n) {
 }
 
 /** A cone of light leaving (0, y0, 0) along +Y (`up` 1) or -Y (-1). */
-function jet(b, y0, len, r0, col, up = 1, seg = 8) {
+function jetCone(b, y0, len, r0, col, up = 1, seg = 8) {
   b.cyl(up > 0 ? r0 : 0.8, up > 0 ? 0.8 : r0, len, col, { y: y0 + up * len * 0.5 }, seg);
 }
 
@@ -266,117 +270,189 @@ function jet(b, y0, len, r0, col, up = 1, seg = 8) {
    THINGS WITH A SURFACE — a planet and the main sequence
    ================================================================== */
 
-P({ id: 'g_rogue', name: 'Rogue Planet', cat: 'planet', fill: 0.5, variants: 3, weight: 12,
+/**
+ * A marking ON the surface of a sphere of radius R — a starspot, a storm, an
+ * ice cap. A flat disc laid tangent at (theta, phi), lifted by a hair.
+ *
+ * ⚠ THIS REPLACES THE IDIOM THAT CAUSED THE COMPLAINT. Every star in this file
+ * used to be two overlapping spheres, a big one and a smaller one at 0.78-0.84
+ * of its radius pushed off-centre, so the inner one broke the surface in a few
+ * places. Rendered, that does not read as a marking: it reads as a hole
+ * punched in a billiard ball, which is most of what "random misshapen blobs"
+ * was pointing at. A tangent disc reads as a spot because it IS one.
+ */
+function spot(b, R, th, ph, size, col, o = {}) {
+  const y0 = o.y ?? R;
+  const dx = Math.sin(ph) * Math.cos(th), dy = Math.cos(ph), dz = Math.sin(ph) * Math.sin(th);
+  b.ellip(R * size, R * size * 0.14, R * size * (o.long ?? 1), col, {
+    x: dx * R * 0.995, y: y0 + dy * R * 0.995, z: dz * R * 0.995,
+    rz: -Math.atan2(dx, dy), rx: Math.atan2(dz, Math.hypot(dx, dy)),
+    ghost: true,
+  }, 6, 3);
+}
+
+/** A latitude band around a sphere — a gas giant's cloud belt. */
+function belt(b, R, lat, width, col) {
+  const c = Math.cos(lat);
+  b.ellip(R * c * 1.006, R * width, R * c * 1.006, col,
+    { y: R + Math.sin(lat) * R, ghost: true }, 11, 3);
+}
+
+P({ id: 'g_rogue', name: 'Rogue Planet', cat: 'planet', sizeMul: 1.0103, fill: 0.5155, variants: 3, weight: 12,
   build(b, r, v) {
     const R = 8;
-    b.sphere(R, [G.dust, G.rust, G.plum][v], { y: R }, 8, 6);
-    b.sphere(R * 0.78, [G.plum, G.emberDk, G.indigo][v], { x: R * 0.16, y: R * 1.1, z: R * 0.14 }, 7, 5);
-    b.sphere(R * 0.26, G.blueWhite, { y: R * 1.66 }, 6, 4);
-    b.ellip(R * 0.6, R * 0.1, R * 0.6, G.ash, { y: R * 0.72, rz: 0.2 }, 8, 4);
+    b.sphere(R, [G.dust, G.rust, G.plum][v], { y: R }, 12, 9);
+    // No star to light it: a cold cap, a couple of basins, and a faint rim so
+    // the silhouette survives against the void.
+    spot(b, R, 0, 0.28, 0.42, G.ash);
+    spot(b, R, 2.1, 1.5, 0.3, [G.plum, G.emberDk, G.indigo][v], { long: 1.6 });
+    spot(b, R, 4.3, 2.0, 0.24, G.void);
+    b.decor((d) => {
+      d.lathe([[R * 1.0, 0], [R * 1.05, 0]], [G.dustLit, G.slate ?? G.ash, G.indigo][v] ?? G.dustLit,
+        { y: R, rx: 0.35 }, 20);
+    });
   } });
 
-P({ id: 'g_browndwarf', name: 'Brown Dwarf', cat: 'star', fill: 0.5, variants: 3, weight: 12,
+P({ id: 'g_browndwarf', name: 'Brown Dwarf', cat: 'star', sizeMul: 1.0022, fill: 0.5033, variants: 3, weight: 12,
   build(b, r, v) {
     const R = 10.5;
-    b.sphere(R, G.rust, { y: R }, 9, 6);
+    b.sphere(R, G.rust, { y: R }, 13, 9);
+    // Belts, drawn as bands hugging the surface rather than as discs punched
+    // through it — the old version's equator read as a seam.
     const bands = [G.emberDk, G.plum, G.dustWarm];
-    for (let i = 0; i < 3; i++) {
-      b.ellip(R * 0.94, R * 0.13, R * 0.94, bands[(i + v) % 3], { y: R + (i - 1) * R * 0.4 }, 9, 4);
+    for (let i = 0; i < 5; i++) {
+      belt(b, R, (i - 2) * 0.34, 0.052 + (i % 2) * 0.03, bands[(i + v) % 3]);
     }
-    b.sphere(R * 0.28, G.ember, { x: R * 0.34, y: R * 1.2, z: R * 0.5 }, 6, 4);
+    spot(b, R, 0.8, 1.25, 0.3, G.ember, { long: 1.7 });     // the great storm
+    spot(b, R, 3.6, 1.9, 0.18, G.amber, { long: 1.4 });
   } });
 
-P({ id: 'g_reddwarf', name: 'Red Dwarf', cat: 'star', fill: 0.55, variants: 3, weight: 13,
+P({ id: 'g_reddwarf', name: 'Red Dwarf', cat: 'star', sizeMul: 1.0022, fill: 0.5537, variants: 3, weight: 13,
   build(b, r, v) {
     const R = 13.5;
-    b.sphere(R, G.ember, { y: R }, 9, 6);
-    b.sphere(R * 0.84, [G.emberDk, G.rust, G.amber][v], { x: -R * 0.12, y: R * 0.96, z: R * 0.1 }, 8, 5);
-    // a flare loop off one limb, kept inside the star's own box
-    b.torus(R * 0.34, R * 0.06, G.gold, { x: R * 0.5, y: R * 1.3, rx: 0.4, rz: 0.5 }, 5, 10);
-    for (let i = 0; i < 3; i++) {
-      const a = r() * 6.28;
-      b.sphere(R * 0.16, G.rust,
-        { x: Math.cos(a) * R * 0.6, y: R + Math.sin(a) * R * 0.4, z: R * 0.6 }, 6, 4);
+    b.sphere(R, G.ember, { y: R }, 13, 9);
+    // A flare loop off the limb, and a spot group at its feet. A red dwarf's
+    // whole personality is that it is small, cool and covered in weather.
+    prominence(b, R, G.gold, 0.5, 0.34, { y: R, lift: 0.3 });
+    prominence(b, R, G.amber, 3.4, 0.24, { y: R, lift: -0.1, tilt: 0.8 });
+    for (let i = 0; i < 4; i++) {
+      spot(b, R, r() * TAU, 0.7 + r() * 1.7, 0.13 + r() * 0.1, [G.emberDk, G.rust, G.plum][v]);
     }
   } });
 
-/* A point of light with a cross through it. The four spikes ARE the bounding
-   box — a white dwarf that measured as a plain sphere would sit on the same
-   rung as a red dwarf and the ladder would have two rungs at one height. */
-P({ id: 'g_whitedwarf', name: 'White Dwarf', cat: 'star', fill: 0.3, variants: 3, weight: 13,
+/* A point of light with a cross through it. The spikes ARE the silhouette — a
+   white dwarf drawn as a plain sphere would sit on the same rung as a red dwarf
+   and the ladder would have two rungs at one height.
+   ⚠ They are ghost now, so they no longer set `pickup` either; `sizeMul` below
+   carries that instead. See tools/reghost.mjs. */
+P({ id: 'g_whitedwarf', name: 'White Dwarf', cat: 'star', sizeMul: 1.3241, fill: 0.6964, variants: 3, weight: 13,
   build(b, r, v) {
     const R = 17;
-    b.box(R * 2, R * 0.09, R * 0.09, G.white, { y: R });
-    b.box(R * 0.09, R * 0.09, R * 2, G.white, { y: R });
-    b.box(R * 0.08, R * 2, R * 0.08, G.blueWhite, { y: R });
-    b.sphere(R * 0.46, G.white, { y: R }, 9, 7);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * 6.28;
-      b.sphere(R * 0.16, [G.halo, G.cyan, G.blueWhite][v],
-        { x: Math.cos(a) * R * 0.72, y: R + Math.sin(a) * R * 0.5, z: Math.sin(a * 1.7) * R * 0.6 }, 6, 4);
-    }
+    core(b, R, R, R, G.blueWhite, { y: R, k: 0.78 });
+    b.sphere(R * 0.4, G.white, { y: R }, 11, 8);
+    b.decor((d) => {
+      // A diffraction cross: long, needle-thin, tapering to nothing. The old
+      // version used square bars of constant thickness and read as scaffolding.
+      for (const [sx, sy, sz] of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) {
+        for (const s of [1, -1]) {
+          d.cone(R * 0.055, R * 0.98, sy ? G.blueWhite : G.white, {
+            x: sx * s * R * 0.49, y: R + sy * s * R * 0.49, z: sz * s * R * 0.49,
+            rz: sx ? -s * Math.PI / 2 : 0, rx: sz ? s * Math.PI / 2 : 0,
+            ry: 0,
+          }, 4);
+        }
+      }
+      d.torus(R * 0.6, R * 0.02, [G.halo, G.cyan, G.blueWhite][v], { y: R, rx: 1.2 }, 4, 16);
+    });
   } });
 
-P({ id: 'g_star', name: 'Main-Sequence Star', cat: 'star', fill: 0.55, variants: 4, weight: 14,
+P({ id: 'g_star', name: 'Main-Sequence Star', cat: 'star', sizeMul: 0.984, fill: 0.524, variants: 4, weight: 14,
   build(b, r, v) {
     const R = 21.5;
-    b.sphere(R, [G.gold, G.white, G.blueWhite, G.amber][v], { y: R }, 10, 7);
-    b.sphere(R * 0.8, [G.amber, G.gold, G.cyan, G.ember][v],
-      { x: R * 0.14, y: R * 1.08, z: -R * 0.12 }, 9, 6);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * 6.28 + r();
-      b.ellip(R * 0.19, R * 0.3, R * 0.19, G.ember,
-        { x: Math.cos(a) * R * 0.66, y: R + Math.sin(a) * R * 0.5, z: Math.sin(a * 1.3) * R * 0.5 }, 7, 4);
-    }
+    const skin = [G.gold, G.white, G.blueWhite, G.amber][v];
+    const cool = [G.amber, G.blueWhite, G.cyan, G.ember][v];
+    b.sphere(R, skin, { y: R }, 13, 9);
+    b.decor((d) => ring(d, R * 1.13, cool, { y: R, rx: 1.42, tube: 0.022 }, 22));
+    prominence(b, R, G.ember, 1.0, 0.3, { y: R, lift: 0.4 });
+    prominence(b, R, cool, 4.0, 0.22, { y: R, lift: -0.2, tilt: 0.7 });
+    // granulation: a scatter of faint cells, so the surface is not a flat fill
+    for (let i = 0; i < 5; i++) spot(b, R, r() * TAU, r() * Math.PI, 0.14 + r() * 0.08, cool);
   } });
 
 /* Aspect 1.3 x 0.877 x 0.877 — the widest thing in the file and still only
    0.65 of its own pickup in collision radius. */
-P({ id: 'g_binary', name: 'Binary Pair', cat: 'star', fill: 0.34, variants: 3, weight: 11,
+P({ id: 'g_binary', name: 'Binary Pair', cat: 'star', sizeMul: 0.9804, fill: 0.3204, variants: 3, weight: 11,
   build(b, r, v) {
     const HX = 35.1, HY = 23.68;
-    b.sphere(HY, [G.gold, G.white, G.amber][v], { x: -HX + HY, y: HY }, 10, 7);
-    b.sphere(HY * 0.443, [G.ember, G.blueWhite, G.rust][v], { x: HX - HY * 0.443, y: HY }, 9, 6);
-    // the stream between them
-    b.box(HX * 0.34, HY * 0.16, HY * 0.16, G.gold, { x: HX * 0.52, y: HY });
-    b.ellip(HY * 0.3, HY * 0.2, HY * 0.3, G.amber, { x: HX * 0.7, y: HY }, 7, 5);
+    const big = [G.gold, G.white, G.amber][v], small = [G.ember, G.blueWhite, G.rust][v];
+    b.sphere(HY, big, { x: -HX + HY, y: HY }, 13, 9);
+    b.sphere(HY * 0.443, small, { x: HX - HY * 0.443, y: HY }, 11, 8);
+    b.decor((d) => {
+      /* The accretion stream: mass leaving the big star, spiralling in, and
+         piling up as a disc round the small one. It curves — a straight bar
+         between two stars is a dumbbell and reads as one. */
+      const x0 = -HX + HY * 1.9, x1 = HX - HY * 0.9;
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        const w = HY * (0.13 - t * 0.06);
+        d.ellip(w * 2.2, w, w, i > 5 ? G.amber : G.gold, {
+          x: x0 + (x1 - x0) * t,
+          y: HY + Math.sin(t * Math.PI) * HY * 0.26,
+          z: Math.sin(t * Math.PI) * HY * 0.34,
+          ry: -0.5 + t,
+        }, 6, 4);
+      }
+      gradedDisc(d, HY * 0.5, HY * 1.15, [G.gold, G.amber, G.ember],
+        { x: HX - HY * 0.443, y: HY, rx: 0.32 }, 3, 20);
+    });
   } });
 
-P({ id: 'g_redgiant', name: 'Red Giant', cat: 'star', fill: 0.5, variants: 3, weight: 11,
+P({ id: 'g_redgiant', name: 'Red Giant', cat: 'star', sizeMul: 0.985, fill: 0.4778, variants: 3, weight: 11,
   build(b, r, v) {
     const R = 33.5;
-    b.sphere(R, G.ember, { y: R }, 10, 7);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * 6.28 + v;
-      b.sphere(R * 0.33, [G.emberDk, G.amber, G.rust][i % 3],
-        { x: Math.cos(a) * R * 0.62, y: R + Math.sin(a * 1.4) * R * 0.5, z: Math.sin(a) * R * 0.62 }, 8, 5);
+    b.sphere(R, G.ember, { y: R }, 13, 9);
+    // Huge, ragged and shedding: a long corona, big loops, and convection cells
+    // the size of the whole star, which is what a red giant actually has.
+    for (let i = 0; i < 4; i++) {
+      prominence(b, R, [G.amber, G.gold, G.rust][i % 3], (i / 4) * TAU + v,
+        0.24 + (i % 2) * 0.12, { y: R, lift: 0.2 + (i % 3) * 0.22, tilt: 0.7 + i * 0.2, tube: 0.07 });
     }
-    b.sphere(R * 0.22, G.gold, { y: R * 1.52 }, 7, 5);
+    for (let i = 0; i < 4; i++) spot(b, R, (i / 4) * TAU + v, 0.6 + (i % 3) * 0.8, 0.32, G.emberDk);
   } });
 
-P({ id: 'g_supergiant', name: 'Blue Supergiant', cat: 'star', fill: 0.5, variants: 3, weight: 10,
+P({ id: 'g_supergiant', name: 'Blue Supergiant', cat: 'star', sizeMul: 0.984, fill: 0.4764, variants: 3, weight: 10,
   build(b, r, v) {
     const R = 41;
-    b.sphere(R, G.blueWhite, { y: R }, 10, 7);
-    b.sphere(R * 0.72, [G.blue, G.white, G.cyan][v], { x: -R * 0.16, y: R * 1.14, z: R * 0.12 }, 9, 6);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * 6.28;
-      b.ellip(R * 0.19, R * 0.14, R * 0.19, G.halo,
-        { x: Math.cos(a) * R * 0.78, y: R + Math.cos(a * 2.1) * R * 0.6, z: Math.sin(a) * R * 0.78 }, 7, 4);
-    }
+    b.sphere(R, G.blueWhite, { y: R }, 13, 9);
+    // The wind: a supergiant is blowing itself apart, so it wears a bubble.
+    // A wind RING, not a wind shell: a shell round a star is just a bigger
+    // star, and an opaque one hides the thing it is decorating.
+    b.decor((d) => {
+      ring(d, R * 1.22, G.cyan, { y: R * 1.02, rx: 1.35, tube: 0.022 }, 22);
+      ring(d, R * 1.34, G.halo, { y: R * 1.0, rx: 1.5, rz: 0.4, tube: 0.016 }, 22);
+    });
+    for (let i = 0; i < 5; i++) spot(b, R, (i / 5) * TAU, 0.5 + (i % 3) * 0.7, 0.16, G.blue);
   } });
 
 /* ==================================================================
    BIRTH — cocoons, globules, the places stars come from
    ================================================================== */
 
-P({ id: 'g_protostar', name: 'Protostar', cat: 'birth', fill: 0.18, variants: 3, weight: 10,
+P({ id: 'g_protostar', name: 'Protostar', cat: 'birth', sizeMul: 1.5819, fill: 0.7125, variants: 3, weight: 10,
   build(b, r, v) {
+    /* A star still inside its egg: a dark dusty cocoon, a hot dot at the
+       middle, a flat infall disc, and two narrow outflows drilling out of the
+       poles. The old jets were cones a third as wide as they were long, which
+       renders as an ice-cream cone and read as one. */
     const HX = 46.5, HY = 58, cy = 40;
-    puff(b, HX, cy, HX, 11, [G.dust, G.dustWarm, G.ash], r, { y: cy, lo: 0.2, hi: 0.34 });
-    b.sphere(13, [G.glare, G.amber, G.gold][v], { y: cy }, 8, 6);
-    jet(b, cy, HY * 2 - cy, 11, G.cyan, 1);
-    jet(b, cy, cy, 11, G.cyan, -1);
+    core(b, HX, HY * 0.72, HX, G.dust, { y: cy, k: 0.72 });
+    b.sphere(13, [G.glare, G.amber, G.gold][v], { y: cy }, 9, 7);
+    b.decor((d) => {
+      wisps(d, HX, cy * 0.8, HX, 9, [G.dust, G.dustWarm, G.ash], r, { y: cy, head: v, spread: 0.8 });
+      gradedDisc(d, 16, HX * 0.92, [G.dustWarm, G.dust, G.ash], { y: cy, rx: 0.28, warp: 0.1 }, 3, 20);
+      jet(d, cy + 12, HY * 0.95, G.cyan, { up: 1, r: 0.03, knots: 2, hot: G.jade, lobe: 0.1 });
+      jet(d, cy - 12, cy * 0.85, G.cyan, { up: -1, r: 0.03, knots: 2, hot: G.jade });
+    });
   } });
 
 P({ id: 'g_bok', name: 'Bok Globule', cat: 'birth', fill: 0.35, variants: 3, weight: 9,
@@ -391,26 +467,48 @@ P({ id: 'g_bok', name: 'Bok Globule', cat: 'birth', fill: 0.35, variants: 3, wei
     }
   } });
 
-P({ id: 'g_planetary', name: 'Planetary Nebula', cat: 'death', fill: 0.1, variants: 3, weight: 9,
+P({ id: 'g_planetary', name: 'Planetary Nebula', cat: 'death', sizeMul: 1.7001, fill: 0.4914, variants: 3, weight: 9,
   build(b, r, v) {
+    /* Everybody's mental image of one is a RING with a white dot at the
+       middle, and it was thirteen coloured balls. Now it is: the dead core, a
+       bright inner ring, a graded torus of ejected shell, and two faint polar
+       lobes — the bipolar shape most of them actually have. */
     const R = 71.5;
-    puff(b, R, R, R, 13, [[G.teal, G.magenta, G.violet][v], G.magenta, G.cyan], r,
-      { shell: 0.72, lo: 0.19, hi: 0.29 });
-    b.sphere(R * 0.13, G.white, { y: R }, 8, 6);
-    b.torus(R * 0.44, R * 0.1, G.rose, { y: R, rx: 1.2 }, 5, 12);
+    const hot = [G.teal, G.magenta, G.violet][v];
+    core(b, R, R, R, hot, { y: R, k: 0.6 });
+    b.sphere(R * 0.13, G.white, { y: R }, 9, 7);
+    b.decor((d) => {
+      ring(d, R * 0.3, G.rose, { y: R, rx: 1.15, tube: 0.05 }, 22);
+      gradedDisc(d, R * 0.42, R * 0.96, [G.cyan, hot, G.magenta, G.violet],
+        { y: R, rx: 1.15, warp: 0.12 }, 4, 24);
+      for (const s of [1, -1]) {
+        d.ellip(R * 0.28, R * 0.44, R * 0.28, hot, { y: R + s * R * 0.5, ghost: true }, 8, 5);
+      }
+    });
   } });
 
-P({ id: 'g_remnant', name: 'Supernova Remnant', cat: 'death', fill: 0.08, variants: 3, weight: 8,
+P({ id: 'g_remnant', name: 'Supernova Remnant', cat: 'death', sizeMul: 1.5469, fill: 0.2961, variants: 3, weight: 8,
   build(b, r, v) {
+    /* A real expanding bubble, open at the top so you can see the cavity —
+       which is the thing that reads as "this blew up" and is exactly what a
+       cloud of twelve spheres cannot say. Ghost, so it is a picture of a shell
+       and not a cage: solid, this shape once pinned a katamari inside itself
+       for five minutes and `balance` counted 698 stalls. */
     const R = 85;
-    puff(b, R, R, R, 12, [G.ember, G.emberDk, [G.rose, G.violet, G.jade][v]], r,
-      { shell: 0.72, lo: 0.17, hi: 0.27 });
-    for (let i = 0; i < 4; i++) {
-      const a = r() * 6.28, e = (r() - 0.5) * 1.1;
-      b.box(R * 0.5, R * 0.05, R * 0.05, G.rose,
-        { x: Math.cos(a) * R * 0.58, y: R + e * R * 0.5, z: Math.sin(a) * R * 0.58, ry: -a });
-    }
-    b.sphere(R * 0.08, G.xray, { y: R }, 7, 5);
+    const tint = [G.rose, G.violet, G.jade][v];
+    core(b, R, R, R, G.emberDk, { y: R, k: 0.66 });
+    b.sphere(R * 0.1, G.xray, { y: R }, 8, 6);
+    b.decor((d) => {
+      shell(d, R, G.emberDk, { y: R, th: 0.07, open: 0.34 }, 22);
+      shell(d, R * 0.82, tint, { y: R, th: 0.05, open: 0.42 }, 18);
+      // filaments whipping off the shock front
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + v, e = (r() - 0.5) * 1.1;
+        d.ellip(R * 0.3, R * 0.035, R * 0.035, G.rose, {
+          x: Math.cos(a) * R * 0.78, y: R + e * R * 0.55, z: Math.sin(a) * R * 0.78, ry: -a,
+        }, 5, 4);
+      }
+    });
   } });
 
 /* ==================================================================
@@ -419,17 +517,21 @@ P({ id: 'g_remnant', name: 'Supernova Remnant', cat: 'death', fill: 0.08, varian
    ================================================================== */
 
 P({ id: 'g_neutron', name: 'Neutron Star', cat: 'death', surface: 'air', flyHeight: 90,
-  fill: 0.06, variants: 3, weight: 8,
+  sizeMul: 1.7213, fill: 0.306, variants: 3, weight: 8,
   build(b, r, v) {
+    /* A city-sized object with a magnetosphere the size of a solar system:
+       a tiny hard dot, a wide thin field ring, and two beams. All the drama is
+       in the ratio, so the dot has to stay small and the beams have to stay
+       thin. */
     const HX = 83, HY = 145;
-    b.torus(HX - 9, 9, [G.cyan, G.teal, G.halo][v], { y: HY, rx: Math.PI / 2 }, 5, 12);
-    b.sphere(13, G.xray, { y: HY }, 8, 6);
-    jet(b, HY, HY, 22, G.blueWhite, 1);
-    jet(b, HY, HY, 22, G.blueWhite, -1);
-    for (let i = 0; i < 4; i++) {
-      const s = i % 2 ? 1 : -1, t = 0.4 + (i >> 1) * 0.34;
-      b.sphere(HY * 0.075, G.white, { y: HY + s * HY * t }, 6, 4);
-    }
+    core(b, HX, HY, HX, G.void, { y: HY, k: 0.6 });
+    b.sphere(13, G.xray, { y: HY }, 9, 7);
+    b.decor((d) => {
+      ring(d, HX * 0.92, [G.cyan, G.teal, G.halo][v], { y: HY, rx: 0.2, tube: 0.03 }, 24);
+      ring(d, HX * 0.62, G.halo, { y: HY, rx: 0.2, rz: 0.3, tube: 0.02 }, 22);
+      jet(d, HY + 12, HY * 0.92, G.blueWhite, { up: 1, r: 0.022, knots: 3, hot: G.white });
+      jet(d, HY - 12, HY * 0.92, G.blueWhite, { up: -1, r: 0.022, knots: 3, hot: G.white });
+    });
   } });
 
 P({ id: 'g_pulsar', name: 'Pulsar', cat: 'death', surface: 'air', flyHeight: 120,
@@ -449,44 +551,66 @@ P({ id: 'g_pulsar', name: 'Pulsar', cat: 'death', surface: 'air', flyHeight: 120
 
 /* THE DISC IS EIGHT ARCS, NOT A PLATE. See `disc` above; a single annulus
    here was the exact trap rule 4 of the brief describes. */
-P({ id: 'g_blackhole', name: 'Black Hole', cat: 'exotic', fill: 0.12, variants: 3, weight: 7,
+P({ id: 'g_blackhole', name: 'Black Hole', cat: 'exotic', sizeMul: 1.8438, fill: 0.7522, variants: 3, weight: 7,
   build(b, r, v) {
+    /* ⚠ THE ONE THE PLAYER NAMED: *"we want someone rolling over a black hole
+       for it to look like a black hole and feel some sense of connection."*
+
+       Everything except the hole itself is ghost, and that is what finally
+       makes it possible. The old version had to build its accretion disc out
+       of eight separate lumps thirty units thick, because one flat annulus
+       that wide would have been a wall across a fifth of a region — and eight
+       lumps in a circle is a necklace, not a disc. As decoration it can be what
+       it actually is: four flat rings, tilted and warped, graded from
+       white-hot inside to ember outside, a thin photon ring inside them, and
+       two pencil-thin jets out of the poles. */
     const HX = 123.75, HY = 169.8;
-    b.sphere(44, G.event, { y: HY }, 10, 7);
-    b.torus(56, 5, C.chrome, { y: HY, rx: Math.PI / 2 }, 4, 10);   // the photon ring
-    /* The ring's underside sits at HY - 20 - 18, i.e. 132, which is more than
-       twice the 64 of clear floor inside it — so any ball small enough to be
-       under the disc at all is too short to be stopped by it and rolls straight
-       out again. Drop that clearance and the disc becomes a cage. */
-    disc(b, HX - 30, 30, 18, HY,
-      [G.glare, G.gold, G.amber, [G.ember, G.rose, G.cyan][v]], 20, 8);
-    jet(b, HY, HY, 20, G.xray, 1);
-    jet(b, HY, HY, 20, G.xray, -1);
+    core(b, HX, HY * 0.72, HX, G.event, { y: HY, k: 0.62 });
+    b.sphere(44, G.event, { y: HY }, 12, 9);
+    b.decor((d) => {
+      ring(d, 54, C.chrome, { y: HY, rx: 0.34, tube: 0.05 }, 24);
+      ring(d, 49, G.glare, { y: HY, rx: 0.34, tube: 0.022 }, 24);
+      gradedDisc(d, 62, HX, [G.glare, G.gold, G.amber, [G.ember, G.rose, G.cyan][v]],
+        { y: HY, rx: 0.34, warp: 0.16, rise: 6 }, 4, 26);
+      jet(d, HY + 40, HY * 0.9, G.xray, { up: 1, r: 0.02, knots: 3, hot: G.white });
+      jet(d, HY - 40, HY * 0.9, G.xray, { up: -1, r: 0.02, knots: 3, hot: G.white });
+    });
   } });
 
 /* ==================================================================
    CROWDS — clusters and nurseries
    ================================================================== */
 
-P({ id: 'g_globular', name: 'Globular Cluster', cat: 'cluster', fill: 0.25, variants: 3, weight: 7,
+P({ id: 'g_globular', name: 'Globular Cluster', cat: 'cluster', sizeMul: 1.2358, fill: 0.4718, variants: 3, weight: 7,
   build(b, r, v) {
+    /* ⚠ MANY AND SMALL. Twenty-two blobs at 6-15% of the cluster's radius is a
+       bag of marbles: at that size you count them instead of reading the shape
+       they make. A hundred and thirty at 3-6% reads as a crowd, and costs less,
+       because a 5x4 sphere is 40 triangles. The bright compact core is the
+       other half of the read — a globular is a ball of stars with a blaze in
+       the middle, not an even scatter. */
     const R = 160;
-    puff(b, R, R, R, 22, [G.gold, G.white, G.amber, [G.blueWhite, G.rose, G.cyan][v]], r,
-      { lo: 0.065, hi: 0.15, pack: 0.95, seg: 6, hseg: 4 });
-    b.sphere(R * 0.17, G.glare, { y: R }, 8, 6);
+    core(b, R, R, R, G.gold, { y: R, k: 0.82, seg: 10, hseg: 8 });
+    b.sphere(R * 0.15, G.glare, { y: R }, 9, 7);
+    swarm(b, R, R, R, 86, [G.gold, G.white, G.amber, [G.blueWhite, G.rose, G.cyan][v]], r,
+      { y: R, lo: 0.03, hi: 0.062, bias: 2.4 });
   } });
 
-P({ id: 'g_opencluster', name: 'Open Cluster', cat: 'cluster', fill: 0.1, variants: 3, weight: 7,
+P({ id: 'g_opencluster', name: 'Open Cluster', cat: 'cluster', sizeMul: 1.5592, fill: 0.379, variants: 3, weight: 7,
   build(b, r, v) {
+    /* Loose and young: few stars, all bright, still sitting in the shredded
+       gas they condensed out of. The difference from a globular is that you
+       can see between the members — so low bias, and the gas is wisps rather
+       than the five fat spheres it used to be. */
     const HX = 168.75, HY = 231.6;
-    puff(b, HX, HY, HX, 15, [G.blueWhite, G.white, G.blue], r,
-      { lo: 0.055, hi: 0.14, seg: 6, hseg: 4 });
-    // the gas it was cut out of, still hanging about
-    for (let i = 0; i < 5; i++) {
-      const a = r() * 6.28, d = HX * 0.7 * r();
-      b.sphere(HX * (0.2 + r() * 0.14), [G.indigo, G.dust, G.plum][v],
-        { x: Math.cos(a) * d, y: HY + (r() - 0.5) * HY * 0.5, z: Math.sin(a) * d }, 6, 4);
-    }
+    core(b, HX, HY, HX, [G.indigo, G.dust, G.plum][v], { y: HY, k: 0.66 });
+    b.sphere(HX * 0.13, G.white, { y: HY }, 8, 6);
+    b.decor((d) => {
+      wisps(d, HX, HY * 0.5, HX, 7, [G.indigo, G.dust, G.plum], r,
+        { y: HY, head: 0.7 + v, spread: 0.9 });
+    });
+    swarm(b, HX, HY, HX, 34, [G.blueWhite, G.white, G.blue], r,
+      { y: HY, lo: 0.05, hi: 0.1, bias: 1.1 });
   } });
 
 P({ id: 'g_nursery', name: 'Star Nursery', cat: 'birth', fill: 0.15, variants: 3, weight: 6,
@@ -657,8 +781,8 @@ P({ id: 'g_smbh', name: 'Supermassive Black Hole', cat: 'exotic', fill: 0.16, va
   build(b, r, v) {
     const HX = 801, HY = 1099.2;
     b.sphere(270, G.event, { y: HY }, 12, 8);
-    disc(b, HX - 165, 165, 96, HY,
+    lumpDisc(b, HX - 165, 165, 96, HY,
       [G.glare, G.gold, G.amber, [G.ember, G.rose][v]], 230, 12);
-    jet(b, HY, HY, 120, G.xray, 1);
-    jet(b, HY, HY, 120, G.xray, -1);
+    jetCone(b, HY, HY, 120, G.xray, 1);
+    jetCone(b, HY, HY, 120, G.xray, -1);
   } });
