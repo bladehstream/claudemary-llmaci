@@ -107,6 +107,16 @@ const VEL_SPAN = Math.log2(VEL_HI / VEL_LO);
  * next: pluck 0.0208, brass 0.0619, kick 0.0345, snare 0.0105, rim 0.0120,
  * hat 0.0089, shaker 0.0082, tom 0.0319. */
 const TRIM = {
+  /* bass/vibe/scat, trimmed the same way as the rest: rendered at gain
+     0.15/0.45/0.90 and matched on RMS against the SAME sheet from the
+     pre-rebuild code, so the balance Music.js was hand-tuned around survives a
+     change of timbre. Reference dB from the old code, for whoever tunes this
+     next: bass -24.5/-15.0/-9.0, vibe -32.0/-22.9/-17.1, scat
+     -41.5/-32.0/-26.0. Rebuilt and untrimmed they came out -0.4, +1.5 and
+     +0.5 dB against those. */
+  bass: 1.05,
+  vibe: 0.84,
+  scat: 0.94,
   pluck: 0.33,
   brass: 0.34,
   kick: 0.92,
@@ -435,27 +445,115 @@ export class AudioEngine {
      cleans up after itself.
      ============================================================ */
 
-  /** Warm plucked bass — saw through a closing lowpass. */
+  /**
+   * Upright bass, fingered.
+   *
+   * The old version was a saw plus a sub-sine through a lowpass swept from
+   * `freq * 9` to `freq * 1.6`. Measured: centroid ratio 0.991 — playing
+   * harder did nothing whatsoever to the tone — 28 of 28 note pairs
+   * bit-identical, and a centroid slope of 1.041, meaning the spectrum tracked
+   * the note exactly. That last number is the signature of an instrument with
+   * no body. A double bass is a large wooden box, and the box does not change
+   * size when you move up the neck.
+   *
+   * The same three changes that fixed the guitar:
+   *   - the tone filter is in ABSOLUTE Hz and opened by velocity, so digging
+   *     in recruits harmonics rather than only adding decibels;
+   *   - a FIXED body resonance that stays put at every pitch;
+   *   - a real attack — a finger leaving a wound string, which is most of what
+   *     says "bass" rather than "low synth".
+   *
+   * 11 nodes: 3 osc, 4 gain (sub, envelope, finger, send), 3 biquad, 1 noise.
+   * The seat costs none — see STAGE.
+   */
   bass(t, freq, dur, gain = 0.5, out = null) {
     const ctx = this.ctx;
-    const dest = out || this.music;
-    const o = ctx.createOscillator();
-    const o2 = ctx.createOscillator();
-    const f = ctx.createBiquadFilter();
+    const dest = this._seat(out || this.music, 'bass');
+    const v = this._vel(gain);
+
+    /* HOW HARD IT WAS PLUCKED, IN HERTZ. A string dug in near the bridge
+       throws energy up the series; played softly over the fingerboard it is
+       nearly a sine. 420Hz whispered to ~2.6kHz driven — a narrower span than
+       the guitar's, because a bass is a dark instrument even at full tilt and
+       taking it higher makes it read as a cello. */
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 1.4;
+    const open = 420 + v * v * 2200;
+    lp.frequency.setValueAtTime(open, t);
+    // Strings lose their highs first. Decays toward a floor, not toward `freq`.
+    lp.frequency.exponentialRampToValueAtTime(Math.max(160, open * 0.30),
+      t + Math.min(0.5, dur * 0.8));
+
+    /* THE BOX. A double bass resonates around 90Hz (the air mode) and has a
+       broad woody shelf near 260Hz. Both are properties of the wood, so both
+       are absolute. This is exactly what metric E looks for, and what the old
+       `freq * N` filter made structurally impossible. */
+    const air = ctx.createBiquadFilter();
+    air.type = 'peaking';
+    air.frequency.value = 92;
+    air.Q.value = 1.6;
+    air.gain.value = 5;
+    const wood = ctx.createBiquadFilter();
+    wood.type = 'peaking';
+    wood.frequency.value = 260;
+    wood.Q.value = 0.9;
+    wood.gain.value = 3.5;
+
+    /* Two strings' worth of motion, humanised per note. One oscillator is a
+       tone; two slightly apart are a string. */
+    const det = (3 + Math.random() * 5) * (Math.random() < 0.5 ? -1 : 1);
+    const o1 = ctx.createOscillator();
+    o1.type = 'sawtooth';
+    o1.frequency.value = freq;
+    o1.detune.value = det;
+    /* The sub is what you feel rather than hear. Under the filter so digging
+       in does not turn it to mud, and softer notes lean on it more — which is
+       what actually happens when you stop exciting the upper partials. */
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = freq / 2;
+    const subg = ctx.createGain();
+    subg.gain.value = 0.55 - v * 0.2;
+    o1.connect(lp); sub.connect(subg); subg.connect(lp);
+    lp.connect(air); air.connect(wood);
+
+    /* THE FINGER. A wound string released from a fingertip makes a short dull
+       thump plus a scrape of the winding. Unlike the guitar's nail this is
+       BANDPASSED LOW rather than high-passed: on a bass the click lives under
+       the note rather than over it, and putting it up top turns an upright
+       into a slap bass. */
+    const n = this.noiseSource(0.7);
+    const ng = ctx.createGain();
+    const fbp = ctx.createBiquadFilter();
+    fbp.type = 'bandpass';
+    fbp.frequency.value = 320 + v * 900;
+    fbp.Q.value = 0.8;
+    const thump = 0.5 + v * v * 1.6;
+    ng.gain.setValueAtTime(thump, t);
+    ng.gain.exponentialRampToValueAtTime(thump * 0.2, t + 0.014);
+    ng.gain.exponentialRampToValueAtTime(thump * 1e-3, t + 0.075);
+    n.connect(ng); ng.connect(fbp); fbp.connect(wood);
+    n.start(t); n.stop(t + 0.08);
+
+    /* Relative floor, linear attack — see the note on `pluck`. An absolute
+       floor makes `gain` a backwards note-length control, and an exponential
+       ramp from 0.0001 spends its first milliseconds near -80dB and swallows
+       the transient whole. */
     const g = ctx.createGain();
-    o.type = 'sawtooth'; o.frequency.value = freq;
-    o2.type = 'sine'; o2.frequency.value = freq / 2;
-    f.type = 'lowpass';
-    f.Q.value = 5;
-    f.frequency.setValueAtTime(Math.min(6000, freq * 9), t);
-    f.frequency.exponentialRampToValueAtTime(Math.max(90, freq * 1.6), t + Math.min(0.32, dur));
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(gain * 0.45, t + dur * 0.5);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(f); o2.connect(f); f.connect(g); g.connect(dest);
-    o.start(t); o2.start(t);
-    o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+    const hum = this._hum(0.05);
+    const peak = gain * TRIM.bass;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(peak * 0.45, t + dur * 0.5 * hum);
+    g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
+    wood.connect(g); g.connect(dest);
+
+    const send = ctx.createGain(); send.gain.value = 0.12;
+    g.connect(send); send.connect(this._revFor(dest));
+
+    o1.start(t); sub.start(t);
+    o1.stop(t + dur + 0.05); sub.stop(t + dur + 0.05);
   }
 
   /**
@@ -590,21 +688,99 @@ export class AudioEngine {
     o1.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
   }
 
-  /** Vibraphone: sine with a touch of FM and a tremolo. */
+  /**
+   * Vibraphone: an aluminium bar over a tuned resonator.
+   *
+   * The old version was one sine with a 3.01x FM partial and a tremolo, which
+   * measured centroid ratio 1.001, 28 of 28 bit-identical notes, and a
+   * centroid slope of 1.001 — a spectrum that tracked the note exactly.
+   *
+   * ⚠ THE PARTIALS OF A STRUCK BAR ARE NOT HARMONICS, and that is the single
+   * thing that makes a vibraphone sound like metal rather than like a soft
+   * synth lead. A free-free bar's natural modes fall at roughly 1 : 2.76 :
+   * 5.40 of the fundamental; makers undercut the middle of the bar to pull the
+   * second mode down to exactly 4x and the third to about 10x, which is why a
+   * vibraphone is tuned and a length of scaffolding is not. Those ratios are
+   * fixed properties of the bar, so they are written as ratios and the LEVELS
+   * are what velocity moves — a hard mallet excites the high modes, a soft one
+   * barely wakes them.
+   *
+   * The other half of the instrument is the tube under the bar. It is a
+   * quarter-wave resonator tuned to the fundamental, so unlike the guitar's
+   * box it DOES track the note — that is not a body in metric E's sense and
+   * the slope will stay near 1. Faking a fixed body here would be inventing an
+   * instrument that does not exist; what fixes the "preset" quality is the
+   * inharmonic mode structure and the mallet, not a resonance that has no
+   * business being there.
+   *
+   * 13 nodes: 5 osc (3 modes, tremolo, and the FM shimmer), 5 gain, 1 biquad,
+   * 1 noise, 1 mallet gain.
+   */
   vibe(t, freq, dur, gain = 0.3, out = null) {
     const ctx = this.ctx;
-    const dest = out || this.music;
+    const dest = this._seat(out || this.music, 'vibe');
+    const v = this._vel(gain);
+
     const car = ctx.createOscillator();
     car.type = 'sine'; car.frequency.value = freq;
-    const mod = ctx.createOscillator();
-    mod.type = 'sine'; mod.frequency.value = freq * 3.01;
-    const modGain = ctx.createGain();
-    modGain.gain.setValueAtTime(freq * 1.6, t);
-    modGain.gain.exponentialRampToValueAtTime(freq * 0.05, t + 0.22);
-    mod.connect(modGain); modGain.connect(car.frequency);
+    /* Mode 2 and mode 3, at the ratios an undercut bar is tuned to. Both die
+       far faster than the fundamental — high modes radiate more efficiently
+       and lose their energy first, which is why a vibraphone note starts
+       bright and settles into a hum within a fifth of a second. Detuned by a
+       few cents per note because no two strikes land in the same place. */
+    const bar = ctx.createGain();
+    const modes = [[4.0, 0.42, 0.16], [10.0, 0.14, 0.09]];
+    const modeOsc = [];
+    for (const [ratio, lvl, tail] of modes) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = freq * ratio;
+      o.detune.value = (Math.random() * 2 - 1) * 9;
+      const mg = ctx.createGain();
+      // Velocity IS mallet hardness: how much of the bar's high modes woke up.
+      const lv = lvl * (0.25 + v * 1.5);
+      mg.gain.setValueAtTime(lv, t);
+      mg.gain.exponentialRampToValueAtTime(lv * tail, t + 0.18 + Math.random() * 0.05);
+      mg.gain.exponentialRampToValueAtTime(lv * 1e-3, t + Math.min(dur, 0.9));
+      o.connect(mg); mg.connect(bar);
+      modeOsc.push(o);
+    }
+    car.connect(bar);
+
+    /* THE MALLET, AND THE SAME MASKING TRAP THE GUITAR FELL INTO.
+     *
+     * The obvious build is a soft LOWPASSED knock, because yarn on aluminium
+     * is a dull sound. Measured, that contributes 0.0% of the attack energy:
+     * it lands in exactly the band the bar's own modes occupy and is masked by
+     * them completely, however far it is turned up. Identical to the pluck's
+     * fingernail, which measured 0.5-0.9% for the same reason.
+     *
+     * So it is HIGHPASSED, above the fundamental and above mode 2, where the
+     * bar has nothing of its own. Physically that is the right answer as well
+     * as the audible one: the click of contact is a much shorter event than
+     * the bar's ringing and therefore a much broader one, and what you hear as
+     * "the mallet" is precisely the part that is not the note.
+     */
+    const n = this.noiseSource(1);
+    const ng = ctx.createGain();
+    const mhp = ctx.createBiquadFilter();
+    mhp.type = 'highpass';
+    mhp.frequency.value = 2600 + v * 2600;
+    mhp.Q.value = 0.7;
+    const knock = 1.2 + v * v * 3.2;
+    ng.gain.setValueAtTime(knock, t);
+    ng.gain.exponentialRampToValueAtTime(knock * 0.12, t + 0.006);
+    ng.gain.exponentialRampToValueAtTime(knock * 1e-3, t + 0.022 + (1 - v) * 0.012);
+    n.connect(ng); ng.connect(mhp); mhp.connect(bar);
+    n.start(t); n.stop(t + 0.04);
+
+    /* THE OLD FM SHIMMER IS GONE, and its absence is the point. It existed to
+       fake the inharmonicity of a struck bar with a 3.01x modulator; the bar
+       now has its actual modes at 4x and 10x, so keeping the FM as well would
+       be paying two nodes a note to blur partials that are finally correct. */
 
     const trem = ctx.createOscillator();
-    trem.type = 'sine'; trem.frequency.value = 5.2;
+    trem.type = 'sine'; trem.frequency.value = 5.2 * this._hum(0.04);
     /* THE TREMOLO DEPTH MUST SCALE WITH THE NOTE, AND IT DID NOT.
      *
      * This is the one change inside an otherwise untouched voice, and it is a
@@ -623,21 +799,27 @@ export class AudioEngine {
      * Multiplying by `gain` makes the depth a constant 16% of the envelope at
      * every level, which is plainly what the original 0.16 intended. vibe is
      * otherwise untouched and still sounds like the old engine. */
-    const tremGain = ctx.createGain(); tremGain.gain.value = 0.16 * gain;
+    const peak = gain * TRIM.vibe;
+    const tremGain = ctx.createGain(); tremGain.gain.value = 0.16 * peak;
     trem.connect(tremGain);
 
+    /* Relative floor and a linear attack, for the same reasons as everywhere
+       else: an absolute 0.0001 made `gain` a backwards note-length control,
+       and an exponential ramp out of silence buries the mallet. */
     const g = ctx.createGain();
+    const hum = this._hum(0.06);
     tremGain.connect(g.gain);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
 
-    car.connect(g); g.connect(dest);
+    bar.connect(g); g.connect(dest);
     const send = ctx.createGain(); send.gain.value = 0.4;
     g.connect(send); send.connect(this._revFor(dest));
 
-    car.start(t); mod.start(t); trem.start(t);
-    car.stop(t + dur + 0.05); mod.stop(t + dur + 0.05); trem.stop(t + dur + 0.05);
+    car.start(t); trem.start(t);
+    for (const o of modeOsc) { o.start(t); o.stop(t + dur + 0.05); }
+    car.stop(t + dur + 0.05); trem.stop(t + dur + 0.05);
   }
 
   /**
@@ -779,31 +961,97 @@ export class AudioEngine {
       [300, 870, 2240],    // "oo"
     ];
     const F = FORMANTS[vowel % FORMANTS.length];
+    const v = this._vel(gain);
+
+    /* ⚠ THE FORMANTS WERE ALREADY RIGHT, AND THAT IS WORTH SAYING OUT LOUD.
+     * This voice measured a centroid slope of 0.308 while every other pitched
+     * voice sat at 0.999-1.041 — it was the ONLY instrument in the file with a
+     * fixed body, because a vocal tract is a fixed length and its resonances
+     * do not move when you sing a higher note. The model for the whole rebuild
+     * was already here, a few lines above the voices that needed it, and an
+     * earlier diagnosis confidently listed it among the things that were
+     * missing. Read the whole file before declaring a pattern absent.
+     *
+     * So this is not a rebuild. It is the three things the voice was missing
+     * on top of a body that was already correct: dynamics, a consonant, and
+     * any variation at all from one note to the next.
+     */
+
+    /* THE GLOTTIS. Singing harder does not move the formants — it changes the
+     * SOURCE, because the vocal folds slam shut faster and the pulse acquires
+     * a sharper corner. So velocity opens a lowpass on the saw ahead of the
+     * tract, which is physically what is happening and also what metric A is
+     * asking about. */
+    const glottis = ctx.createBiquadFilter();
+    glottis.type = 'lowpass';
+    glottis.Q.value = 0.7;
+    glottis.frequency.value = 700 + v * v * 4600;
+
     const src = ctx.createOscillator();
     src.type = 'sawtooth';
-    src.frequency.setValueAtTime(freq * 0.985, t);
-    src.frequency.linearRampToValueAtTime(freq, t + 0.05);
+    // The scoop into the note, humanised — a singer does not land on the pitch
+    // from exactly the same distance below it twice.
+    const scoop = 0.975 + Math.random() * 0.017;
+    src.frequency.setValueAtTime(freq * scoop, t);
+    src.frequency.linearRampToValueAtTime(freq, t + 0.04 + Math.random() * 0.03);
 
-    // gentle vibrato once the note has settled
-    const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 5.6;
+    // Gentle vibrato once the note has settled. Rate and depth vary per note;
+    // a metronomic vibrato is one of the most synthetic sounds there is.
+    const vib = ctx.createOscillator();
+    vib.type = 'sine';
+    vib.frequency.value = 5.6 * this._hum(0.12);
     const vibG = ctx.createGain();
     vibG.gain.setValueAtTime(0, t);
-    vibG.gain.linearRampToValueAtTime(freq * 0.012, t + Math.min(0.25, dur * 0.6));
+    vibG.gain.linearRampToValueAtTime(freq * 0.012 * this._hum(0.25),
+      t + Math.min(0.25, dur * 0.6));
     vib.connect(vibG); vibG.connect(src.frequency);
 
+    /* THE CONSONANT, THROUGH THE SAME MOUTH.
+     *
+     * Scat singing is "doo", "bah", "dat" — the syllable begins with a tongue
+     * or a lip releasing, and that release is a burst of noise shaped by the
+     * very same tract as the vowel that follows it. Routing it through the
+     * formants rather than around them is what makes it read as a mouth rather
+     * than as a hiss laid over the top.
+     *
+     * It SHARES the vowel's filters rather than getting three of its own. The
+     * first version built a duplicate set at wider Q, which is arguably a shade
+     * more accurate — a plosive is broader than a vowel — and cost six extra
+     * nodes on a voice already measuring 21 against a budget of 12. Sharing
+     * makes the consonant slightly more voiced than a real plosive, which is a
+     * far better trade than a melody line allocating twenty-one nodes a note. */
+    const n = this.noiseSource(1);
+    const ng = ctx.createGain();
+    const puff = 0.9 + v * 2.2;
+    ng.gain.setValueAtTime(puff, t);
+    ng.gain.exponentialRampToValueAtTime(puff * 0.08, t + 0.016);
+    ng.gain.exponentialRampToValueAtTime(puff * 1e-3, t + 0.05);
+    n.connect(ng);
+    n.start(t); n.stop(t + 0.06);
+
     const sum = ctx.createGain();
+    src.connect(glottis);
     F.forEach((hz, i) => {
       const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass'; bp.frequency.value = hz; bp.Q.value = 7 + i * 3;
+      bp.type = 'bandpass';
+      // A few cents of wander per note: two utterances of the same syllable
+      // are never made with quite the same shape of mouth.
+      bp.frequency.value = hz * this._hum(0.03);
+      bp.Q.value = 7 + i * 3;
       const bg = ctx.createGain(); bg.gain.value = [1, 0.55, 0.28][i];
-      src.connect(bp); bp.connect(bg); bg.connect(sum);
+      glottis.connect(bp);
+      ng.connect(bp);
+      bp.connect(bg); bg.connect(sum);
     });
 
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + 0.03);
-    g.gain.setValueAtTime(gain, t + Math.max(0.06, dur * 0.55));
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const hum = this._hum(0.05);
+    const peak = gain * TRIM.scat;
+    // Relative floor; the sustain shelf is kept, because a sung note does hold.
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.018);
+    g.gain.setValueAtTime(peak, t + Math.max(0.06, dur * 0.55));
+    g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
     sum.connect(g); g.connect(dest);
     const send = ctx.createGain(); send.gain.value = 0.36;
     g.connect(send); send.connect(this._revFor(dest));
