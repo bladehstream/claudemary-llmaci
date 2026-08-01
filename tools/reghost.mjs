@@ -55,10 +55,30 @@ if (!baseFile || baseFile.startsWith('--')) {
 
 /* The digest's format, parsed back. Deliberately parsing the human-readable
    output rather than adding a JSON mode: one format means one thing to keep
-   true, and this file is the only reader. */
+   true, and this file is the only reader.
+
+   ⚠ `NUM` must accept exponential notation. The catalogue spans 7.7e-8 to
+   4.4e9 in volume, so the ten smallest props print as `7.735680658e-8`. The
+   original `[\d.]+` stopped at the `e`, read that as 7.7, and reported a
+   prop that had not moved as having moved by a factor of ten million. */
+const NUM = String.raw`(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?`;
+const ROW = new RegExp(`^(\\S+)\\s+pickup\\s+(${NUM})\\s+vol\\s+(${NUM})\\s+rad\\s+(${NUM})`);
+const text = fs.readFileSync(baseFile, 'utf8');
+
+/* A baseline written by the pre-v2 digest carried volumes at four DECIMAL
+   places, which is no significant figures at all for a small prop. Comparing
+   against one silently produces nonsense, so refuse it outright. */
+if (!text.startsWith('# catalogue-digest v2')) {
+  console.error(`${baseFile} is not a v2 digest.`);
+  console.error('Pre-v2 baselines printed volume to 4 decimal places, which rounds every');
+  console.error('small prop to 0.0000 — comparing against one reports moves that never');
+  console.error('happened. Regenerate it:  node tools/catalogue-digest.mjs > ' + baseFile);
+  process.exit(1);
+}
+
 const base = new Map();
-for (const line of fs.readFileSync(baseFile, 'utf8').split('\n')) {
-  const m = line.match(/^(\S+)\s+pickup\s+([\d.]+)\s+vol\s+([\d.]+)\s+rad\s+([\d.]+)/);
+for (const line of text.split('\n')) {
+  const m = line.match(ROW);
   if (m) base.set(m[1], { pickup: +m[2], volume: +m[3], radius: +m[4] });
 }
 if (!base.size) { console.error(`no archetypes parsed out of ${baseFile}`); process.exit(1); }
@@ -95,4 +115,10 @@ for (const p of rows) {
 
 console.log(`\n${moved} archetype(s) moved${missing ? `, ${missing} new` : ''}.`);
 if (!moved) console.log('pickup and volume are exactly where they were.');
-process.exit(0);
+
+/* Exit non-zero when something moved. This used to be an unconditional
+   `process.exit(0)`, which made the tool unusable as a gate: a serial
+   `for t in …; do npm run -s $t; echo "EXIT $t = $?"; done` recorded 0 for a
+   run that had just reported 131 moved archetypes. A harness that cannot
+   fail is a harness that is not being read. */
+process.exit(moved ? 1 : 0);

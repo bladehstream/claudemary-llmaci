@@ -16,6 +16,21 @@
 
    `--only=` filters by stage tag. `--tris` adds triangle counts,
    which are the one column expected to move during an art pass.
+
+   ⚠ EVERY NUMBER IS PRINTED TO 10 SIGNIFICANT FIGURES, NOT TO A
+   FIXED NUMBER OF DECIMALS. It used to be `.toFixed(4)`, and that
+   silently destroyed this file's whole purpose at the small end of
+   the catalogue: volume spans 7.7e-8 (a virus) to 4.4e9 (a
+   supercluster complex), so four decimal places is ten significant
+   figures for the supercluster and *none at all* for the virus —
+   `wristwatch` printed `vol 0.0000`. Anything comparing against
+   that was dividing by zero. `reghost.mjs` reported 131 of 429
+   archetypes moved when nothing had changed at all.
+
+   Ten significant figures is far inside `reghost`'s 0.5% default
+   tolerance at both ends. The ten smallest props print in
+   exponential form; `reghost.mjs`'s parser accepts it, and
+   `npm run reghost` proves the round trip on every run.
    ============================================================ */
 
 import * as THREE from 'three';
@@ -38,11 +53,23 @@ const flag = (n) => process.argv.find((a) => a.startsWith(`--${n}=`))?.split('='
 const ONLY = flag('only')?.split(',').map((s) => s.trim()).filter(Boolean) ?? null;
 const TRIS = process.argv.includes('--tris');
 
+/* Bump this whenever the number format changes, and bump the matching
+   check in reghost.mjs. Not exported — importing this file runs it. */
+const FORMAT_STAMP = '# catalogue-digest v2';
+
 buildCatalog();
 
 const rows = ARCHETYPES
   .filter((p) => !ONLY || p.tags.some((t) => ONLY.includes(t)))
   .sort((a, b) => (a.id < b.id ? -1 : 1));
+
+/* Ten significant figures, never a fixed decimal count — see the header. */
+const sig = (x) => (Number.isFinite(x) ? x.toPrecision(10) : String(x));
+
+/* A stamp, so a baseline written by the old fixed-decimal build cannot be
+   silently compared against a new run. `reghost.mjs` refuses a file without
+   it rather than quietly reading four-decimal volumes as exact. */
+console.log(`${FORMAT_STAMP}  (pickup/vol/rad/h/w/d at 10 significant figures)`);
 
 let tot = 0;
 for (const p of rows) {
@@ -51,12 +78,12 @@ for (const p of rows) {
   const parts = p.parts.reduce((s, a) => s + a.length / 6, 0) / p.parts.length;
   console.log(
     `${p.id.padEnd(20)}`
-    + ` pickup ${p.pickup.toFixed(4).padStart(11)}`
-    + ` vol ${p.volume.toFixed(4).padStart(13)}`
-    + ` rad ${p.radius.toFixed(4).padStart(10)}`
-    + ` h ${p.height.toFixed(4).padStart(10)}`
-    + ` w/d ${p.dims.w.toFixed(3).padStart(9)}/${p.dims.d.toFixed(3).padStart(9)}`
-    + ` boxes ${String(parts).padStart(4)}`
+    + ` pickup ${sig(p.pickup).padStart(15)}`
+    + ` vol ${sig(p.volume).padStart(15)}`
+    + ` rad ${sig(p.radius).padStart(15)}`
+    + ` h ${sig(p.height).padStart(15)}`
+    + ` w/d ${sig(p.dims.w).padStart(15)}/${sig(p.dims.d).padStart(15)}`
+    + ` boxes ${parts.toFixed(2).padStart(6)}`
     + (TRIS ? ` tris ${String(Math.round(tris)).padStart(5)}` : ''),
   );
 }

@@ -39,7 +39,8 @@
     "magnet": "node tools/test-magnet.mjs",
     "zoom": "node tools/test-zoom.mjs",
     "escape": "node tools/test-escape.mjs",
-    "contrast": "node tools/test-contrast.mjs"
+    "contrast": "node tools/test-contrast.mjs",
+    "reghost": "node tools/test-reghost.mjs"
   },
   "dependencies": {
     "@fontsource/baloo-2": "^5.3.0",
