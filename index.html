@@ -40,6 +40,9 @@
       <div class="hud-topright">
         <div id="timer" class="timer">0:00</div>
         <div id="stage-name" class="stage-name"></div>
+        <!-- Only ever visible during a co-op round. A friend dropping out is
+             otherwise indistinguishable from a friend standing still. -->
+        <div id="coop-hud" class="coop-hud hidden"></div>
       </div>
 
       <div class="hud-bottomleft">
@@ -124,6 +127,7 @@
         <p class="title-sub">Roll up the world. Everything sticks. Nothing is out of context.</p>
         <div class="title-buttons">
           <button class="btn btn-big" data-action="play">Start Rolling</button>
+          <button class="btn alt" data-action="coop">Play With a Friend</button>
           <button class="btn" data-action="how">How to Play</button>
           <button class="btn" data-action="collection">Collection</button>
           <button class="btn" data-action="options">Options</button>
@@ -143,6 +147,95 @@
         <div id="stage-cards" class="stage-cards"></div>
         <div class="panel-actions">
           <button class="btn" data-action="back-title">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PLAY WITH A FRIEND ============
+         Three steps, one panel. See src/ui/Coop.js — that file is the whole
+         opt-in: nothing here constructs a connection until a button is
+         pressed, and the Content Security Policy cannot enforce that because
+         connect-src does not cover WebRTC. -->
+    <div id="coop-screen" class="screen hidden">
+      <div class="panel">
+        <h2 class="panel-title">Play With a Friend</h2>
+
+        <!-- ---- what this is, and what it costs you ---- -->
+        <div id="coop-menu" class="coop-step">
+          <p class="coop-lede">
+            Two katamaris in one world. You can see each other rolling around, and anything
+            either of you picks up is gone for both of you. Nobody can roll anybody else up —
+            there is no way to get in each other's way at all.
+          </p>
+          <!-- THE DISCLOSURE, ON THE WAY IN, NOT BURIED IN A README. Peer-to-peer
+               means the two devices talk directly, and that is not a detail a
+               player should discover afterwards. -->
+          <p class="coop-warn">
+            <b>Worth knowing first.</b> This connects your device straight to your friend's,
+            the same way a video call does — so each of you can see the other's IP address.
+            There is no server holding the game, no account, no sign-in, and nothing is
+            written down anywhere. Only send an invite to someone you would give your
+            phone number to.
+          </p>
+          <div class="panel-actions column">
+            <button class="btn btn-big" data-action="coop-host">Create an Invite</button>
+            <button class="btn alt" data-action="coop-join">I Have an Invite</button>
+          </div>
+          <!-- Hidden unless a signalling worker was configured at build time.
+               The shipped game has no server, so this never appears in it. -->
+          <div id="coop-room-block" class="coop-room hidden">
+            <p class="coop-note">Or join with a room code:</p>
+            <div class="coop-roomrow">
+              <input id="coop-room-code" class="coop-input" type="text" autocomplete="off"
+                     autocapitalize="characters" spellcheck="false" maxlength="6"
+                     placeholder="ABC123" aria-label="Room code" />
+              <button class="btn small alt" data-action="coop-room-join">Join Room</button>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button class="btn" data-action="back-title">Back</button>
+          </div>
+        </div>
+
+        <!-- ---- which cosmos ---- -->
+        <div id="coop-stage" class="coop-step hidden">
+          <p class="coop-lede">
+            Pick the one you will both roll. Your friend does not choose — the invite
+            carries it, and their game loads the same world from it.
+          </p>
+          <div class="coop-pick">
+            <label for="coop-stage-sel">Cosmos</label>
+            <select id="coop-stage-sel"></select>
+          </div>
+          <div class="panel-actions">
+            <button class="btn btn-big" data-action="coop-make">Make the Invite</button>
+            <button class="btn alt" data-action="coop-cancel">Back</button>
+          </div>
+        </div>
+
+        <!-- ---- the exchange ---- -->
+        <div id="coop-exchange" class="coop-step hidden">
+          <div id="coop-out-block" class="coop-block hidden">
+            <p id="coop-out-label" class="coop-note"></p>
+            <textarea id="coop-out" class="coop-blob" readonly rows="4" spellcheck="false"
+                      aria-label="Your code"></textarea>
+            <div class="coop-blobrow">
+              <button id="coop-copy" class="btn small" data-action="coop-copy">Copy</button>
+              <button id="coop-share" class="btn small alt hidden" data-action="coop-share">Send…</button>
+            </div>
+          </div>
+          <div id="coop-in-block" class="coop-block hidden">
+            <p id="coop-in-label" class="coop-note"></p>
+            <textarea id="coop-in" class="coop-blob" rows="4" spellcheck="false"
+                      autocomplete="off" autocapitalize="off" aria-label="Their code"
+                      placeholder="paste the code here"></textarea>
+          </div>
+          <div id="coop-bigcode" class="coop-bigcode hidden"></div>
+          <p id="coop-status" class="coop-status" role="status" aria-live="polite"></p>
+          <div class="panel-actions">
+            <button id="coop-go" class="btn btn-big hidden" data-action="coop-go">Connect</button>
+            <button class="btn alt" data-action="coop-cancel">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -365,6 +458,14 @@
         <div class="intro-line"><span class="intro-key">Goal</span><span id="intro-goal"></span></div>
         <div class="intro-line"><span class="intro-key">Time</span><span id="intro-time"></span></div>
         <div id="intro-brief" class="intro-brief"></div>
+        <!-- Shown only when a co-op session is live. You each start when you
+             are ready, so this has to say so — otherwise the first player to
+             tap sits alone wondering where the other ball is. -->
+        <div id="intro-coop" class="intro-coop hidden">
+          Connected to your friend. You each start when you tap, so your clocks run
+          separately — but you are rolling the same world, and whatever either of you
+          picks up is gone for both.
+        </div>
         <!-- On a phone this button is also the user gesture that iOS requires
              for DeviceOrientationEvent.requestPermission(). Asking from page
              load resolves 'denied' without ever showing the dialog. -->

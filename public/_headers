@@ -20,7 +20,27 @@
 
 # The game is a single canvas with no embeds, no third-party scripts and no
 # outbound requests of any kind; it reads and writes one localStorage key.
+#
+# THE CSP IS THE INTERESTING LINE. No 'unsafe-eval' means the page cannot reach
+# a string->code sink even if one gets introduced later by accident, and
+# `connect-src 'none'` means it cannot make a network request at all. Both are
+# already true of the code — src/ contains no fetch, XMLHttpRequest, WebSocket,
+# eval, new Function or dynamic import — so this costs nothing today and turns
+# "we don't do that" into something the browser enforces rather than something
+# a future commit can quietly undo.
+#
+# ⚠ PEER-TO-PEER PLAY MEANS REVISITING THIS, KNOWINGLY. WebRTC is NOT covered
+# by connect-src, and no shipping browser implements the spec's `webrtc`
+# directive — so this header will not stop a data channel and must never be
+# mistaken for the thing that keeps networking opt-in. That has to be enforced
+# in code. What it WILL still do is stop hostile peer data from becoming
+# executable, which is the risk that actually matters.
+#
+# style-src allows inline because the HUD writes element styles directly;
+# data:/blob: on img/media/font because the typefaces, the generated silent WAV
+# and the fart samples are all data URIs rather than files.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'

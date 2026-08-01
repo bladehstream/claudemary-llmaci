@@ -1,0 +1,40 @@
+# Signalling for Claudemary LLMaci — Stage 2.
+#
+# This is a SEPARATE deployment from the game. The game is static files on
+# Cloudflare Pages and stays that way; this is a Worker, and nothing in the
+# game requires it — Stage 1's copy-paste connect works with no server at all.
+#
+#   npx wrangler deploy
+#   npx wrangler secret put TURN_API_TOKEN     # optional, enables TURN
+#
+# Then put the deployed URL in the game: VITE_SIGNAL_URL at build time, e.g.
+#   VITE_SIGNAL_URL=wss://damaci-signal.<subdomain>.workers.dev npm run build
+# Without it the game simply does not offer room codes and Stage 1 still works.
+
+name = "damaci-signal"
+main = "index.js"
+compatibility_date = "2026-07-01"
+
+# Durable Objects have been on the Workers free plan since April 2025, and an
+# idle hibernating object is not billed for duration. A room lives for about
+# two seconds of actual work, so this costs nothing at any plausible scale.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Room"]
+
+[vars]
+# Comma-separated. Leave empty to allow any origin (fine while testing; set it
+# before telling anyone the URL, or you are running a signalling server for the
+# whole internet rather than for your game).
+ALLOWED_ORIGINS = "https://claudemary-llmaci.pages.dev"
+
+# TURN_KEY_ID is not secret; the token is. Set the token with `wrangler secret`,
+# never here — this file is committed to a public repository.
+# TURN_KEY_ID = "..."
+
+[observability]
+enabled = true

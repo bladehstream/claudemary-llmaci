@@ -338,6 +338,101 @@ html, body {
 }
 
 /* ------------------------------------------------------------
+   Play with a friend
+
+   The only screen in the game with a text field in it, which is
+   why `html, body { user-select: none }` has to be undone here —
+   without that the invite blob cannot be selected with a finger,
+   and on a phone selecting it IS how you copy it when the
+   Clipboard API is refused.
+   ------------------------------------------------------------ */
+.coop-lede {
+  font-size: 16px; line-height: 1.5; color: var(--ink);
+  max-width: 54ch; margin: 0 auto 14px;
+}
+/* Not styled as an error, because it is not one. Enough emphasis to be read
+   before the buttons underneath it, and no more. */
+.coop-warn {
+  font-size: 14px; line-height: 1.5; color: var(--purple);
+  background: #fff6d9; border: 3px solid #f0d375; border-radius: 14px;
+  padding: 12px 16px; margin: 0 auto 18px; max-width: 56ch; text-align: left;
+}
+.coop-warn b { color: #8a6d1f; }
+.coop-note {
+  font-size: 14px; font-weight: 600; color: var(--purple);
+  margin: 0 auto 6px; max-width: 56ch; text-align: left;
+}
+.coop-block { margin-bottom: 16px; }
+.coop-blob {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.35;
+  padding: 10px 12px; border-radius: 12px;
+  border: 3px solid var(--purple); background: #fff; color: var(--ink);
+  resize: vertical;
+  /* THE ONE PLACE THE GLOBAL user-select: none MUST NOT APPLY. */
+  user-select: text; -webkit-user-select: text;
+  /* An invite is ~350 characters of base64 with no spaces in it, so without
+     this it lays out as one unbreakable line and scrolls sideways forever. */
+  word-break: break-all;
+}
+.coop-blob:disabled { opacity: 0.6; }
+.coop-blobrow { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+.coop-pick {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin: 6px 0 4px; font-size: 17px; font-weight: 600;
+}
+.coop-pick select {
+  font-family: var(--font-ui); font-size: 16px; padding: 6px 10px;
+  border-radius: 10px; border: 3px solid var(--purple); background: #fff;
+}
+.coop-status {
+  font-size: 15px; line-height: 1.45; font-weight: 600; color: var(--purple);
+  min-height: 1.4em; margin: 10px auto 0; max-width: 56ch;
+}
+.coop-status.bad { color: var(--red); }
+.coop-bigcode {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 54px; letter-spacing: 0.14em;
+  color: var(--purple); background: #fff;
+  border: 4px solid var(--purple); border-radius: 18px;
+  /* Asymmetric on purpose: letter-spacing adds a trailing gap after the last
+     character, so equal padding makes the code look shoved to the left. */
+  padding: 10px 6px 10px 20px;
+  margin: 6px auto 4px; max-width: 9ch;
+  user-select: text; -webkit-user-select: text;
+}
+.coop-room { margin-top: 18px; padding-top: 14px; border-top: 3px dashed rgba(107,70,193,0.25); }
+.coop-roomrow { display: flex; gap: 10px; justify-content: center; align-items: center; }
+.coop-input {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: 22px; letter-spacing: 0.12em; text-align: center;
+  width: 7em; padding: 6px 10px;
+  border-radius: 12px; border: 3px solid var(--purple); background: #fff;
+  color: var(--purple); text-transform: uppercase;
+  user-select: text; -webkit-user-select: text;
+}
+.intro-coop {
+  max-width: 46ch; margin: 12px auto 0;
+  font-size: 15px; line-height: 1.45; font-weight: 600;
+  color: #eafff0; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+/* The in-round presence pill. Small on purpose — it is a reassurance, not a HUD
+   element competing with the timer. */
+.coop-hud {
+  /* inline-block, so the pill hugs its text — `.hud-topright` has no width of
+     its own and a block child would stretch a translucent bar across it. */
+  display: inline-block; margin-top: 4px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(0,0,0,0.34); color: #fff;
+  border: 2px solid rgba(255,255,255,0.5);
+}
+.coop-hud.ok { border-color: #7fe08a; color: #d8ffdd; }
+.coop-hud.wait { border-color: #ffd93b; color: #fff3c4; }
+.coop-hud.bad { border-color: #ff8a80; color: #ffd9d5; }
+
+/* ------------------------------------------------------------
    Collection log
    ------------------------------------------------------------ */
 .collection-summary { font-size: 17px; font-weight: 600; color: var(--purple); margin-bottom: 14px; }
@@ -996,6 +1091,23 @@ body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
   .collection-list { grid-template-columns: 1fr 1fr; }
   .results-stats { grid-template-columns: 1fr 1fr; }
   .results-size-value { font-size: 34px; }
+
+  /* Co-op. The blob is the awkward part of this panel on a phone: it must stay
+     tall enough to show that there is a lot of it (so nobody copies half),
+     while the disclosure above it stays readable rather than being scrolled
+     past. 16px on the textarea specifically — iOS Safari zooms the whole page
+     in on focus for anything smaller, and it does not zoom back out. */
+  .coop-lede { font-size: 15px; }
+  .coop-warn { font-size: 13px; padding: 10px 12px; }
+  .coop-blob { font-size: 16px; }
+  .coop-status { font-size: 14px; }
+  .coop-bigcode { font-size: 40px; padding: 8px 4px 8px 14px; }
+  .coop-input { font-size: 18px; }
+  /* Stack, because the label plus a full-width select does not fit beside it. */
+  .coop-pick { flex-direction: column; gap: 6px; }
+  .coop-pick select { width: 100%; }
+  .coop-roomrow { flex-direction: column; }
+  .intro-coop { font-size: 13px; }
 
   .hud-topleft, .hud-topright { transform: scale(0.82); transform-origin: top left; }
   .hud-topright { transform-origin: top right; }

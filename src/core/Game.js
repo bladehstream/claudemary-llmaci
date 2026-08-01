@@ -8,6 +8,7 @@ import { CameraRig } from '../render/CameraRig.js';
 import { Input } from './Input.js';
 import { HUD } from '../ui/HUD.js';
 import { Screens } from '../ui/Screens.js';
+import { Coop } from '../ui/Coop.js';
 import { Ending } from '../ui/Ending.js';
 import { TouchControls, isCoarsePointer, PAN_RATE } from './Touch.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
@@ -110,6 +111,18 @@ export class Game {
       this.screens.refreshTiltUi(this.touch);
       if (this.state === 'intro') this.screens.showTiltPrompt(this.touch);
     };
+
+    /* ⚠ NULL UNTIL THE PLAYER ASKS FOR IT, AND THAT IS THE OPT-IN.
+       No RTCPeerConnection is constructed, no socket opened and no address
+       resolved until somebody presses a button — so a person who merely loads
+       the page has exactly the exposure they had before multiplayer existed,
+       which is none. The CSP cannot enforce this: `connect-src` does not cover
+       WebRTC and no shipping browser implements the spec's `webrtc` directive.
+       It is enforced here, by this being null, and nowhere else. */
+    this.net = null;
+    /* The panel that can set it. Constructing this opens nothing — see the
+       header of src/ui/Coop.js; every path in it starts at a button press. */
+    this.coop = new Coop(this);
 
     this.state = 'loading';
     this.stage = null;
@@ -356,6 +369,36 @@ export class Game {
   stageIds() { return STAGES.map((s) => s.id); }
 
   /**
+   * Stages the player may host, in ladder order.
+   *
+   * `all` exists for the JOINING side. Being invited to a stage is not the same
+   * as choosing it: refusing to load a friend's game because you have not
+   * personally unlocked the city would be a lock protecting nothing — you are
+   * not banking progress, you are playing along with someone who has. The
+   * unlock ladder still governs what you can start on your own.
+   */
+  unlockedStages(all = false) {
+    if (all) return STAGES.slice();
+    return STAGES.filter((s, i) => i === 0 || this.save.cleared.includes(STAGES[i - 1].id)
+      || this.save.cleared.includes(s.id));
+  }
+
+  /**
+   * Both halves are connected and agree on the world. Hand back to the normal
+   * intro screen rather than starting immediately: iOS will not unlock audio
+   * outside a user gesture, and the tap that dismisses this intro is that
+   * gesture. It also means neither player is dropped into a round they were not
+   * looking at because the other one finished pasting first.
+   */
+  coopLinked() {
+    if (!this.stage) return;
+    this.screens.showIntro(this.stage);
+    this.screens.showTiltPrompt(this.touch);
+    this.screens.setCoopIntro(true);
+    this.state = 'intro';
+  }
+
+  /**
    * Decide whether this session is played with thumbs or with a keyboard, and
    * reshape the UI to match.
    *
@@ -399,6 +442,11 @@ export class Game {
 
   toTitle() {
     this.state = 'title';
+    /* Leaving for the title ENDS a co-op session, and ends it properly: the
+       peer is closed, the ghost meshes are disposed and `net` goes back to
+       null. Anything less would leave a data channel open behind a menu, which
+       is the state this whole design exists to make impossible. */
+    this.coop.close();
     /* Silence the continuous rolling voice. It is started once and runs for the
        life of the page, so anything that leaves a round has to close the gate or
        the hiss follows you to the menu — which it did. */
@@ -455,6 +503,18 @@ export class Game {
         this.screens.show('select');
         this.state = 'select';
         break;
+      /* ---- play with a friend ----
+         Every one of these is a button press, and that is the point: no
+         connection object exists in this process until one of them runs. */
+      case 'coop': this._ensureAudio(); this.state = 'coop'; this.coop.open(); break;
+      case 'coop-host': this.coop.chooseHost(); break;
+      case 'coop-join': this.coop.chooseJoin(); break;
+      case 'coop-make': this.coop.makeInvite(); break;
+      case 'coop-go': this.coop.go(); break;
+      case 'coop-copy': this.coop.copy(); break;
+      case 'coop-share': this.coop.share(); break;
+      case 'coop-room-join': this.coop.joinRoom(); break;
+      case 'coop-cancel': this.coop.cancel(); break;
       case 'how': this.screens.show('how'); this.state = 'how'; break;
       case 'options': this.screens.syncOptions(this.options); this.screens.show('options'); this.state = 'options'; break;
       case 'collection': this.screens.showCollection(this.save); this.state = 'collection'; break;
@@ -523,6 +583,11 @@ export class Game {
          hold threshold — see `_onKeyUp`. */
     } else if (this.state === 'paused') {
       if (code === 'Escape' || code === 'KeyP') this.resume();
+    } else if (this.state === 'coop') {
+      /* Escape backs out of an attempt without leaving the game. It cannot
+           reach here from inside the invite box — Input.js ignores keys aimed
+           at text fields — so it is unambiguous. */
+      if (code === 'Escape') { this.sfx.ui('back'); this.coop.cancel(); }
     } else if (this.state === 'intro') {
       if (code === 'Space' || code === 'Enter') this.begin();
     } else if (this.state === 'results') {
@@ -565,8 +630,27 @@ export class Game {
      Stage lifecycle
      ------------------------------------------------------------ */
 
-  loadStage(stage) {
+  /**
+   * @param {object} stage
+   * @param {{then?: () => void}} [opts] `then` replaces the jump to the intro
+   *   screen, which is what the co-op panel uses to build the world first and
+   *   keep the player on its own screen while the connection is negotiated.
+   *   `Session.hash` is derived from the loaded stage and its prop count, so a
+   *   handshake sent before the build would announce the wrong world.
+   */
+  loadStage(stage, opts = {}) {
     this.stage = stage;
+    /* ⚠ RESEED. `this.rng` is built ONCE in the constructor and handed to
+       `world.resolve(kat, H, this.rng)` on EVERY TICK, and `Katamari.knockOff`
+       draws from it to choose which attached pieces are shaken loose — which
+       sets volLost, then volume, then radius. That is physics, not decoration.
+       Without this line the stream position at the start of a round depends on
+       everything you did earlier in the session, so the same stage played twice
+       is two different games and no run is reproducible. Measured: shifting the
+       stream by a single draw moved a final diameter from 287.8427 to 287.0252.
+       Derived from the stage seed so a given stage always starts identically,
+       and offset so it is not the same stream the world builder just used. */
+    this.rng = makeRng(((stage.seed ?? 12345) ^ 0x5eed) >>> 0);
     this.screens.show('loading');
     this.screens.setLoading(`${pickLoading()}  ·  ${stage.name}`);
     this.hud.hide();
@@ -607,9 +691,28 @@ export class Game {
       this.foundThisRun = new Set();
 
       this.hud.reset(stage);
-      this.screens.showIntro(stage);
-      this.screens.showTiltPrompt(this.touch);
-      this.state = 'intro';
+
+      /* ⚠ THE WORLD UNDER A LIVE CO-OP SESSION HAS JUST CHANGED, so tell it.
+         Prop indices only mean anything relative to one stage's prop table —
+         "Roll Again" or "Next Stage" while connected would otherwise have both
+         players deleting each other's scenery by index in two different worlds,
+         which looks like a physics bug and is not one. `resync` suspends the
+         exchange until the peer announces the same world, so whoever moves
+         first simply waits for the other to catch up. It must run HERE, after
+         the build, because the hash it announces is derived from the prop count
+         that only exists once `new World(...)` has returned. */
+      if (this.net) this.net.resync();
+
+      if (opts.then) {
+        // The co-op panel owns the screen; it puts itself back up.
+        this.state = 'coop';
+        opts.then();
+      } else {
+        this.screens.setCoopIntro(!!this.net);
+        this.screens.showIntro(stage);
+        this.screens.showTiltPrompt(this.touch);
+        this.state = 'intro';
+      }
       if (this.audio.ready) { this.music.play(stage.id); this.music.setIntensity(0.4); this.music.setHurry(false); }
     }));
   }
@@ -790,9 +893,27 @@ export class Game {
       this.accum -= H;
       steps++;
     }
-    if (steps === 8) this.accum = 0;
+    /* DO NOT THROW THE REMAINDER AWAY — CAP IT.
+       This used to be `this.accum = 0`, which silently discarded simulation
+       time whenever a frame needed more than 8 sub-steps. `dt` is clamped to
+       0.1s and H is 1/120, so 8 steps covers 0.0667s: below about 15fps every
+       frame hit the cap and the world quietly ran in slow motion, with the
+       clock (which is wall-time) running on regardless. The player's round got
+       shorter in game terms the worse their machine was, which is exactly
+       backwards. Keeping one frame's worth lets a brief hitch catch up on the
+       following frames; capping stops a long stall from banking seconds of
+       simulation and then replaying it as a lurch. */
+    if (steps === 8) this.accum = Math.min(this.accum, H * 8);
     kat.layoutAttached();
     world.update(dt, kat.diameter);
+
+    /* ⚠ AFTER THE PHYSICS, AND THAT ORDERING IS THE POINT. Nothing the network
+       delivers may influence the simulation this frame, and running it here
+       rather than above makes that structural rather than a thing to remember.
+       There is no PVP, so a remote value's only destinations are a ghost mesh's
+       transform and `PropField.remove` — neither of which the simulation reads.
+       See src/net/Session.js. Null and free when playing alone. */
+    if (this.net) this.net.tick(dt, kat);
 
     /* ---- clock ---- */
     this.timeLeft -= dt;
@@ -880,6 +1001,8 @@ export class Game {
         this.sfx.pickup(rel, ev.size);
         this.hud.pushPickup(ev.arch.name, rel);
         this.foundThisRun.add(ev.arch.id);
+        // Tell the other player this one is gone. No-op when playing alone.
+        if (this.net) this.net.notePickup(ev.idx);
         if (rel > 0.55) { this.rig.bump(rel * 0.5); this.hud.flash(0.18 * rel); }
         // Swallowing something near your own size is the one moment that
         // actually earns a "good catch". Throttled so it stays an event.

@@ -650,7 +650,14 @@ export class World {
           const wp = new THREE.Vector3(ix, f.y[i] + Math.min(f.hgt[i] * 0.5, R), iz);
           f.remove(i);
           kat.attach(arch, wp, f.variant[i], f.rotY[i], rnd);
-          out.push({ type: 'pickup', arch, pos: wp, size: f.pickup[i] });
+          /* `idx` is the prop's index in the one PropField. It is stable for the
+             life of a world AND identical on every machine, because the world is
+             built deterministically from `stage.seed` — which makes it the whole
+             of what a peer needs in order to say "this one is gone": two bytes,
+             no position, no name, and nothing to validate beyond a range check.
+             Nothing in the single-player game reads it; it is here so the
+             network layer never has to invent an identity scheme of its own. */
+          out.push({ type: 'pickup', arch, pos: wp, size: f.pickup[i], idx: i });
         }
         return;
       }

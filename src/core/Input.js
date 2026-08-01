@@ -21,13 +21,34 @@ export class Input {
        is a tap — so the tap action has to fire here. */
     this.onKeyUp = null;
 
+    /**
+     * A TEXT FIELD OWNS ITS OWN KEYS.
+     *
+     * These listeners are on `window`, so without this guard they see every
+     * keystroke aimed at any control on the page — and the `preventDefault`
+     * below then eats Space, Tab and all four arrows before the field gets
+     * them. That was invisible while the game had no text input, and two things
+     * were quietly broken by it all along: arrow keys did not adjust the
+     * Options sliders, and Tab did not move between controls. The multiplayer
+     * invite box is the first place it would have been unmissable — Enter typed
+     * into a textarea would have ended the round.
+     */
+    const typing = (e) => {
+      const t = e.target;
+      if (!t || t === window || t === document || !t.tagName) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable === true;
+    };
+
     this._onKeyDown = (e) => {
+      if (typing(e)) return;
       if (e.repeat) { e.preventDefault?.(); return; }
       this.keys.add(e.code);
       if (this.onKey) this.onKey(e.code, e);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
     };
     this._onKeyUp = (e) => {
+      if (typing(e)) return;
       this.keys.delete(e.code);
       if (this.onKeyUp) this.onKeyUp(e.code, e);
     };

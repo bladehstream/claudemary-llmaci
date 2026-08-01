@@ -34,6 +34,7 @@
     "voicelab": "node tools/voicelab.mjs",
     "repetition": "node tools/test-repetition.mjs",
     "pickup": "node tools/test-pickup.mjs",
+    "net": "node tools/test-net.mjs",
     "bakefarts": "node tools/bake-farts.mjs"
   },
   "dependencies": {

@@ -127,6 +127,7 @@ export class Screens {
       how: document.getElementById('how-screen'),
       options: document.getElementById('options-screen'),
       collection: document.getElementById('collection-screen'),
+      coop: document.getElementById('coop-screen'),
       pause: document.getElementById('pause-screen'),
       results: document.getElementById('results-screen'),
       intro: document.getElementById('intro-screen'),
@@ -489,6 +490,12 @@ export class Screens {
 
   /* ---------------- intro ---------------- */
 
+  /** The "your friend is here" line on the intro screen, co-op rounds only. */
+  setCoopIntro(on) {
+    const el = document.getElementById('intro-coop');
+    if (el) el.classList.toggle('hidden', !on);
+  }
+
   showIntro(stage) {
     document.getElementById('intro-stage').textContent = stage.name;
     document.getElementById('intro-start').textContent = formatSizeShort(stage.startSize, stage.unit);
@@ -564,9 +571,21 @@ export class Screens {
       const seen = found.has(p.id);
       const row = document.createElement('div');
       row.className = 'col-item' + (seen ? '' : ' unseen');
-      // A prop carries its own unit, because the collection log is the one
-      // place where an atom and a continent sit in the same list.
-      row.innerHTML = `<b>${seen ? p.name : '???'}</b><span class="col-size">${seen ? formatSizeShort(p.pickup, p.unit) : ''}</span>`;
+      /* BUILT, NOT INTERPOLATED. This was `row.innerHTML = ...` with `p.name`
+         substituted in, which is safe today because every name is static data
+         from ARCHETYPES — and is precisely the line that stops being safe the
+         moment a list like this shows anything a person supplied. A multiplayer
+         scoreboard is exactly that feature. Changing it now costs nothing;
+         changing it later means remembering it exists.
+
+         A prop carries its own unit, because the collection log is the one
+         place where an atom and a continent sit in the same list. */
+      const name = document.createElement('b');
+      name.textContent = seen ? p.name : '???';
+      const size = document.createElement('span');
+      size.className = 'col-size';
+      size.textContent = seen ? formatSizeShort(p.pickup, p.unit) : '';
+      row.append(name, size);
       list.appendChild(row);
     }
     document.getElementById('collection-summary').textContent =
