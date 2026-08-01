@@ -596,19 +596,16 @@ P({ id: 'g_globular', name: 'Globular Cluster', cat: 'cluster', sizeMul: 1.2358,
       { y: R, lo: 0.03, hi: 0.062, bias: 2.4 });
   } });
 
-P({ id: 'g_opencluster', name: 'Open Cluster', cat: 'cluster', sizeMul: 1.5592, fill: 0.379, variants: 3, weight: 7,
+P({ id: 'g_opencluster', name: 'Open Cluster', cat: 'cluster', sizeMul: 1.4404, fill: 0.2988, variants: 3, weight: 7,
   build(b, r, v) {
     /* Loose and young: few stars, all bright, still sitting in the shredded
        gas they condensed out of. The difference from a globular is that you
        can see between the members — so low bias, and the gas is wisps rather
        than the five fat spheres it used to be. */
     const HX = 168.75, HY = 231.6;
-    core(b, HX, HY, HX, [G.indigo, G.dust, G.plum][v], { y: HY, k: 0.66 });
+    wisps(b, HX, HY * 0.62, HX, 8, [G.indigo, G.dust, G.plum], r,
+      { y: HY, head: 0.7 + v, spread: 0.9, solid: true });
     b.sphere(HX * 0.13, G.white, { y: HY }, 8, 6);
-    b.decor((d) => {
-      wisps(d, HX, HY * 0.5, HX, 7, [G.indigo, G.dust, G.plum], r,
-        { y: HY, head: 0.7 + v, spread: 0.9 });
-    });
     swarm(b, HX, HY, HX, 34, [G.blueWhite, G.white, G.blue], r,
       { y: HY, lo: 0.05, hi: 0.1, bias: 1.1 });
   } });
@@ -633,29 +630,41 @@ P({ id: 'g_nursery', name: 'Star Nursery', cat: 'birth', fill: 0.15, variants: 3
    collision volume is a dozen separate lumps with gaps between them.
    ================================================================== */
 
-P({ id: 'g_darknebula', name: 'Dark Nebula', cat: 'nebula', fill: 0.09, variants: 3, weight: 6,
+P({ id: 'g_darknebula', name: 'Dark Nebula', cat: 'nebula', sizeMul: 1.2597, fill: 0.1799, variants: 3, weight: 6,
   build(b, r, v) {
+    /* A cloud IS amorphous, so this stays soft — but soft along a HEADING.
+       Fourteen spheres scattered at random have no direction and read as a
+       heap; the same volume as overlapping shards laid along one axis reads as
+       something drifting. The rim stars are what make it a hole rather than a
+       hill. */
     const HX = 224.4, HY = 329;
-    puff(b, HX, HY, HX, 14, [G.voidDeep, G.void, [G.dust, G.ash, G.plum][v]], r,
-      { lo: 0.28, hi: 0.42 });
-    // stars caught at the edge, so it reads as a hole rather than a hill
-    for (let i = 0; i < 4; i++) {
-      const a = r() * 6.28;
-      b.sphere(HX * 0.055, G.blueWhite,
-        { x: Math.cos(a) * HX * 0.9, y: HY + (r() - 0.5) * HY * 1.2, z: Math.sin(a) * HX * 0.9 }, 6, 4);
-    }
+    wisps(b, HX, HY * 0.72, HX, 13, [G.voidDeep, G.void, [G.dust, G.ash, G.plum][v]], r,
+      { y: HY, head: 0.5 + v * 1.1, spread: 0.7, solid: true });
+    b.decor((d) => {
+      for (let i = 0; i < 6; i++) {
+        const a = r() * TAU;
+        d.sphere(HX * 0.05, G.blueWhite,
+          { x: Math.cos(a) * HX * 0.94, y: HY + (r() - 0.5) * HY * 1.3, z: Math.sin(a) * HX * 0.94 }, 5, 4);
+      }
+    });
   } });
 
-P({ id: 'g_emission', name: 'Emission Nebula', cat: 'nebula', fill: 0.07, variants: 3, weight: 6,
+P({ id: 'g_emission', name: 'Emission Nebula', cat: 'nebula', sizeMul: 1.2966, fill: 0.1526, variants: 3, weight: 6,
   build(b, r, v) {
+    /* Gas lit from inside by the stars that just formed in it: a bright
+       cavity wall, the young cluster in the middle, and a dark lane cutting
+       across — the three things that make one recognisable. */
     const HX = 259.6, HY = 380.6;
-    puff(b, HX, HY, HX, 14, [G.magenta, G.rose, [G.violet, G.ember, G.plum][v]], r,
-      { lo: 0.2, hi: 0.34 });
-    for (let i = 0; i < 4; i++) {
-      const a = r() * 6.28, d = HX * 0.5 * r();
-      b.sphere(HX * 0.07, G.white, { x: Math.cos(a) * d, y: HY + (r() - 0.5) * HY, z: Math.sin(a) * d }, 6, 4);
-    }
-    b.ellip(HX * 0.5, HY * 0.12, HX * 0.16, G.dust, { y: HY * 0.8, ry: 0.6 }, 8, 4);
+    const tint = [G.violet, G.ember, G.plum][v];
+    wisps(b, HX, HY * 0.72, HX, 11, [G.rose, G.magenta, tint], r,
+      { y: HY, head: v * 1.4, spread: 0.8, solid: true });
+    b.decor((d) => {
+      for (let i = 0; i < 6; i++) {
+        const a = r() * TAU, dd = HX * 0.45 * r();
+        d.sphere(HX * 0.06, G.white, { x: Math.cos(a) * dd, y: HY + (r() - 0.5) * HY * 0.8, z: Math.sin(a) * dd }, 5, 4);
+      }
+      d.ellip(HX * 0.62, HY * 0.09, HX * 0.13, G.dust, { y: HY * 0.86, ry: 0.6 }, 7, 4);
+    });
   } });
 
 P({ id: 'g_reflection', name: 'Reflection Nebula', cat: 'nebula', surface: 'air', flyHeight: 250,
@@ -670,16 +679,20 @@ P({ id: 'g_reflection', name: 'Reflection Nebula', cat: 'nebula', surface: 'air'
     }
   } });
 
-P({ id: 'g_molecular', name: 'Molecular Cloud', cat: 'nebula', fill: 0.08, variants: 3, weight: 5,
+P({ id: 'g_molecular', name: 'Molecular Cloud', cat: 'nebula', sizeMul: 1.2805, fill: 0.168, variants: 3, weight: 5,
   build(b, r, v) {
+    /* The biggest cold thing in the stage: long, dark, filamentary, with
+       stars igniting inside it. Drifting along one axis for the same reason as
+       the dark nebula. */
     const HX = 347.6, HY = 509.6;
-    puff(b, HX, HY, HX, 15, [G.voidDeep, G.dust, [G.ash, G.plum, G.dustWarm][v]], r,
-      { lo: 0.24, hi: 0.4 });
-    // protostars buried in it
-    for (let i = 0; i < 4; i++) {
-      const a = r() * 6.28, d = HX * 0.6 * r();
-      b.sphere(HX * 0.08, G.amber, { x: Math.cos(a) * d, y: HY * (0.5 + r()), z: Math.sin(a) * d }, 6, 4);
-    }
+    wisps(b, HX, HY * 0.75, HX, 15, [G.voidDeep, G.dust, [G.ash, G.plum, G.dustWarm][v]], r,
+      { y: HY, head: 1.1 + v * 0.9, spread: 0.85, solid: true });
+    b.decor((d) => {
+      for (let i = 0; i < 5; i++) {
+        const a = r() * TAU, dd = HX * 0.6 * r();
+        d.sphere(HX * 0.07, G.amber, { x: Math.cos(a) * dd, y: HY * (0.5 + r()), z: Math.sin(a) * dd }, 5, 4);
+      }
+    });
   } });
 
 P({ id: 'g_dustlane', name: 'Dust Lane', cat: 'structure', fill: 0.07, variants: 3, weight: 4,
@@ -689,23 +702,26 @@ P({ id: 'g_dustlane', name: 'Dust Lane', cat: 'structure', fill: 0.07, variants:
       { thick: 0.16, grain: 1.6, knot: G.amber });
   } });
 
-P({ id: 'g_hii', name: 'HII Region', cat: 'nebula', fill: 0.07, variants: 3, weight: 4,
+P({ id: 'g_hii', name: 'HII Region', cat: 'nebula', sizeMul: 1.4076, fill: 0.1952, variants: 3, weight: 4,
   build(b, r, v) {
+    /* PILLARS. This is the one shape in the stage that everybody has already
+       seen a photograph of, and the old build spent thirteen spheres on gas
+       and two thin cones on the pillars — exactly backwards. Now the pillars
+       are the silhouette: tall, tapered, leaning away from the cluster that is
+       eating them, each with a lit tip. */
     const HX = 457.6, HY = 670.8;
-    puff(b, HX, HY, HX, 13, [G.rose, G.magenta, [G.ember, G.violet, G.amber][v]], r,
-      { lo: 0.2, hi: 0.34 });
-    // the cluster doing the ionising, and two dark pillars pointing at it
-    b.sphere(HX * 0.15, G.white, { y: HY }, 8, 6);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * 6.28 + 0.4;
-      b.sphere(HX * 0.07, G.blueWhite,
-        { x: Math.cos(a) * HX * 0.16, y: HY + Math.sin(a) * HY * 0.2, z: Math.sin(a) * HX * 0.16 }, 6, 4);
-    }
-    for (let i = 0; i < 2; i++) {
-      const a = 1.1 + i * 2.6;
-      b.taperOn(HX * 0.05, HX * 0.12, HY * 1.2, G.dust,
-        { x: Math.cos(a) * HX * 0.6, y: 0, z: Math.sin(a) * HX * 0.6 }, 7);
-    }
+    const tint = [G.ember, G.violet, G.amber][v];
+    wisps(b, HX, HY * 0.66, HX, 9, [G.magenta, tint, G.rose], r,
+      { y: HY, head: v, spread: 0.9, solid: true });
+    b.sphere(HX * 0.15, G.white, { y: HY }, 9, 7);
+    b.decor((d) => {
+      pillars(d, HX * 0.82, HY * 1.5, 7, G.dust, G.rose, r, { y: 0 });
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU + 0.4;
+        d.sphere(HX * 0.06, G.blueWhite,
+          { x: Math.cos(a) * HX * 0.18, y: HY + Math.sin(a) * HY * 0.22, z: Math.sin(a) * HX * 0.18 }, 5, 4);
+      }
+    });
   } });
 
 /* ==================================================================

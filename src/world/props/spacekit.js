@@ -272,6 +272,13 @@ export function swarm(b, RX, RY, RZ, n, cols, rnd, o = {}) {
  *
  * A cloud IS amorphous, so this stays blobby on purpose — but it is blobby in
  * a DIRECTION, which is the difference between a nebula and a bag of balls.
+ *
+ * ⚠ PASS `solid: true` FOR AN ACTUAL CLOUD. Ghosting exists for shapes that are
+ * FLAT or HOLLOW — a disc fences the map, a shell is a cage. A cloud is neither:
+ * it is a lumpy solid, it was always safe as one, and its wisps ARE its body.
+ * Ghosting them forces a `core()` in to carry the mass, and at the size that
+ * takes, the core is an opaque egg two thirds the width of the prop that hides
+ * the very wisps it was standing in for. Looked at it; that is what it does.
  */
 export function wisps(b, RX, RY, RZ, n, cols, rnd, o = {}) {
   const yc = o.y ?? RY;
@@ -288,7 +295,7 @@ export function wisps(b, RX, RY, RZ, n, cols, rnd, o = {}) {
         x: Math.cos(head) * along * (RX - L) + Math.cos(head + Math.PI / 2) * off * RX,
         y: yc + (rnd() - 0.5) * RY * 0.7,
         z: Math.sin(head) * along * (RZ - L) + Math.sin(head + Math.PI / 2) * off * RZ,
-        ry: -a, rz: (rnd() - 0.5) * 0.4, ghost: true,
+        ry: -a, rz: (rnd() - 0.5) * 0.4, ghost: !(o.solid ?? false),
       }, S(6), S(4));
   }
   return b;
