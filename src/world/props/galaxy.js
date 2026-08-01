@@ -244,27 +244,11 @@ function band(b, RX, RY, RZ, n, cols, rnd, o = {}) {
   }
 }
 
-/**
- * A ring of chunks: an accretion disc, broken into arcs on purpose.
- *
- * One flat annulus would be a single wide plate whose collision radius fences
- * off a region while its `pickup` reads as a mouthful, and there would be no
- * way through it. Eight lumps with a warp in them have seven gaps, real
- * thickness, and the same silhouette. `n` divisible by four so a chunk sits on
- * each axis and the box is exact.
- */
-function lumpDisc(b, R, rr, ry, yc, cols, warp, n) {
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    b.ellip(rr, ry, rr, cols[i % cols.length],
-      { x: Math.cos(a) * R, y: yc + Math.sin(a) * warp, z: Math.sin(a) * R }, 8, 5);
-  }
-}
-
-/** A cone of light leaving (0, y0, 0) along +Y (`up` 1) or -Y (-1). */
-function jetCone(b, y0, len, r0, col, up = 1, seg = 8) {
-  b.cyl(up > 0 ? r0 : 0.8, up > 0 ? 0.8 : r0, len, col, { y: y0 + up * len * 0.5 }, seg);
-}
+/* `lumpDisc` and `jetCone` lived here and are gone. Both existed only to work
+   around collision: a disc had to be built out of separate arcs because one
+   annulus was a wall, and a jet had to be a fat cone because a thin one
+   measured as nothing. `ghost` retired the reason for both, and `g_smbh` was
+   the last prop using either — see `gradedDisc` and `jet` in spacekit.js. */
 
 /* ==================================================================
    THINGS WITH A SURFACE — a planet and the main sequence
@@ -564,16 +548,30 @@ P({ id: 'g_blackhole', name: 'Black Hole', cat: 'exotic', sizeMul: 1.8438, fill:
        it actually is: four flat rings, tilted and warped, graded from
        white-hot inside to ember outside, a thin photon ring inside them, and
        two pencil-thin jets out of the poles. */
-    const HX = 123.75, HY = 169.8;
+    /* ⚠ EVERY RADIUS HERE IS MEASURED AGAINST THE CORE, NOT AGAINST HX.
+       `core(k: 0.62)` draws the ellipsoid that IS the black sphere on screen,
+       at 0.62 * HX = 76.7. The first draft put the photon rings at 54 and 49
+       and an event-horizon sphere at 44 — all three entirely inside that,
+       drawn every frame and never once visible, and the disc's inner sixth
+       was buried with them. About 680 triangles per instance rendering the
+       inside of an opaque ball. The bright ring hugging the dark circle is
+       the single most recognisable thing about a black hole, and it was in
+       the file, and nobody could see it.
+
+       ⚠ AND THE RINGS WERE PERPENDICULAR TO THEIR OWN DISC. `ring()` is a
+       torus and `b.torus` builds in the XY plane (vertical); `annulus()` is
+       a lathe about Y and builds in XZ (horizontal). Passing both the same
+       `rx: 0.34` tilts one from flat and the other from upright, leaving them
+       90 degrees apart. A ring meant to lie in the disc needs
+       `rx: PI/2 + tilt`. */
+    const HX = 123.75, HY = 169.8, R = HX * 0.62, TILT = 0.34;
     core(b, HX, HY * 0.72, HX, G.event, { y: HY, k: 0.62 });
-    b.sphere(44, G.event, { y: HY }, 12, 9);
     b.decor((d) => {
-      ring(d, 54, C.chrome, { y: HY, rx: 0.34, tube: 0.05 }, 24);
-      ring(d, 49, G.glare, { y: HY, rx: 0.34, tube: 0.022 }, 24);
-      gradedDisc(d, 62, HX, [G.glare, G.gold, G.amber, [G.ember, G.rose, G.cyan][v]],
-        { y: HY, rx: 0.34, warp: 0.16, rise: 6 }, 4, 26);
-      jet(d, HY + 40, HY * 0.9, G.xray, { up: 1, r: 0.02, knots: 3, hot: G.white });
-      jet(d, HY - 40, HY * 0.9, G.xray, { up: -1, r: 0.02, knots: 3, hot: G.white });
+      ring(d, R * 1.05, C.chrome, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.03 }, 24);
+      gradedDisc(d, R * 1.16, HX * 1.16, [G.glare, G.gold, G.amber, [G.ember, G.rose, G.cyan][v]],
+        { y: HY, rx: TILT, warp: 0.16, rise: 6 }, 4, 26);
+      jet(d, HY + R * 0.5, HY * 0.9, G.xray, { up: 1, r: 0.02, knots: 3, hot: G.white });
+      jet(d, HY - R * 0.5, HY * 0.9, G.xray, { up: -1, r: 0.02, knots: 3, hot: G.white });
     });
   } });
 
@@ -755,23 +753,63 @@ P({ id: 'g_spiralarm', name: 'Spiral-Arm Fragment', cat: 'structure', fill: 0.1,
     }
   } });
 
-P({ id: 'g_hypernova', name: 'Hypernova Shell', cat: 'death', fill: 0.06, variants: 2, weight: 2,
+P({ id: 'g_hypernova', name: 'Hypernova Shell', cat: 'death', sizeMul: 2.3917, fill: 0.8209, variants: 2, weight: 2,
   build(b, r, v) {
-    const HX = 711, HY = 975.7;
-    puff(b, HX, HY, HX, 14, [G.ember, G.emberDk, G.violet, [G.rose, G.magenta][v]], r,
-      { shell: 0.5, lo: 0.16, hi: 0.26 });
-    /* The ejecta, and the reason this one is not hollow. See the cage note on
-       `puff`: at 1,560ly across the hole in a shell is big enough to hold a
-       mid-game katamari and the gaps in it are not big enough to let it back
-       out. This fills the bottom half of the inside, so a ball is bounced off
-       the outside rather than swallowed by it. */
-    b.sphere(HX * 0.56, G.emberDk, { y: HX * 0.56 }, 10, 7);
-    b.sphere(HX * 0.16, G.xray, { y: HY }, 8, 6);
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * 6.28 + v;
-      b.box(HX * 0.44, HX * 0.06, HX * 0.06, G.glare,
-        { x: Math.cos(a) * HX * 0.45, y: HY + Math.sin(a * 1.7) * HY * 0.4, z: Math.sin(a) * HX * 0.45, ry: -a });
-    }
+    /* ⚠ THE CAGE NOTE ON `puff` IS WHAT THIS PROP WAS BUILT AROUND, AND IT NO
+       LONGER APPLIES. The old comment here reads: "at 1,560ly across the hole
+       in a shell is big enough to hold a mid-game katamari and the gaps in it
+       are not big enough to let it back out", and the fix was to fill the
+       bottom half of the inside with a solid sphere so a ball bounced off
+       rather than fell in. That is a workaround for a collision problem, and
+       `ghost` deletes the problem: the shell is a picture, `core` is the
+       collision, and nothing can be trapped by a drawing.
+
+       What it can be instead is the shape a hypernova actually makes. Not the
+       supernova remnant's even bubble — this one is jet-driven, so it is
+       BIPOLAR: a shell pinched at the waist and stretched along the poles,
+       with the equatorial ring that everybody has seen a photograph of round
+       the middle, and the jets that did it still coming out of both ends.
+       That is three legible differences from `g_remnant` at a glance, which
+       is the whole job at 1,400ly. */
+    /* ⚠ AND THE CORE HAS TO BE SMALL ENOUGH TO SEE PAST. First attempt used
+       `k: 0.72`, which is what the mass wants at `fill` 0.21 — and rendered a
+       solid dark-red egg with a ring round it. The cavity, the two lobes and
+       the whole point were behind an opaque ball. This is the same mistake the
+       clouds already cost once ("the core is an opaque egg two thirds the
+       width of the prop that hides the very wisps it stands in for"), made
+       again by someone who had just read that sentence.
+       `fill` is the lever, not `k`: at `k: 0.46` the box is a quarter of the
+       volume, so `fill` goes to 0.86 and carries the same mass out of a core
+       small enough to sit inside the cavity instead of filling it. `fill` has
+       to stay under 1, and 0.86 is the practical floor for `k` on this prop. */
+    const HX = 711, HY = 975.7, tint = [G.rose, G.magenta][v];
+    const LOBE = HX * 0.62, OFF = HX * 0.55;
+    core(b, HX, HY * 0.8, HX, G.rust, { y: HY, k: 0.46 });
+    b.sphere(HX * 0.08, G.xray, { y: HY }, 8, 6);
+    b.decor((d) => {
+      /* Two lobes opening towards each other, not one stretched sphere. `rx:
+         PI` turns the upper one over so its mouth faces the waist. */
+      shell(d, LOBE, G.emberDk, { y: HY + OFF, th: 0.05, open: 0.44, rx: Math.PI }, 20);
+      shell(d, LOBE, G.emberDk, { y: HY - OFF, th: 0.05, open: 0.44 }, 20);
+      shell(d, LOBE * 0.7, tint, { y: HY + OFF * 0.92, th: 0.05, open: 0.5, rx: Math.PI }, 16);
+      shell(d, LOBE * 0.7, tint, { y: HY - OFF * 0.92, th: 0.05, open: 0.5 }, 16);
+      /* The waist. A ring here is only possible because a ring is no longer a
+         fence — this is the exact shape rule 3 of the old header forbade. */
+      ring(d, HX * 1.0, G.glare, { y: HY, rx: Math.PI / 2 + 0.16, tube: 0.03 }, 30);
+      gradedDisc(d, HX * 0.88, HX * 1.14, [tint, G.ember, G.emberDk],
+        { y: HY, rx: 0.16, warp: 0.06 }, 3, 28);
+      jet(d, HY + HX * 0.95, HY * 0.7, G.xray,
+        { up: 1, r: 0.022, knots: 3, hot: G.white, lobe: 0.07 });
+      jet(d, HY - HX * 0.95, HY * 0.7, G.xray,
+        { up: -1, r: 0.022, knots: 3, hot: G.white, lobe: 0.07 });
+      // ejecta whipping off the shock front, along the waist
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + v, e = (r() - 0.5) * 1.2;
+        d.ellip(HX * 0.26, HX * 0.03, HX * 0.03, G.glare, {
+          x: Math.cos(a) * HX * 0.95, y: HY + e * HY * 0.42, z: Math.sin(a) * HX * 0.95, ry: -a,
+        }, 5, 4);
+      }
+    });
   } });
 
 /* THE TOP RUNG, AND IT HAS TO BE EDIBLE.
@@ -793,12 +831,43 @@ P({ id: 'g_hypernova', name: 'Hypernova Shell', cat: 'death', fill: 0.06, varian
  * these are 16% of it, so the ceiling comes down too. Raising `fill` adds mass
  * without touching pickup, so that is the lever that buys headroom. Do not
  * change either without re-reading that line out of `balance`. */
-P({ id: 'g_smbh', name: 'Supermassive Black Hole', cat: 'exotic', fill: 0.16, variants: 2, weight: 1,
+P({ id: 'g_smbh', name: 'Supermassive Black Hole', cat: 'exotic', sizeMul: 1.5896, fill: 0.6427, variants: 2, weight: 1,
   build(b, r, v) {
-    const HX = 801, HY = 1099.2;
-    b.sphere(270, G.event, { y: HY }, 12, 8);
-    lumpDisc(b, HX - 165, 165, 96, HY,
-      [G.glare, G.gold, G.amber, [G.ember, G.rose][v]], 230, 12);
-    jetCone(b, HY, HY, 120, G.xray, 1);
-    jetCone(b, HY, HY, 120, G.xray, -1);
+    /* The same object as `g_blackhole` four thousand times over, and it has
+       to READ as more than a bigger copy. Three things separate them, all of
+       them things you would actually see:
+
+       the disc is proportionally far wider — a stellar-mass hole's disc is a
+       collar, a supermassive one's is a plate reaching well past the hole;
+       it is graded over five steps rather than four, so the temperature
+       gradient from white-hot to ember is legible across that width; and the
+       jets end in LOBES, which is the signature of the thing — the plumes
+       where a jet finally rams into the intergalactic medium, and the reason
+       these are visible from other galaxies.
+
+       ⚠ IT IS AFFORDABLE TO BE LAVISH HERE AND NOWHERE ELSE. The stage
+       places three of these. At 3 instances a 3,000-triangle prop costs 9k
+       against a 642k budget, where `g_bok` at 171 instances cannot afford
+       200 extra triangles. Spend the detail where the instance count is
+       small; that is the whole shape of this stage's budget. */
+    /* ⚠ `k` IS SET BY THE MASS, NOT BY THE LOOK. At the 0.62 that suits
+       `g_blackhole` this prop's measured box is 939 x 954 x 981, giving a
+       boxVol of 8.79e8 against the 8.85e8 of `volume` it has to carry — so
+       `reghost` printed `fill: 1.006 ⚠ CLAMPED AT 1`, a hair short of
+       impossible. Note the box is smaller than 2*HX*k: a 9-segment ellipsoid
+       does not reach its own nominal radius, which is 5% of the width and all
+       of the shortfall. 0.72 leaves fill at 0.64 and room to move. */
+    const HX = 801, HY = 1099.2, K = 0.72, R = HX * K, TILT = 0.26;
+    core(b, HX, HY * 0.72, HX, G.event, { y: HY, k: K });
+    b.decor((d) => {
+      ring(d, R * 1.04, C.chrome, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.02 }, 30);
+      ring(d, R * 1.1, G.glare, { y: HY, rx: Math.PI / 2 + TILT, tube: 0.01 }, 30);
+      gradedDisc(d, R * 1.2, HX * 1.42,
+        [G.glare, G.white, G.gold, G.amber, [G.ember, G.rose][v]],
+        { y: HY, rx: TILT, warp: 0.13, rise: 30 }, 5, 32);
+      jet(d, HY + R * 0.55, HY * 1.15, G.xray,
+        { up: 1, r: 0.014, knots: 4, hot: G.white, lobe: 0.085 });
+      jet(d, HY - R * 0.55, HY * 1.15, G.xray,
+        { up: -1, r: 0.014, knots: 4, hot: G.white, lobe: 0.085 });
+    });
   } });
