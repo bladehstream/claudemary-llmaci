@@ -558,6 +558,37 @@ panel says out loud, before any button that starts a connection, that this means
 exchange IP addresses the same way a video call does — that is what "no server" costs, and it
 is not something a player should find out afterwards.
 
+### Is it winnable at all? Measured, before building anything else
+
+Every stage is mass-limited: there is a fixed budget of props, sized so that one player who
+plays well just clears the goal. In co-op the two of you **share that budget** — so if a solo
+clear needed more than about half the stage, neither of you would reach the goal, and it would
+only become apparent at the end of a round.
+
+Measured with `npm run balance`: mass headroom is **3.35x to 13.45x** on every stage, and a
+pessimistic clean 50/50 volume split (pessimistic, because two players cover more ground than
+one) leaves every stage at or above goal. No world-generation change is needed. The one
+exception is **the house, at exactly 1.00x** — it is the tightest stage in the game and already
+only clears 4 solo bot runs in 5. Magnet mode is what pulls it clear.
+
+### Two players, two starting points
+
+You spawn on opposite sides of the stage's designed start point, a couple of ball-widths apart
+— close enough to see each other immediately, far enough not to start inside each other. The
+offset scales with the stage's start size and sits well inside the stage's own spawn-clear
+bubble, so it can never drop somebody inside a parked bus.
+
+It needs no agreement protocol: "I made the invite" and "I accepted one" are already
+asymmetric. It is applied when the round is **built**, which happens before the connection
+exists — so it comes from the panel, not from the session. Deriving it from the session would
+stack both players on the same point for the first round of every game and separate them from
+the second onwards, which is about the most confusing shape a bug can have.
+
+A marker in your friend's own ball colour tracks where they are: a ring when they are on
+screen, a solid pip at the screen edge when they are not. It hides rather than pointing at a
+stale position — a friend whose packets have stopped is a friend who is not there, and sending
+somebody across a city to an empty patch of floor is worse than telling them nothing.
+
 ### The security model is the architecture, not a validator
 
 The whole design turns on one decision: **no remote value is ever an input to local physics.**

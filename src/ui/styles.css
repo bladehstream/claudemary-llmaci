@@ -815,6 +815,37 @@ html, body {
   margin: -8px 0 0 -8px;
   opacity: .85;
 }
+
+/* The other player, in a co-op round. Wears their own ball colour via the
+   `--friend` custom property so it reads as a person rather than as another
+   piece of HUD furniture — and deliberately NOT yellow, which is the straggler
+   finder's colour and means something completely different.
+   `pointer-events: none` because it floats over the play area and a marker you
+   can accidentally tap is a marker that eats a tap you meant for the game. */
+.friend-marker {
+  --friend: #4ad6ff;
+  position: absolute;
+  width: 30px; height: 30px;
+  margin: -15px 0 0 -15px;
+  border: 3px dashed var(--friend);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.35), 0 0 12px var(--friend);
+  pointer-events: none;
+  z-index: 6;
+  animation: friend-spin 6s linear infinite;
+}
+/* Off screen: a solid pip rather than a ring. The ring says "they are there";
+   the pip at the edge says "they are that way", and the two should not be
+   confusable at a glance. */
+.friend-marker.off {
+  border-style: solid;
+  width: 18px; height: 18px;
+  margin: -9px 0 0 -9px;
+  background: var(--friend);
+  animation: none;
+  opacity: .9;
+}
+@keyframes friend-spin { to { transform: rotate(360deg); } }
 /* Top item of `.prompt-stack` — see index.html. NOT absolutely positioned: it
    used to sit at a hand-chosen `bottom: 84px` while the two Enter chips were
    anchored independently at `bottom: 22px`, and on a narrow window it printed

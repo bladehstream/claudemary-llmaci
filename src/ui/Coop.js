@@ -80,6 +80,22 @@ export class Coop {
   constructor(game) {
     this.game = game;
     this.role = null;         // 'host' | 'join'
+    /**
+     * Which of the two players this client is: 0 for the host, 1 for whoever
+     * joined, null when playing alone.
+     *
+     * ⚠ SET BEFORE `loadStage`, NOT WITH THE SESSION. The spawn offset is
+     * applied when the round is built, and the round is built BEFORE the
+     * connection exists — the whole reason for that ordering is that
+     * `Session.hash` is derived from the loaded world. Deriving the slot from
+     * `Session` instead would leave both players stacked on the same point for
+     * the first round of every game and separated from the second onwards,
+     * which is a very confusing bug to be shown.
+     *
+     * It needs no agreement protocol: "I made the invite" and "I accepted one"
+     * are already asymmetric, and each client only ever moves its own ball.
+     */
+    this.slot = null;
     this.phase = 'busy';
     this.stage = null;
     this.peer = null;
@@ -161,6 +177,7 @@ export class Coop {
     const stage = this.game.unlockedStages().find((s) => s.id === (sel && sel.value));
     if (!stage) return;
     this.role = 'host';
+    this.slot = 0;
     this.stage = stage;
     this._step('exchange');
     this._phase('busy');
@@ -264,6 +281,7 @@ export class Coop {
         + 'probably on different versions of the game.', true);
     }
     this.stage = stage;
+    this.slot = 1;
     this._lock(true);
     this._phase('busy');
     this._say(`Building ${stage.name}…`);
@@ -314,6 +332,7 @@ export class Coop {
       return this._say('That is not a room code. They are six characters, like ABC123.', true);
     }
     this.role = 'join';
+    this.slot = 1;
     this._step('exchange');
     this._phase('busy');
     this._say('Looking for the room…');
@@ -406,6 +425,7 @@ export class Coop {
     if (this.room) { try { this.room.close(); } catch { /* */ } this.room = null; }
     if (this.game.net) { this.game.net.close(); this.game.net = null; }
     this.role = null;
+    this.slot = null;
     this.stage = null;
     this.ice = null;
     this.linked = false;

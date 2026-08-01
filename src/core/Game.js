@@ -704,14 +704,31 @@ export class Game {
       this.scene.setSun(stage.sun, stage.sun.intensity);
       this.scene.setShadows(this.options.shadows);
 
-      const spawnY = this.world.groundAt(stage.spawn.x, stage.spawn.z);
+      /* ⚠ TWO PLAYERS MUST NOT SPAWN INSIDE EACH OTHER.
+         Offset along X by slot: the host to one side of the designed spawn,
+         the joiner to the other, so they start a couple of ball-widths apart
+         and can see each other immediately. Solo play is untouched — `slot` is
+         null and this is exactly zero.
+
+         Scaled by `startSize`, because the same offset has to work for a 5cm
+         marble and a 30,000-unit galaxy. 2.5 start sizes is comfortably inside
+         the stage's own spawn-clear bubble (`spawnClear`, 3.5 start sizes), so
+         the ground is already guaranteed free of anything too big to eat — the
+         offset cannot drop somebody inside a parked bus.
+
+         The WORLD is not offset, only the ball, so both peers still build a
+         byte-identical prop table and `stageHash` still matches. */
+      const slot = this.coop ? this.coop.slot : null;
+      const sep = slot === null ? 0 : (slot === 0 ? -1 : 1) * stage.startSize * 2.5;
+      const spawnX = stage.spawn.x + sep;
+      const spawnY = this.world.groundAt(spawnX, stage.spawn.z);
       // Speed and weight are anchored to this stage's own scale, so a 5m
       // katamari opening the city feels like a 5cm one opening the house.
       const width = stage.bounds.maxX - stage.bounds.minX;
       const span = Math.max(4, (stage.goal * 1.5) / stage.startSize);
       this.kat.setStageProfile(stage.startSize, stageSpeedFor(stage), span);
       this.kat.magnet = (this.options.magnet || 0) * TUNING.magnetMax;
-      this.kat.reset(stage.startSize / 2, new THREE.Vector3(stage.spawn.x, isFinite(spawnY) ? spawnY : 0, stage.spawn.z));
+      this.kat.reset(stage.startSize / 2, new THREE.Vector3(spawnX, isFinite(spawnY) ? spawnY : 0, stage.spawn.z));
       this.kat.group.visible = true;
       this.rig.configure(stage.camera, Math.PI);
       // `configure` resets the rig to the stage's own numbers, so the player's
@@ -958,7 +975,17 @@ export class Game {
        There is no PVP, so a remote value's only destinations are a ghost mesh's
        transform and `PropField.remove` — neither of which the simulation reads.
        See src/net/Session.js. Null and free when playing alone. */
-    if (this.net) this.net.tick(dt, kat);
+    if (this.net) {
+      this.net.tick(dt, kat);
+      /* Point at your friend. `nearestGhost` returns null when there is nobody
+         to point at — not connected, not yet in the same world, or their last
+         packet has gone stale — and the marker hides itself rather than
+         freezing at their last known position, which would send you across a
+         city to an empty patch of floor. */
+      const g = this.net.nearestGhost(kat.group.position);
+      if (g) this.hud.setFriend(g.mesh.position, this.scene.camera, g.colour);
+      else this.hud.clearFriend();
+    }
 
     /* ---- clock ---- */
     this.timeLeft -= dt;

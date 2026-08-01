@@ -313,7 +313,11 @@ export class Session {
     mesh.receiveShadow = false;
     mesh.visible = false;
     this.game.scene.scene.add(mesh);
-    g = { mesh, target: new THREE.Vector3(), radius: 1, seen: 0, started: false };
+    /* Keep the colour on the ghost too. The mesh material has it, but the HUD
+       marker wants a plain integer and digging it back out of a THREE.Color
+       is a lossy round trip through floats. */
+    g = { mesh, target: new THREE.Vector3(), radius: 1, seen: 0, started: false,
+      colour: COLOURS.includes(colour) ? colour : COLOURS[0] };
     this.ghosts.set(peer, g);
     return g;
   }
@@ -366,6 +370,27 @@ export class Session {
       }
       g.mesh.scale.setScalar(g.radius);
     }
+  }
+
+  /**
+   * The closest ghost worth pointing at, or null.
+   *
+   * Null covers every case where a marker would be a lie: not synced, no
+   * ghost, or a ghost whose last packet has aged out — the mesh is hidden by
+   * then but its position is still wherever it was four seconds ago, and
+   * sending a player across a city to an empty patch of floor is worse than
+   * telling them nothing. Written to take a position so it stays correct if
+   * there is ever a third player.
+   */
+  nearestGhost(from) {
+    if (!this.synced) return null;
+    let best = null, bestD = Infinity;
+    for (const [, g] of this.ghosts) {
+      if (!g.mesh.visible) continue;
+      const d = from ? g.mesh.position.distanceToSquared(from) : 0;
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    return best;
   }
 
   /** Called from `Game._handleEvents` for every local pickup. */

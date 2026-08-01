@@ -39,6 +39,67 @@ export class HUD {
     this._feedItems = [];
     this._flashUntil = 0;
     this._urgent = false;
+    this._friendEl = document.getElementById('friend-marker');
+  }
+
+  /**
+   * World point to a screen position that always points somewhere useful.
+   *
+   * ⚠ A POINT BEHIND THE CAMERA PROJECTS TO A MIRRORED POSITION, so the naive
+   * version sends you confidently in exactly the wrong direction. `project`
+   * gives `z > 1` for those, and flipping both axes puts the marker back on the
+   * correct side before the edge clamp runs.
+   *
+   * Shared by the straggler finder and the co-op friend marker — they want the
+   * identical behaviour, and the behind-the-camera flip is precisely the sort
+   * of subtlety that gets fixed in one copy and not the other.
+   *
+   * @returns {{sx: number, sy: number, off: boolean}} `off` = clamped to an edge
+   */
+  static _project(p, camera, w, h, pad) {
+    _fv.set(p.x, p.y, p.z).project(camera);
+    const behind = _fv.z > 1;
+    let sx = (_fv.x * 0.5 + 0.5) * w;
+    let sy = (-_fv.y * 0.5 + 0.5) * h;
+    if (behind) { sx = w - sx; sy = h - sy; }
+    const off = behind || sx < pad || sx > w - pad || sy < pad || sy > h - pad;
+    if (off) {
+      const cx = w / 2, cy = h / 2;
+      const dx = sx - cx, dy = sy - cy;
+      const m = Math.max(1e-3, Math.max(Math.abs(dx) / (cx - pad), Math.abs(dy) / (cy - pad)));
+      sx = cx + dx / m;
+      sy = cy + dy / m;
+    }
+    return { sx, sy, off };
+  }
+
+  /**
+   * Where the other player is, during a co-op round.
+   *
+   * Always on screen in some form, unlike the straggler finder: a ghost you
+   * cannot find is the difference between playing together and playing
+   * alongside, and the two of you start a couple of ball-widths apart and
+   * diverge from there. Wears the friend's own colour so it reads as them
+   * rather than as another piece of HUD furniture.
+   */
+  setFriend(pos, camera, colour) {
+    const el = this._friendEl;
+    if (!el) return;
+    if (!pos) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const w = window.innerWidth, h = window.innerHeight;
+    const { sx, sy, off } = HUD._project(pos, camera, w, h, 40);
+    el.classList.toggle('off', off);
+    el.style.left = `${sx}px`;
+    el.style.top = `${sy}px`;
+    if (colour !== this._friendColour) {
+      this._friendColour = colour;
+      el.style.setProperty('--friend', `#${(colour >>> 0).toString(16).padStart(6, '0')}`);
+    }
+  }
+
+  clearFriend() {
+    if (this._friendEl) this._friendEl.classList.add('hidden');
   }
 
   /**
@@ -70,25 +131,9 @@ export class HUD {
       const dot = this._finderDots[i];
       if (i >= pts.length) { dot.style.display = 'none'; continue; }
       const p = pts[i];
-
-      // World -> camera space, so we can tell in-front from behind. A point
-      // behind the camera projects to a mirrored on-screen position, which
-      // would send you confidently in exactly the wrong direction.
-      _fv.set(p.x, p.y, p.z).project(camera);
-      const behind = _fv.z > 1;
-      let sx = (_fv.x * 0.5 + 0.5) * w;
-      let sy = (-_fv.y * 0.5 + 0.5) * h;
-      if (behind) { sx = w - sx; sy = h - sy; }
-
-      const off = behind || sx < pad || sx > w - pad || sy < pad || sy > h - pad;
-      if (off) {
-        // Clamp to the screen edge along the line from the middle.
-        const cx = w / 2, cy = h / 2;
-        let dx = sx - cx, dy = sy - cy;
-        const m = Math.max(1e-3, Math.max(Math.abs(dx) / (cx - pad), Math.abs(dy) / (cy - pad)));
-        sx = cx + dx / m;
-        sy = cy + dy / m;
-      }
+      // Shared with the co-op friend marker; see `_project` for why a point
+      // behind the camera needs both axes flipped before the edge clamp.
+      const { sx, sy, off } = HUD._project(p, camera, w, h, pad);
       dot.style.display = '';
       dot.classList.toggle('off', off);
       dot.style.left = `${sx}px`;

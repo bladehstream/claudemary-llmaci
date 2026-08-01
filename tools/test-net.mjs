@@ -578,6 +578,35 @@ if (bothLinked) {
     () => window.__llmaci.state === 'intro'
       && !document.getElementById('intro-coop').classList.contains('hidden')));
 
+  /* ⚠ THE TWO PLAYERS MUST NOT START INSIDE EACH OTHER, and the offset is
+     applied when the round is BUILT — which happens before the connection
+     exists — so it cannot be derived from the session. If it ever is, this
+     assertion fails on the first round of a game and passes on every one
+     after, which is about the most confusing shape a bug can have. */
+  const spawns = await Promise.all([A, B].map((p) => p.evaluate(() => {
+    const g = window.__llmaci;
+    return {
+      x: g.kat.group.position.x,
+      z: g.kat.group.position.z,
+      start: g.stage.startSize,
+      // ⚠ RELATIVE TO THE STAGE'S OWN SPAWN, not to the origin. The first
+      // version of this compared the sign of the absolute x and failed on the
+      // quantum stage, whose spawn is nowhere near zero — both players were
+      // correctly on opposite sides of it and both had negative coordinates.
+      offset: g.kat.group.position.x - g.stage.spawn.x,
+    };
+  })));
+  const apart = Math.hypot(spawns[0].x - spawns[1].x, spawns[0].z - spawns[1].z);
+  check('the two players spawn clear of each other',
+    apart > spawns[0].start * 2,
+    `${(apart / spawns[0].start).toFixed(1)} start-sizes apart`);
+  /* And on OPPOSITE sides of the designed spawn rather than both displaced the
+     same way, which would separate them from the stage instead of each other. */
+  check('and on opposite sides of the stage spawn point',
+    Math.sign(spawns[0].offset) !== Math.sign(spawns[1].offset)
+    && spawns[0].offset !== 0,
+    `offsets ${spawns[0].offset.toFixed(3)} and ${spawns[1].offset.toFixed(3)}`);
+
   await A.evaluate(() => window.__llmaci.begin());
   await B.evaluate(() => window.__llmaci.begin());
   await A.waitForFunction(() => window.__llmaci.state === 'playing');
@@ -591,6 +620,65 @@ if (bothLinked) {
     return false;
   }, { timeout: 20000 }).then(() => true).catch(() => false);
   check("the other player's katamari shows up", sawGhost);
+
+  /* THE MARKER, which is what makes it co-op rather than two people in the
+     same building. Checked as rendered geometry, not as a flag: the class
+     could be right and the element still be parked at 0,0 or hidden by a
+     stylesheet. */
+  const marker = await B.evaluate(() => {
+    const el = document.getElementById('friend-marker');
+    if (!el) return { missing: true };
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return {
+      missing: false,
+      hidden: el.classList.contains('hidden'),
+      w: r.width, h: r.height,
+      onScreen: r.left > -50 && r.right < window.innerWidth + 50
+        && r.top > -50 && r.bottom < window.innerHeight + 50,
+      colour: st.getPropertyValue('--friend').trim(),
+      ghostColour: (() => {
+        for (const [, g] of window.__llmaci.net.ghosts) return g.colour;
+        return null;
+      })(),
+    };
+  });
+  check('a marker points at your friend', !marker.missing && !marker.hidden
+    && marker.w > 8 && marker.onScreen,
+    `${Math.round(marker.w)}x${Math.round(marker.h)}px, on screen ${marker.onScreen}`);
+  check('and it wears their colour, not a generic one',
+    marker.colour === `#${(marker.ghostColour >>> 0).toString(16).padStart(6, '0')}`,
+    `${marker.colour} vs ghost ${marker.ghostColour}`);
+
+  /* And it must LIE about nothing. A ghost whose packets have stopped is
+     hidden, and pointing at where they were four seconds ago would send a
+     player across a city to an empty patch of floor.
+
+     ⚠ SYNCHRONOUSLY, WITHIN ONE EVALUATE. The first version staled the ghost
+     and then awaited two frames before checking — but the other tab is still
+     playing and still broadcasting at 20Hz, so a fresh STATE arrived in the
+     gap and un-staled it. The test was measuring "does a live peer keep its
+     ghost alive", which it does, rather than the thing under test. */
+  const honest = await B.evaluate(() => {
+    const g = window.__llmaci;
+    for (const [, gh] of g.net.ghosts) { gh.seen = 0; gh.mesh.visible = false; }
+    const stale = g.net.nearestGhost(g.kat.group.position);
+    // And the same for a session that is connected but not in the same world.
+    const was = g.net.synced;
+    g.net.synced = false;
+    for (const [, gh] of g.net.ghosts) gh.mesh.visible = true;
+    const unsynced = g.net.nearestGhost(g.kat.group.position);
+    g.net.synced = was;
+    // The HUD side: clearing really removes it, rather than leaving it parked.
+    g.hud.clearFriend();
+    return {
+      stale, unsynced,
+      hidden: document.getElementById('friend-marker').classList.contains('hidden'),
+    };
+  });
+  check('and it hides rather than pointing at a stale position', honest.stale === null);
+  check('and points at nobody while the worlds disagree', honest.unsynced === null);
+  check('and clearing it really hides the marker', honest.hidden);
 
   /* THE ONE THING THAT MUST CONVERGE. A eats a prop; the same prop must die on
      B, by index, with no acknowledgement of any kind. */
