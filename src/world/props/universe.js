@@ -54,6 +54,9 @@
 
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
+import {
+  gradedDisc, spiralArm, ring, sheet, shell, jet, swarm as kitSwarm, wisps, core,
+} from './spacekit.js';
 
 const U = 'cosmic';
 const TAU = Math.PI * 2;
@@ -294,48 +297,100 @@ P({ id: 'u_irregular', name: 'Irregular Galaxy', cat: 'galaxy', fill: 0.2, varia
     }
   } });
 
-P({ id: 'u_spiral', name: 'Spiral Galaxy', cat: 'galaxy', fill: 0.34, variants: 4, weight: 14,
+/* ⚠ THIS IS THE PROP THE PLAYER NAMED. *"a galaxy should not look like a blob.
+   It should look like a galaxy."* It looked like a blob for one reason and it
+   was not the art: `envelope()` drew a single opaque ellipsoid the full size of
+   the prop, and the disc, the bulge and all four arms were built INSIDE it.
+   Everything that made it a galaxy was there, in the file, sealed in a shell.
+
+   The envelope existed to set the bounding box, because collision measures
+   what you draw. `ghost` sets the box with a solid core instead, so the
+   envelope is gone from every galaxy in this file and the disc is the
+   silhouette.
+
+   ⚠ HOW THIN THE SOLID PART CAN BE IS SET BY `fill`, NOT BY TASTE. At `fill`
+   0.34 there is only a 2.94x reduction in boxVol available before it passes 1,
+   which is 1.43x per axis — so the solid body stays a broad lens rather than
+   becoming a compact bulge. That is fine: the lens reads as the inner disc, and
+   the ghost disc and arms reach well past it, which is where the shape lives. */
+P({ id: 'u_spiral', name: 'Spiral Galaxy', cat: 'galaxy', sizeMul: 1.3486, fill: 0.8338, variants: 4, weight: 14,
   build(b, r, v) {
-    const S = SP.spiral, H = S * 0.8;
-    envelope(b, S, H, U_.spaceLit);
-    b.cyl(S * 0.88, S * 0.88, H * 0.1, U_.blueDim, { y: H * 0.5 }, 11);
-    b.ellip(S * 0.24, H * 0.3, S * 0.24, U_.amber, { y: H * 0.5 }, 9, 6);
-    const arms = 2 + (v % 2);
-    for (let k = 0; k < arms; k++) {
-      arm(b, S, H, (k / arms) * TAU + v * 0.5, 2.2, 4, [U_.blue, U_.bluePale], H * 0.5);
-    }
+    const S = SP.spiral, H = S * 0.8, yc = H * 0.5;
+    /* ⚠ THE SOLID LENS HAS TO BE FLAT AND THE ARMS HAVE TO START OUTSIDE IT.
+       First pass made it 0.72 S wide and 0.42 H tall — a dome — and put the
+       arms from 0.34 S outwards, so their inner two thirds were buried inside
+       it and only white specks came out of the rim. Same volume, spread wide
+       and thin instead: 0.9 S across and 0.27 H deep is a four-to-one lens
+       that reads as the inner disc, and everything ghost begins beyond its
+       edge where it can actually be seen. */
+    b.ellip(S * 0.66, H * 0.5, S * 0.66, U_.amber, { y: yc }, 10, 7);
+    b.decor((d) => {
+      /* Low contrast between the rings on purpose: four strongly different
+         tones concentric is a dartboard. The SPIRAL is what says spiral. */
+      gradedDisc(d, S * 0.88, S * 1.5, [U_.blueDim, U_.spaceLit],
+        { y: yc, warp: 0.012, t: H * 0.025 }, 2, 22);
+      const arms = 2 + (v % 2);
+      for (let k = 0; k < arms; k++) {
+        /* ⚠ THE ARMS RUN ACROSS THE FACE OF THE DISC, NOT ROUND ITS RIM.
+           Starting them outside the solid lens kept them visible but gave two
+           short curves at the same radius, which is a broken ring, not a
+           spiral. They start near the centre now and sit just proud of the
+           lens — `yc + H*0.29` against a lens top of `H*0.27` — so the whole
+           sweep is on show from above, which is the angle this is played
+           from. A spiral is only a spiral if you can see it turn. */
+        spiralArm(d, S * 0.26, S * 1.48, (k / arms) * TAU + v * 0.5, 3.3,
+          [U_.blue, U_.bluePale, U_.ice, U_.blue],
+          { y: yc + H * 0.29, w: 0.075, h: 0.26, seg: 5, hseg: 3 }, 13);
+      }
+      d.ellip(S * 0.2, H * 0.62, S * 0.2, U_.goldPale, { y: yc }, 8, 6);
+    });
   } });
 
-P({ id: 'u_barred', name: 'Barred Spiral', cat: 'galaxy', fill: 0.36, variants: 3, weight: 13,
+P({ id: 'u_barred', name: 'Barred Spiral', cat: 'galaxy', sizeMul: 1.3715, fill: 0.9286, variants: 3, weight: 13,
   build(b, r, v) {
-    const S = SP.barred, H = S * 0.78;
-    envelope(b, S, H, U_.spaceLit);
-    b.cyl(S * 0.86, S * 0.86, H * 0.1, U_.blueDim, { y: H * 0.5 }, 11);
-    // the bar, and the two arms that hang off its ends
+    /* The bar is the whole point of the name, and it was inside the envelope
+       too. Arms spring from the BAR ENDS rather than from the centre, which is
+       the difference you can actually see between this and `u_spiral`. */
+    const S = SP.barred, H = S * 0.78, yc = H * 0.5;
     const ba = v * 0.7;
-    b.ellip(S * 0.46, H * 0.24, S * 0.15, U_.amber, { y: H * 0.5, ry: ba }, 9, 6);
-    b.ellip(S * 0.19, H * 0.3, S * 0.19, U_.goldPale, { y: H * 0.5 }, 9, 6);
-    for (const s of [0, Math.PI]) {
-      arm(b, S, H, ba + s, 2.0, 4, [U_.blue, U_.bluePale], H * 0.5);
-    }
-    for (let i = 0; i < 3; i++) {
-      const a = r() * TAU, d = S * (0.5 + r() * 0.4);
-      b.sphere(S * 0.06, U_.ice, { x: Math.cos(a) * d, y: H * 0.52, z: Math.sin(a) * d }, 6, 4);
-    }
+    b.ellip(S * 0.64, H * 0.5, S * 0.64, U_.amber, { y: yc }, 10, 7);
+    b.decor((d) => {
+      gradedDisc(d, S * 0.86, S * 1.46, [U_.blueDim, U_.spaceLit],
+        { y: yc, warp: 0.012, t: H * 0.025 }, 2, 22);
+      // the bar, proud of the lens so it is the thing you see first
+      d.ellip(S * 0.72, H * 0.36, S * 0.2, U_.amber, { y: yc + H * 0.16, ry: ba }, 9, 6);
+      d.ellip(S * 0.2, H * 0.42, S * 0.2, U_.goldPale, { y: yc }, 9, 6);
+      // and the arms, hung off its two ends
+      for (const sgn of [0, Math.PI]) {
+        spiralArm(d, S * 0.66, S * 1.44, ba + sgn, 2.9,
+          [U_.blue, U_.bluePale, U_.ice],
+          { y: yc + H * 0.29, w: 0.075, h: 0.26, seg: 5, hseg: 3 }, 12);
+      }
+      for (let i = 0; i < 3; i++) {
+        const a = r() * TAU, dd = S * (0.95 + r() * 0.5);
+        d.sphere(S * 0.055, U_.ice, { x: Math.cos(a) * dd, y: yc + H * 0.03, z: Math.sin(a) * dd }, 6, 4);
+      }
+    });
   } });
 
-P({ id: 'u_lenticular', name: 'Lenticular Galaxy', cat: 'galaxy', fill: 0.4, variants: 3, weight: 12,
+P({ id: 'u_lenticular', name: 'Lenticular Galaxy', cat: 'galaxy', sizeMul: 1.2947, fill: 0.8681, variants: 3, weight: 12,
   build(b, r, v) {
-    const S = SP.lenticular, H = S * 0.76;
-    envelope(b, S, H, U_.goldDim, 0.95);
-    // a spiral that ran out of gas: big bulge, smooth disc, no arms
-    b.cyl(S * 0.9, S * 0.9, H * 0.13, U_.amber, { y: H * 0.5 }, 11);
-    b.ellip(S * 0.42, H * 0.42, S * 0.42, U_.goldPale, { y: H * 0.5 }, 9, 6);
-    b.cyl(S * 0.62, S * 0.62, H * 0.06, U_.redDim, { y: H * (0.5 + 0.09 + v * 0.02) }, 10);
-    for (let i = 0; i < 5; i++) {
-      const a = r() * TAU, d = S * (0.3 + r() * 0.55);
-      b.sphere(S * 0.05, U_.goldPale, { x: Math.cos(a) * d, y: H * (0.42 + r() * 0.18), z: Math.sin(a) * d }, 6, 4);
-    }
+    /* A spiral that ran out of gas: big bulge, smooth disc, NO arms. The
+       absence is the identity, so the disc has to be visibly a disc for the
+       absence to register — which it could not be inside an envelope. */
+    const S = SP.lenticular, H = S * 0.76, yc = H * 0.5;
+    b.ellip(S * 0.68, H * 0.5, S * 0.68, U_.goldDim, { y: yc }, 10, 7);
+    b.decor((d) => {
+      gradedDisc(d, S * 0.88, S * 1.36, [U_.goldDim, U_.amber],
+        { y: yc, warp: 0.008, t: H * 0.03 }, 2, 22);
+      d.ellip(S * 0.42, H * 0.56, S * 0.42, U_.goldPale, { y: yc }, 9, 6);
+      // the one dust lane it still has
+      ring(d, S * 1.12, U_.redDim, { y: yc + H * 0.015, rx: 0.03, tube: 0.016 }, 18);
+      for (let i = 0; i < 5; i++) {
+        const a = r() * TAU, dd = S * (0.4 + r() * 0.7);
+        d.sphere(S * 0.05, U_.goldPale, { x: Math.cos(a) * dd, y: yc + (r() - 0.5) * H * 0.2, z: Math.sin(a) * dd }, 6, 4);
+      }
+    });
   } });
 
 P({ id: 'u_elliptical', name: 'Elliptical Galaxy', cat: 'galaxy', fill: 0.44, variants: 3, weight: 12,

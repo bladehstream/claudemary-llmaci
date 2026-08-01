@@ -158,9 +158,17 @@ export function spiralArm(b, r0, r1, a0, sweep, col, o = {}, n = 14) {
     const a = a0 + sweep * t;
     const d = r0 + (r1 - r0) * Math.pow(t, 0.78);
     const s = r1 * w * (1 - t * 0.55);
+    /* ⚠ `seg`/`hseg` MATTER MORE HERE THAN ANYWHERE ELSE IN THE KIT, because
+       this helper is the only one that multiplies: n elements times a full
+       ellipsoid each. At the default 6x4 an arm is 48 triangles an element,
+       and a 20-element arm on a prop placed 325 times is 312k triangles on its
+       own. The universe stage runs 3,360 props with single archetypes placed
+       665 times, so it is the LEAST able to afford detail in the whole game —
+       which is the opposite of the intuition that the biggest objects deserve
+       the most. */
     b.ellip(s * 2.1, s * h, s * 0.72, Array.isArray(col) ? col[i % col.length] : col, {
       x: Math.cos(a) * d, y, z: Math.sin(a) * d, ry: -a + Math.PI / 2, ghost: true,
-    }, S(6), S(4));
+    }, S(o.seg ?? 6), S(o.hseg ?? 4));
   }
   return b;
 }
