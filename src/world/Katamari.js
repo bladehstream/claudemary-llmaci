@@ -21,6 +21,16 @@ const _v2 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 const _up = new THREE.Vector3(0, 1, 0);
 
+/**
+ * How fast a magnet-snatched piece slides in, per second of exponential decay.
+ *
+ * 18 puts a piece taken from the far edge of a 0.6 magnet about 96% of the way
+ * home in a sixth of a second. Slow enough to read as motion rather than as a
+ * teleport with extra steps; fast enough that a stream of them does not turn
+ * the ball into a fuzzy halo of things queuing to land.
+ */
+const FLY_RATE = 18;
+
 export const TUNING = {
   /**
    * An object sticks when its `pickup` size is at most this multiple of the
@@ -57,6 +67,33 @@ export const TUNING = {
   pickupRatio: 0.88,
   /** Fraction of a collected object's volume that actually swells the ball. */
   packing: 0.48,
+
+  /**
+   * MAGNET: how much further than its own surface the ball may reach, at the
+   * slider's maximum, as a fraction of the radius.
+   *
+   * ⚠ REACH IS NOT APPETITE, AND THAT DISTINCTION IS THE WHOLE FEATURE. This
+   * scales the DISTANCE at which an already-collectable thing sticks. It does
+   * not touch `pickupRatio`, so it can never make something edible that was
+   * not edible before, and it deliberately does not extend the obstacle test
+   * either — a magnet that also made you bounce off walls you had not touched
+   * would be a bug wearing a feature's clothes. Every "is anything left"
+   * query in World.js keys off `pickupRatio` alone and so needs no change at
+   * all, which is a good sign the line is drawn in the right place.
+   *
+   * The reason it exists is not difficulty, it is INPUT RESOLUTION. Tilt is an
+   * analogue control with a real dead zone, read on a screen where a
+   * collectable thing can be a handful of pixels across; asking it for the
+   * precision a mouse gives is asking for something the hardware cannot
+   * deliver. Requested in exactly those terms — "to rebalance mobile tilt play
+   * and limited resolution".
+   *
+   * 0.6 is the ceiling, not the default. Swept area goes as the SQUARE of
+   * reach, so 1.6 radii covers 2.56x the ground per second — easily enough to
+   * move the balance of every stage, which is why what the slider does to
+   * clear rates is measured in `tools/test-magnet.mjs` rather than assumed.
+   */
+  magnetMax: 0.6,
 
   /**
    * Top speed = stageSpeed * (diameter / stageStartSize)^speedP.
@@ -341,6 +378,19 @@ export class Katamari {
     this.spinner.add(this.core);
 
     this.attached = [];            // {mesh, dir, size, embed, id}
+    /* Entries currently animating inwards from where they were snatched. A
+       separate list rather than a flag on every entry: `layoutAttached` runs
+       over all 260 attached pieces every frame and this is a handful at a
+       time, so paying for the animation once per flying piece rather than once
+       per attached piece is free. See `magnet`. */
+    this.flying = [];
+    /**
+     * Extra reach as a fraction of the radius, 0 = off. Set per round from the
+     * player's option; see TUNING.magnetMax. Deliberately an instance field
+     * rather than a module constant, because `tools/balance.mjs` drives this
+     * class directly and must be able to sweep it.
+     */
+    this.magnet = 0;
     this.uniqueIds = new Set();
     this.collectedCount = 0;
     this.biggest = null;
@@ -394,6 +444,7 @@ export class Katamari {
   reset(startRadius, spawn) {
     for (const a of this.attached) this.spinner.remove(a.mesh);
     this.attached.length = 0;
+    this.flying.length = 0;
     this.uniqueIds.clear();
     this.collectedCount = 0;
     this.biggest = null;
@@ -414,6 +465,15 @@ export class Katamari {
     this.group.position.copy(this.pos);
   }
 
+  /**
+   * How far from the ball's CENTRE a collectable thing still sticks.
+   *
+   * Equal to the radius with the magnet off, which is what makes this safe to
+   * substitute for `radius` at every collection site in `World.resolve`
+   * without changing default behaviour by a single float.
+   */
+  get reach() { return this.radius * (1 + this.magnet); }
+
   /** Can this archetype be picked up right now? */
   canPickUp(arch) {
     return arch.pickup <= this.diameter * TUNING.pickupRatio;
@@ -426,7 +486,17 @@ export class Katamari {
    * @param {number} variant which geometry variant
    * @param {number} rotY the object's world Y rotation
    */
-  attach(arch, worldPos, variant, rotY, rnd) {
+  /**
+   * @param {number} [fly] how far outside the ball's surface this was taken
+   *   from. Non-zero only with the magnet on, and purely cosmetic: the piece
+   *   is attached and counted immediately, then DRAWN sliding inwards from
+   *   where it was. Without it a magnet reads as scenery blinking out of
+   *   existence a body-width away, which looks like a rendering fault rather
+   *   than like a feature — the growth is the same either way, so the only
+   *   thing this buys is the player being able to see what happened, which is
+   *   the entire reason the setting is discoverable at all.
+   */
+  attach(arch, worldPos, variant, rotY, rnd, fly = 0) {
     // Outward direction from the ball centre towards the object, in ball space.
     _v1.copy(worldPos).sub(this.pos);
     if (_v1.lengthSq() < 1e-9) _v1.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5);
@@ -459,8 +529,12 @@ export class Katamari {
       embed: Math.min(arch.embed, arch.pickup * 0.5),
       twist,
       tilt,
+      /* Radial offset still to be travelled, in world units. `layoutAttached`
+         adds it to the resting distance and `step` decays it to zero. */
+      fly: fly > 0 ? fly : 0,
       quat: new THREE.Quaternion(),
     };
+    if (entry.fly > 0) this.flying.push(entry);
     // Orient +Y along the outward normal, then twist/tilt for variety.
     entry.quat.setFromUnitVectors(_up, dir);
     _q1.setFromAxisAngle(dir, twist);
@@ -520,7 +594,35 @@ export class Katamari {
     const R = this.radius;
     for (const a of this.attached) {
       const sink = Math.min(a.embed, R * 0.42);
-      a.mesh.position.copy(a.dir).multiplyScalar(R - sink);
+      // `a.fly` is 0 for everything that was not magnet-snatched, so this is
+      // the same arithmetic it has always been in the overwhelming case.
+      a.mesh.position.copy(a.dir).multiplyScalar(R - sink + a.fly);
+    }
+  }
+
+  /**
+   * Advance the magnet's in-flight pieces. Called once per frame, not per
+   * physics sub-step: it is animation, it must not be run eight times at 1/120
+   * and land somewhere different on a slow machine than on a fast one.
+   *
+   * Frame-rate independent decay, so the slide looks identical at 30fps and
+   * 144. The floor is relative to the ball, because "close enough to stop
+   * animating" is a different absolute distance for a marble and for a moon.
+   */
+  updateFlight(dt) {
+    if (!this.flying.length) return;
+    const k = Math.exp(-FLY_RATE * dt);
+    const floor = this.radius * 0.01;
+    for (let i = this.flying.length - 1; i >= 0; i--) {
+      const a = this.flying[i];
+      a.fly *= k;
+      /* Dropped by `pruneAttached` or `knockOff` while still in the air. Its
+         mesh is gone, so it must leave this list too or it is a slow leak of
+         entries nothing will ever finish. */
+      if (a.fly < floor || !a.mesh.parent) {
+        a.fly = 0;
+        this.flying.splice(i, 1);
+      }
     }
   }
 

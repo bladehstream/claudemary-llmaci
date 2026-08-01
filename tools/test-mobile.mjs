@@ -634,6 +634,80 @@ console.log('\n=== the thumb buttons ===');
     `"${(slider.note || '').slice(0, 48)}…"`);
   check('and is persisted', Math.abs(slider.saved - 1.6) < 1e-9, `options.tiltRange ${slider.saved}`);
 
+  /* ---- The whole Options panel, generically ----
+     ⚠ EVERY control, not a named list. The phone media query drops each row's
+     control onto its own line and centres it, and the bug it exists to fix was
+     never "the checkbox is wrong" — it was that only `input[type=range]` had
+     ever been PLACED, so anything added later auto-flowed to the left edge and
+     sat visibly out of line with a panel whose every other element is centred.
+     That is a bug about the next control somebody adds, so the assertion has to
+     be about all of them. Measured at the time: 51px off centre for the
+     selects, 151px for the checkboxes, 89px for the Reset Progress pill. */
+  await page.evaluate(() => { window.__llmaci.onAction('back-title'); window.__llmaci.onAction('options'); });
+  await page.waitForSelector('#options-screen:not(.hidden)');
+  const opts = await page.evaluate(() => {
+    const panel = document.querySelector('#options-screen .panel');
+    const pr = panel.getBoundingClientRect();
+    const mid = (pr.left + pr.right) / 2;
+    const bad = [];
+    let n = 0;
+    for (const el of panel.querySelectorAll('.opt-row > input, .opt-row > select, .opt-row > .btn')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      n++;
+      const id = el.id || el.dataset.action || el.type || el.tagName.toLowerCase();
+      // Ranges are width:100% and centred by construction; everything else has
+      // to be centred by the rule, which is the thing actually under test.
+      const full = r.width > pr.width * 0.8;
+      const off = Math.abs((r.left + r.right) / 2 - mid);
+      if (!full && off > 12) bad.push(`${id} is ${Math.round(off)}px off centre`);
+      if (r.left < pr.left - 1 || r.right > pr.right + 1) bad.push(`${id} escapes the panel`);
+      if (r.height < 20) bad.push(`${id} is only ${Math.round(r.height)}px tall`);
+    }
+    return { bad, n, notes: panel.querySelectorAll('.opt-note').length };
+  });
+  check('every Options control is measured', opts.n >= 10, `${opts.n} controls, ${opts.notes} notes`);
+  check('and every one of them is centred and inside the panel', opts.bad.length === 0,
+    opts.bad.join('; '));
+
+  /* The two settings added for phone play specifically. Both are sliders whose
+     entire justification is that the value cannot be chosen from a desk, so
+     both have to actually reach the thing they claim to move — the tilt band
+     was inert for the life of the project for exactly this reason. */
+  const added = await page.evaluate(() => {
+    const g = window.__llmaci;
+    const move = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      el.value = String(v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    };
+    const ok = move('opt-magnet', 100) && move('opt-zoom', 180);
+    const out = {
+      ok,
+      magnet: g.kat.magnet,
+      magnetNote: document.getElementById('opt-magnet-note').textContent,
+      zoom: g.rig.zoom,
+      zoomNote: document.getElementById('opt-zoom-note').textContent,
+      savedZoom: g.options.zoom,
+    };
+    move('opt-magnet', 0);
+    out.magnetOff = g.kat.magnet;
+    return out;
+  });
+  check('both new sliders exist', added.ok);
+  check('the magnet slider reaches the katamari',
+    Math.abs(added.magnet - 0.6) < 1e-9 && added.magnetOff === 0,
+    `100 -> ${added.magnet}, 0 -> ${added.magnetOff}`);
+  check('and its note says what it does NOT do',
+    /does NOT change what is small enough/i.test(added.magnetNote || ''));
+  check('the zoom slider reaches the camera rig',
+    Math.abs(added.zoom - 1.8) < 1e-9 && Math.abs(added.savedZoom - 1.8) < 1e-9,
+    `180 -> ${added.zoom}`);
+  check('and its note admits the cost, not only the benefit',
+    /harder to aim|less warning/i.test(added.zoomNote || ''));
+
   await ctx.close();
 }
 

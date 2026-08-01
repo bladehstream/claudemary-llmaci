@@ -175,6 +175,18 @@ export class Game {
          no measurement here can find one. Shipped as a slider rather than as a
          constant plus a round trip every time it feels wrong. */
       tiltRange: 1,
+      /* MAGNET, 0..1, scaled by TUNING.magnetMax into extra reach.
+         Defaulted in `_load` rather than here, because the right value differs
+         by input device and the honest default on a phone is not the honest
+         default on a desktop — see the note there. */
+      magnet: 0,
+      magnetSet: false,
+      /* CAMERA ZOOM, multiplying each stage's own chase distance. 1 = as the
+         stage was designed. Not clamped tighter than the slider because the
+         rig already refuses to leave the stage bounds or sink through the
+         floor, so the failure mode at the extremes is "the view stops getting
+         wider", not a broken camera. */
+      zoom: 1,
       /* Fart mode. Deliberately NOT given an Options row — it is unlocked by
          tapping the play area ten times and the discovery is most of the joke.
          It lives in `options` rather than in `save` so that Reset Progress
@@ -335,6 +347,21 @@ export class Game {
         // back out rather than just sitting in `this.options`.
         if (typeof this.options.speedCurve === 'number') TUNING.speedP = this.options.speedCurve;
       }
+      /* THE MAGNET DEFAULT IS DEVICE-DEPENDENT, and that is the point of it.
+         A mouse gives pixel-accurate steering; tilt is an analogue control with
+         a dead zone, read on a screen where a collectable thing can be a few
+         pixels across. One default cannot be right for both, and picking the
+         desktop one for everybody is how a feature ends up doing nothing for
+         the people who asked for it.
+
+         ⚠ AFTER the merge, not before. Running it first would apply the
+         device default and then have the saved value overwrite it, which is
+         both pointless and exactly backwards. Re-applied on EVERY load until
+         the player moves the slider — the same trap `speedCurveSet` exists to
+         avoid, and for the same reason: a shipped default frozen into
+         somebody's localStorage is a retune that silently misses its whole
+         audience. */
+      if (!this.options.magnetSet) this.options.magnet = isCoarsePointer() ? 0.5 : 0.25;
     } catch { /* corrupt or unavailable storage — start fresh */ }
   }
 
@@ -432,6 +459,17 @@ export class Game {
        menu, defer this to `loadStage` — every control rate is a multiple of top
        speed, so changing it mid-roll would make the ball lurch. */
     if (key === 'speedCurve') { TUNING.speedP = value; this.options.speedCurveSet = true; }
+    /* Live, unlike speedCurve — the magnet is read fresh from `kat.magnet` on
+       every collision pass, so writing it straight through is safe even
+       mid-round, and it is the one setting where being able to feel the change
+       while you move the slider is worth something. */
+    if (key === 'magnet') {
+      this.options.magnetSet = true;
+      if (this.kat) this.kat.magnet = value * TUNING.magnetMax;
+    }
+    // Also live: the rig reads it every frame, and a zoom you cannot see
+    // yourself changing is a zoom nobody can set correctly.
+    if (key === 'zoom') this.rig.zoom = value;
     if (key === 'controls' || key === 'turn' || key === 'tiltRange') this._applyControlMode();
     this._persist();
   }
@@ -672,9 +710,13 @@ export class Game {
       const width = stage.bounds.maxX - stage.bounds.minX;
       const span = Math.max(4, (stage.goal * 1.5) / stage.startSize);
       this.kat.setStageProfile(stage.startSize, stageSpeedFor(stage), span);
+      this.kat.magnet = (this.options.magnet || 0) * TUNING.magnetMax;
       this.kat.reset(stage.startSize / 2, new THREE.Vector3(stage.spawn.x, isFinite(spawnY) ? spawnY : 0, stage.spawn.z));
       this.kat.group.visible = true;
       this.rig.configure(stage.camera, Math.PI);
+      // `configure` resets the rig to the stage's own numbers, so the player's
+      // zoom has to be re-applied after it or it silently reverts every round.
+      this.rig.zoom = this.options.zoom || 1;
       this.rig._initialised = false;
       this.rig.update(0.016, this.kat, this.world);
 
@@ -825,7 +867,7 @@ export class Game {
       this.scene.followSky(cam.position, 900);
       this.scene.followSun(new THREE.Vector3(0, 0, 0), 1.5);
     } else if (this.kat) {
-      if (this.stage) this.rig.fogFar = this.scene.updateFog(this.kat.diameter, this.stage.startSize);
+      if (this.stage) this.rig.fogFar = this.scene.updateFog(this.kat.diameter, this.stage.startSize, this.rig.zoom);
       const far = this.rig.update(dt, this.kat, this.world);
       this.scene.followSky(cam.position, far);
       this.scene.followSun(this.kat.group.position, this.kat.radius);
@@ -904,6 +946,9 @@ export class Game {
        following frames; capping stops a long stall from banking seconds of
        simulation and then replaying it as a lurch. */
     if (steps === 8) this.accum = Math.min(this.accum, H * 8);
+    // Once per frame, before the layout that reads it — it is animation, not
+    // simulation, and must not run once per physics sub-step.
+    kat.updateFlight(dt);
     kat.layoutAttached();
     world.update(dt, kat.diameter);
 
@@ -987,7 +1032,7 @@ export class Game {
 
     /* ---- audio + camera ---- */
     this.sfx.updateRoll(kat.speedFrac, d, !kat.airborne, kat.lumpy);
-    this.rig.fogFar = this.scene.updateFog(d, this.stage.startSize);
+    this.rig.fogFar = this.scene.updateFog(d, this.stage.startSize, this.rig.zoom);
     const far = this.rig.update(dt, kat, world);
     this.scene.followSky(this.scene.camera.position, far);
     this.scene.followSun(kat.group.position, kat.radius);

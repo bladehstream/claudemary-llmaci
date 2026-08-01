@@ -71,6 +71,14 @@ const RUNS = flag('runs') ? Math.max(1, parseInt(flag('runs'), 10)) : 5;
    does not, which is usually the deciding difference. */
 if (flag('packing')) TUNING.packing = parseFloat(flag('packing'));
 if (flag('pickup')) TUNING.pickupRatio = parseFloat(flag('pickup'));
+/* `--magnet=0..1` is the PLAYER-FACING slider value, not raw reach, so a number
+   typed here means the same thing as the same number in Options.
+   ⚠ Read this sweep as "what does the extra reach do to the PACE of a stage",
+   never as "how much does it help". The bot is a bad proxy for what a magnet is
+   for: it already routes perfectly and never fumbles the last centimetre of
+   aim, which is the entire thing the setting exists to forgive. Only a human
+   can answer the second question. */
+const MAGNET = flag('magnet') ? parseFloat(flag('magnet')) * TUNING.magnetMax : 0;
 /* Sweep knobs for the speed model. `speedP` is the top-speed exponent; `agility`
    overrides the huge-end accel/brake/turn multiplier (the small end is a fixed
    9.0). `timeMul` and `densityMul` scale every stage's clock and prop count, so
@@ -185,6 +193,7 @@ function densityReport(world, stage) {
 function run(stage, seed = 99) {
   const world = new World(mat).build(stage);
   const kat = new Katamari(mat, stage.startSize / 2);
+  kat.magnet = MAGNET;
   applyStageProfile(kat, stage);
   const rng = makeRng(seed);
   const spawnY = world.groundAt(stage.spawn.x, stage.spawn.z);
@@ -333,6 +342,7 @@ function runSweeper(stageIn, seed = 7) {
   const stage = TIMEOVR ? { ...stageIn, time: TIMEOVR } : stageIn;
   const world = new World(mat).build(stage);
   const kat = new Katamari(mat, stage.startSize / 2);
+  kat.magnet = MAGNET;
   applyStageProfile(kat, stage);
   const rng = makeRng(seed);
   kat.reset(stage.startSize / 2, new THREE.Vector3(stage.spawn.x, world.groundAt(stage.spawn.x, stage.spawn.z), stage.spawn.z));

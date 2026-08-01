@@ -17,6 +17,21 @@ export class CameraRig {
     this.yaw = 0;
     this.pitch = 0.34;
     this.distMul = 6.2;
+    /**
+     * Player zoom, multiplying the stage's own chase distance. 1 = as designed.
+     *
+     * ⚠ A MULTIPLIER, NOT AN OFFSET, and that is not a stylistic choice. The
+     * entire rig is expressed in RADII so that a 5cm katamari and a 150m one
+     * fill the same slice of screen; an absolute "pull back 8 metres" would be
+     * invisible in the city and put the camera into orbit in the house.
+     *
+     * ⚠ AND IT IS USELESS WITHOUT THE MATCHING FOG. Fog distance is a function
+     * of ball size alone, so pulling the camera back without widening it just
+     * buys the player more fog to look at — strictly worse than not zooming.
+     * `Scene.updateFog` takes the same number for that reason; if you ever set
+     * this from somewhere new, set that too.
+     */
+    this.zoom = 1;
     this.pos = new THREE.Vector3();
     this.look = new THREE.Vector3();
     this.shake = 0;
@@ -69,7 +84,7 @@ export class CameraRig {
      * height, shrinks that wedge, and pulls the band where the props actually
      * live down into the middle of the frame where the player is looking. */
     const tall = this.camera.aspect < 1;
-    const distMul = tall ? this.distMul * 1.25 : this.distMul;
+    const distMul = (tall ? this.distMul * 1.25 : this.distMul) * this.zoom;
     const pitch = tall ? Math.max(-0.12, this.pitch - 0.08) : this.pitch;
 
     // Distance is a function of SIZE ONLY. It used to also pull back with

@@ -95,10 +95,18 @@ export class Scene {
    * scaling the fog with size fixes the look and lets the frustum throw
    * away most of the stage while you are still small.
    * Returns the far distance so the camera can match it.
+   *
+   * ⚠ `zoom` IS NOT OPTIONAL POLISH — it is what makes the zoom setting do
+   * anything at all. Fog distance is otherwise a function of ball size alone,
+   * so pulling the camera back with an unchanged fog wall buys the player a
+   * bigger helping of fog and a SMALLER view of the world, which is worse than
+   * not zooming. Applied to `near` as well as `far`: scaling only the far edge
+   * stretches the gradient out over a longer run and the fog stops reading as
+   * distance and starts reading as a dirty lens.
    */
-  updateFog(diameter, startSize) {
+  updateFog(diameter, startSize, zoom = 1) {
     if (!this._fogBase) return this.scene.fog.far;
-    const f = clamp(Math.sqrt(Math.max(1e-6, diameter / startSize)), 0.6, 2.4);
+    const f = clamp(Math.sqrt(Math.max(1e-6, diameter / startSize)), 0.6, 2.4) * (zoom || 1);
     const near = this._fogBase.near * f;
     const far = this._fogBase.far * f;
     this.scene.fog.near = damp(this.scene.fog.near, near, 3, 1 / 60);

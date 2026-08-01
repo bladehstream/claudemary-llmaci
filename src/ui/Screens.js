@@ -3,6 +3,7 @@
    ============================================================ */
 
 import { formatSize, formatSizeShort, formatTime, clamp } from '../util/math.js';
+import { TUNING } from '../world/Katamari.js';
 import { ARCHETYPES } from '../world/props/index.js';
 import { C } from '../render/palette.js';
 
@@ -187,6 +188,16 @@ export class Screens {
       this._speedCurveLabel(v);
       this.game.setOption('speedCurve', v / 100);
     });
+    bind('opt-magnet', 'input', (e) => {
+      const v = +e.target.value;
+      this._magnetLabel(v);
+      this.game.setOption('magnet', v / 100);
+    });
+    bind('opt-zoom', 'input', (e) => {
+      const v = +e.target.value;
+      this._zoomLabel(v);
+      this.game.setOption('zoom', v / 100);
+    });
     bind('opt-controls', 'change', (e) => this.game.setOption('controls', e.target.value));
     bind('opt-turn', 'change', (e) => this.game.setOption('turn', e.target.value));
     bind('opt-tiltrange', 'input', (e) => {
@@ -250,6 +261,58 @@ export class Screens {
       + `Steering scales with it.`;
   }
 
+  /**
+   * Say what the magnet does in the units the player can see it in.
+   *
+   * "Magnet 50" is meaningless. "Half a ball-width past the edge" is something
+   * you can picture before you have played a round with it, and the sentence
+   * has to carry the one thing the setting does NOT do — this is the setting
+   * most likely to be read as "makes the game easier", and the honest answer
+   * is that it changes where your hand has to be, not what you are allowed
+   * to eat.
+   */
+  _magnetLabel(v) {
+    const el = document.getElementById('opt-magnet-note');
+    const val = document.getElementById('opt-magnet-val');
+    if (val) val.textContent = String(v);
+    if (!el) return;
+    const extra = (v / 100) * TUNING.magnetMax;      // in radii
+    el.textContent = extra <= 0
+      ? 'Off. Things stick only when the ball actually touches them.'
+      : `Things stick from about ${(extra * 0.5).toFixed(2)} ball-widths past the edge of the `
+        + `katamari, and are pulled in. It does NOT change what is small enough to pick up — `
+        + `only how precisely you have to steer. Worth turning up on a phone, where tilt and a `
+        + `small screen make the last few centimetres of aim guesswork.`;
+  }
+
+  /**
+   * Zoom, quoted as what it costs as well as what it buys.
+   *
+   * Pulling back genuinely makes the katamari smaller on screen, and on a
+   * phone that is the difference between seeing a thumbtack and not. Saying
+   * only the good half would leave the player to discover the bad half by
+   * being unable to aim.
+   */
+  _zoomLabel(v) {
+    const el = document.getElementById('opt-zoom-note');
+    const val = document.getElementById('opt-zoom-val');
+    if (val) val.textContent = String(v);
+    if (!el) return;
+    const z = v / 100;
+    // Ground covered goes as the square of the distance; the ball's apparent
+    // size goes as its inverse.
+    const area = z * z;
+    el.textContent = z === 1
+      ? 'The distance each stage was designed around.'
+      : `About ${area.toFixed(1)}x the ground in view, with the katamari itself `
+        + `${(100 / z).toFixed(0)}% of its usual size on screen. `
+        + (z > 1
+          ? 'Further back shows you more of what is coming and makes small things harder to aim at — '
+            + 'worth pairing with a bit more Magnet.'
+          : 'Closer in makes aiming easier and gives you less warning about what is ahead.')
+        + ' The fog moves with it, so the extra distance is really there.';
+  }
+
   syncOptions(o) {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
     set('opt-music', Math.round(o.music * 100));
@@ -257,11 +320,15 @@ export class Screens {
     set('opt-sens', Math.round(o.sensitivity * 100));
     set('opt-speedcurve', Math.round(o.speedCurve * 100));
     set('opt-tiltrange', Math.round((o.tiltRange ?? 1) * 100));
+    set('opt-magnet', Math.round((o.magnet ?? 0) * 100));
+    set('opt-zoom', Math.round((o.zoom ?? 1) * 100));
     document.getElementById('opt-music-val').textContent = String(Math.round(o.music * 100));
     document.getElementById('opt-sfx-val').textContent = String(Math.round(o.sfx * 100));
     document.getElementById('opt-sens-val').textContent = String(Math.round(o.sensitivity * 100));
     this._speedCurveLabel(Math.round(o.speedCurve * 100));
     this._tiltRangeLabel(Math.round((o.tiltRange ?? 1) * 100));
+    this._magnetLabel(Math.round((o.magnet ?? 0) * 100));
+    this._zoomLabel(Math.round((o.zoom ?? 1) * 100));
     document.getElementById('opt-invert').checked = !!o.invertY;
     const ctl = document.getElementById('opt-controls');
     if (ctl) ctl.value = o.controls || 'auto';

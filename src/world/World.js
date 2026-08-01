@@ -591,13 +591,24 @@ export class World {
     const ballTop = kat.pos.y + R;
     const f = this.field;
     const pickupLimit = D * TUNING.pickupRatio;
+    /* ⚠ TWO RADII FROM HERE DOWN, AND THEY MEAN DIFFERENT THINGS.
+       `R` is the ball itself, and everything about being BLOCKED keys off it —
+       a magnet must never make you bounce off something you have not touched.
+       `reach` is how far COLLECTION extends, and is exactly equal to `R` when
+       the magnet is off. The broadphase query has to use the larger of the two
+       or the extra reach never finds anything to use itself on. */
+    const reach = kat.reach;
     let knock = 0;
 
-    f.query(kat.pos.x, kat.pos.z, R, (i) => {
+    f.query(kat.pos.x, kat.pos.z, reach, (i) => {
       const ix = f.x[i], iz = f.z[i];
       let ddx = kat.pos.x - ix, ddz = kat.pos.z - iz;
       let d = Math.hypot(ddx, ddz);
-      if (d > R + f.rad[i]) return;
+      /* Edible right now? Decidable from the prop alone, so the correct radius
+         can be picked before any of the expensive work below happens. */
+      const eat = f.pickup[i] <= pickupLimit;
+      const rr = eat ? reach : R;
+      if (d > rr + f.rad[i]) return;
 
       const itemTop = f.y[i] + f.hgt[i];
       const itemBottom = f.y[i];
@@ -637,19 +648,24 @@ export class World {
       let pr = 0;
       for (let s = s0; s <= s1; s++) { const v = arch.profile[s]; if (v > pr) pr = v; }
       pr *= sc;
-      const sum = R + pr;
+      const sum = rr + pr;
       if (d > sum) return;
 
       if (d < 1e-6) { ddx = 1; ddz = 0; d = 1e-6; }
       const nx = ddx / d, nz = ddz / d;
 
-      if (f.pickup[i] <= pickupLimit) {
+      if (eat) {
         // Anything small enough sticks the moment it is touched — including
         // stamps and coins, which are almost flat.
-        if (d < R + pr * 0.75) {
+        if (d < rr + pr * 0.75) {
           const wp = new THREE.Vector3(ix, f.y[i] + Math.min(f.hgt[i] * 0.5, R), iz);
           f.remove(i);
-          kat.attach(arch, wp, f.variant[i], f.rotY[i], rnd);
+          /* `d - R` is how far outside the ball's actual surface this was
+             snatched from — zero without a magnet, and what the piece flies in
+             across when there is one. Passing it here rather than recomputing
+             inside `attach` keeps the one place that knows about `reach` the
+             one place that knows about `reach`. */
+          kat.attach(arch, wp, f.variant[i], f.rotY[i], rnd, Math.max(0, d - R));
           /* `idx` is the prop's index in the one PropField. It is stable for the
              life of a world AND identical on every machine, because the world is
              built deterministically from `stage.seed` — which makes it the whole

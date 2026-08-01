@@ -1082,6 +1082,17 @@ body.touch .finish-prompt { pointer-events: auto; cursor: pointer; }
   .opt-row > .btn {
     grid-column: 1 / -1; grid-row: 2; justify-self: center;
   }
+  /* A DEFAULT RANGE INPUT IS A 16px-TALL TOUCH TARGET, which is half what a
+     finger needs and about a third of what every other control in this panel
+     offers. It is the element's whole box, not just the visual track, so there
+     is no hidden padding making up the difference — the thumb is simply a
+     small thing to hit while you are holding the phone one-handed, which is
+     exactly the posture these sliders exist to accommodate.
+     Found by the generic Options measurement in `test-mobile`, not by anyone
+     looking: it had been true of all seven sliders for the life of the
+     project. Height only — the track keeps its own painted thickness and the
+     control looks identical, it is just no longer a sliver. */
+  .opt-row input[type=range] { height: 36px; }
   .opt-note { font-size: 12px; max-width: none; }
 
   .how-grid { grid-template-columns: 1fr; gap: 6px; }

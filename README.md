@@ -145,6 +145,41 @@ drawn properly everywhere else. There is now one list, in the stylesheet that us
 
 Click the canvas to capture the pointer; dragging works too if you'd rather not.
 
+### Magnet and camera distance
+
+Two settings in Options that exist because a thumb on a screen is not a mouse on a desk.
+
+**Magnet** extends how far the katamari REACHES, and nothing else. It does not change what is
+small enough to pick up — that is `pickupRatio`, it is what the whole size ladder is built on,
+and the magnet does not touch it. It deliberately does not extend the *obstacle* test either,
+so turning it up never makes you bounce off something you have not touched. Things caught at
+range visibly fly in rather than blinking out of existence, because otherwise it reads as a
+rendering fault. It defaults higher on a touchscreen than on a desktop, and re-applies that
+device default on every load until you move the slider yourself.
+
+What it does to the balance, measured across the slider's whole range with `npm run magnet`:
+almost nothing to final size, and a real improvement to *consistency*. The house — the tightest
+stage in the game — goes from 2 bot clears in 3 at zero to 3 in 3 at maximum, while the goal
+stays at 73-77% of a median run. That is the right shape for an aim assist: it forgives the
+last centimetre of approach without inflating what you end up with. The bot is a poor proxy for
+the feature's real value, mind, since it already routes perfectly and never fumbles.
+
+**Camera distance** multiplies each stage's own chase distance. The fog moves with it, and that
+is not polish — it is the feature. Fog distance is otherwise a function of ball size alone, so
+pulling the camera back without widening the fog buys you a bigger helping of fog and a
+*smaller* view of the world.
+
+`npm run zoom` measures what it actually does, and the shape is worth knowing before anyone
+"fixes" it. At 1.8x the view is **1.8x wider at the katamari's own depth** (3.0m across → 5.2m
+in the town) and the ball is **57% of its usual size on screen** — which is the number the
+Options note quotes, so the note is checked against the projection rather than trusted. But the
+number of *nearby objects* in frame only rises about 14%, and the total triangle count by 1%.
+That is not the setting under-delivering, it is geometry: the view is a cone from the camera, so
+moving the apex back widens it near the ball and barely at all far away, where the field of view
+takes over. Zoom is for seeing what you are steering through, not for seeing further — the fog
+already reaches past the edge of most stages. The upside is that it is nearly free: 1.01x the
+triangles and 1.01x the draw calls at the widest setting.
+
 ### On a phone
 
 Portrait, and it switches itself on — see [Playing on a phone](#playing-on-a-phone).
@@ -1051,6 +1086,9 @@ npm run mobile                    # the phone build: tilt, thumb buttons, portra
 npm run audio                     # silence is silent and a fader at 0 is actually zero
 npm run speedcurve                # the speed-curve slider is settable, sticky and live
 npm run net                       # the wire format, two real peers, and two real tabs
+npm run magnet                    # reach is not appetite: exact distances, then the
+                                  # balance sweep across the slider's whole range
+npm run zoom                      # the camera, the fog and the far plane move together
                                   # connecting end to end through the actual UI
 node tools/shot.mjs house         # screenshot a representative moment
 node tools/shot-ui.mjs            # screenshot the menus, the prompt chips and the ending
