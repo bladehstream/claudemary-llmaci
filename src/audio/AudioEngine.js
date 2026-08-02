@@ -135,6 +135,41 @@ export class AudioEngine {
     this.musicVol = 0.65;
     this.sfxVol = 0.8;
     this.muted = false;
+    /**
+     * How much room the MUSIC is playing in: a multiplier on every music
+     * voice's reverb send. 1 is the value each voice was tuned at.
+     *
+     * ⚠ THE CHEAPEST CHARACTER KNOB IN THE ENGINE, and that is why it exists.
+     * Eleven stages spanning quantum foam to the observable universe were all
+     * playing in the same small room, because every send gain was a constant
+     * baked into its own voice. `Music.play` sets this from `song.space`, so
+     * the house is a room and the universe is a canyon without one new
+     * oscillator.
+     *
+     * Applied when a note is built, so it takes effect on the next note rather
+     * than smearing the tail of the one already sounding. A stage change is a
+     * cut, not a crossfade.
+     *
+     * ⚠ SFX ARE EXEMPT ON PURPOSE. They are diegetic, they play over every
+     * stage, and drowning a pickup blip in cathedral reverb because the
+     * universe theme wanted space is a bug in a feature's clothing. `_send`
+     * only scales a send returning into the MUSIC bus.
+     */
+    this.space = 1;
+  }
+
+  /**
+   * Build a voice's reverb send, scaled by the music's current room size.
+   *
+   * Every voice routes through here rather than setting `send.gain.value`
+   * itself, so `space` cannot be forgotten by one voice and silently apply to
+   * the other ten.
+   */
+  _send(base, dest) {
+    const g = this.ctx.createGain();
+    g.gain.value = dest === this.sfx ? base : base * this.space;
+    g.connect(this._revFor(dest));
+    return g;
   }
 
   /** Must be called from a user gesture. */
@@ -595,8 +630,8 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
     wood.connect(g); g.connect(dest);
 
-    const send = ctx.createGain(); send.gain.value = 0.12;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.12, dest);
+    g.connect(send);
 
     o1.start(t); sub.start(t);
     o1.stop(t + dur + 0.05); sub.stop(t + dur + 0.05);
@@ -727,8 +762,8 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
     body.connect(g); g.connect(dest);
 
-    const send = ctx.createGain(); send.gain.value = 0.2;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.2, dest);
+    g.connect(send);
 
     o1.start(t); o2.start(t);
     o1.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
@@ -860,8 +895,8 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
 
     bar.connect(g); g.connect(dest);
-    const send = ctx.createGain(); send.gain.value = 0.4;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.4, dest);
+    g.connect(send);
 
     car.start(t); trem.start(t);
     for (const o of modeOsc) { o.start(t); o.stop(t + dur + 0.05); }
@@ -987,8 +1022,8 @@ export class AudioEngine {
     /* The send taps the tone only. Close-mic'd brass sends its body to the
      * room; the breath is a few centimetres from the player's face and never
      * reaches the far wall loudly enough to matter. */
-    const send = ctx.createGain(); send.gain.value = 0.22;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.22, dest);
+    g.connect(send);
   }
 
   /**
@@ -1099,8 +1134,8 @@ export class AudioEngine {
     g.gain.setValueAtTime(peak, t + Math.max(0.06, dur * 0.55));
     g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + dur * hum);
     sum.connect(g); g.connect(dest);
-    const send = ctx.createGain(); send.gain.value = 0.36;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.36, dest);
+    g.connect(send);
 
     src.start(t); vib.start(t);
     src.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
@@ -1208,8 +1243,8 @@ export class AudioEngine {
     }
     og.connect(dest);
 
-    const send = ctx.createGain(); send.gain.value = 0.3;
-    ng.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.3, dest);
+    ng.connect(send);
   }
 
   /** Cross-stick / rim click — the heartbeat of the bossa groove. */
@@ -1246,8 +1281,8 @@ export class AudioEngine {
     o.connect(g); g.connect(dest);
     o.start(t); o.stop(t + 0.09);
 
-    const send = ctx.createGain(); send.gain.value = 0.25;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.25, dest);
+    g.connect(send);
   }
 
   hat(t, gain = 0.14, open = false, out = null) {
@@ -1387,7 +1422,7 @@ export class AudioEngine {
     n.connect(bp); bp.connect(ng); ng.connect(dest);
     n.start(t); n.stop(stickEnd + 0.01);
 
-    const send = ctx.createGain(); send.gain.value = 0.22;
-    g.connect(send); send.connect(this._revFor(dest));
+    const send = this._send(0.22, dest);
+    g.connect(send);
   }
 }

@@ -133,12 +133,23 @@ const VOICES = ['kick', 'rim', 'snare', 'shaker', 'hat', 'tom', 'bass', 'pluck',
 
 /* Composites. "The drum pattern repeats every 3.2s" is a claim about the whole
    kit, not about the kick — the kick alone is usually 8-step periodic and would
-   flatter the score. `pluck` is the comping guitar and `vibe` is the tune; both
-   get an alias so the summary table can name what a listener would name. */
-const GROUPS = {
-  drums: ['kick', 'rim', 'snare', 'shaker', 'hat', 'tom'],
-  comp: ['pluck'],
-  melody: ['vibe'],
+   flatter the score.
+
+   ⚠ THE ROLE GROUPS ARE PER SONG NOW. They used to be the constants
+   `comp: ['pluck'], melody: ['vibe']`, which was true of all twelve songs
+   until `song.voices` let a stage put its tune on a choir and its comping on a
+   horn section. Left as constants, the summary printed "-" for the melody of
+   every song whose melody had moved and silently reported the wrong voice's
+   period for the rest. A harness that names a role has to read the same field
+   the scheduler reads. */
+const DRUMS = ['kick', 'rim', 'snare', 'shaker', 'hat', 'tom'];
+const groupsFor = (song) => {
+  const v = song.voices || {};
+  return {
+    drums: DRUMS,
+    comp: [v.comp || 'pluck'],
+    melody: [v.melody || 'vibe'],
+  };
 };
 
 class RecordingEngine {
@@ -406,6 +417,69 @@ function familiarity(fps) {
   };
 }
 
+/* ------------------------------------------------------------
+   How different are the STAGES from each other?
+   ------------------------------------------------------------
+
+   Everything above this point measures one song against itself. The player's
+   second request was the other axis entirely — "inject as much audio
+   difference between levels as possible" — and nothing here could see it: all
+   twelve songs could have been the same eight bars at the same tempo on the
+   same instruments and every number above would have been unchanged.
+
+   ⚠ AND IT WAS VERY NEARLY TRUE. Before the rescore, all twelve put the melody
+   on `vibe`, the comping on `pluck` and the bass on `bass`, differing only in
+   tempo, key and drum grid. That is a real defect a listener would name in
+   five seconds and no instrument in this repo could.
+
+   So: a feature vector per song, and the pairwise distances between them. The
+   headline is the MINIMUM — the two stages a player is most likely to mistake
+   for each other — because a mean flatters a set with one bad pair in it.
+
+   The features are the things that make a listener say "different piece", in
+   the order they notice them. Voice mix is weighted heaviest and deliberately:
+   which instruments are playing at all outranks what notes they play.
+*/
+const SIG_W = { tempo: 1.0, density: 0.9, dur: 0.9, mix: 2.2, register: 0.8, spread: 0.5, space: 1.1 };
+
+function signature(song, engine, seconds) {
+  const ev = engine.events;
+  const n = ev.length || 1;
+  const mix = {};
+  for (const v of VOICES) mix[v] = 0;
+  let durSum = 0;
+  const pitches = [];
+  for (const e of ev) {
+    mix[e.voice] = (mix[e.voice] || 0) + 1 / n;
+    durSum += (e.durSteps || 0) * engine.stepDur;
+    if (e.note != null) pitches.push(e.note);
+  }
+  pitches.sort((a, b) => a - b);
+  const median = pitches.length ? pitches[pitches.length >> 1] : 60;
+  const spread = pitches.length ? pitches[pitches.length - 1] - pitches[0] : 0;
+  return {
+    tempo: song.bpm / 160,
+    density: Math.min(1, ev.length / seconds / 25),
+    dur: Math.min(1, durSum / n / 3),
+    mix: VOICES.map((v) => mix[v]),
+    register: (median - 40) / 55,
+    spread: Math.min(1, spread / 48),
+    space: (song.space ?? 1) / 4.5,
+  };
+}
+
+/** Weighted Euclidean distance between two signatures. */
+function sigDist(a, b) {
+  let d = 0;
+  for (const k of ['tempo', 'density', 'dur', 'register', 'spread', 'space']) {
+    d += SIG_W[k] * (a[k] - b[k]) ** 2;
+  }
+  let m = 0;
+  for (let i = 0; i < a.mix.length; i++) m += (a.mix[i] - b.mix[i]) ** 2;
+  d += SIG_W.mix * m;
+  return Math.sqrt(d);
+}
+
 /** Distinct N-step chunks vs total chunks. */
 function uniqueChunks(fps, size) {
   const seen = new Set();
@@ -455,7 +529,7 @@ function analyse(songId, seconds, opts) {
   for (const v of VOICES) perVoice[v] = stats(engine.events.filter((e) => e.voice === v));
 
   const perGroup = {};
-  for (const [g, members] of Object.entries(GROUPS)) {
+  for (const [g, members] of Object.entries(groupsFor(song))) {
     perGroup[g] = stats(engine.events.filter((e) => members.includes(e.voice)));
   }
 
@@ -484,6 +558,7 @@ function analyse(songId, seconds, opts) {
     loopFull, loopNear,
     matchAtSongLoop: matchAt(fpFull, loopSteps),
     perVoice, perGroup, bars, loops, fam,
+    sig: signature(song, engine, seconds),
     phases: phases.size,
     barsPerPhase: bars.unique / phases.size,
   };
@@ -589,6 +664,48 @@ function reportTable(rows) {
   console.log(` FAMILIARITY (mean share of a bar the player has already heard): ${(famMean * 100).toFixed(1)}%`);
   console.log(` WORST SONG: ${worst.songId} at ${(100 * worst.fam.novel / worst.fam.total).toFixed(1)}%`
     + ` (${worst.fam.novel} novel bars in a ${worst.seconds}s round)`);
+
+  /* ---- how different are the stages from each other? ---- */
+  if (rows.length > 2) {
+    const pairs = [];
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        pairs.push({ a: rows[i], b: rows[j], d: sigDist(rows[i].sig, rows[j].sig) });
+      }
+    }
+    pairs.sort((x, y) => x.d - y.d);
+    const mean = pairs.reduce((a, p) => a + p.d, 0) / pairs.length;
+    /* Consecutive stages matter more than any other pair: they are the only
+       two a player hears within a couple of minutes of each other. */
+    const adj = [];
+    for (let i = 0; i + 1 < rows.length; i++) {
+      if (rows[i].songId === 'menu' || rows[i + 1].songId === 'menu') continue;
+      adj.push({ a: rows[i], b: rows[i + 1], d: sigDist(rows[i].sig, rows[i + 1].sig) });
+    }
+    const adjMin = adj.length ? adj.reduce((m, p) => (p.d < m.d ? p : m)) : null;
+    console.log('');
+    console.log(' STAGE-TO-STAGE DIFFERENCE   (weighted feature distance; higher is more distinct)');
+    console.log(`   closest pair anywhere : ${pairs[0].a.songId} / ${pairs[0].b.songId}`
+      + `   ${pairs[0].d.toFixed(3)}`);
+    console.log(`   next three            : `
+      + pairs.slice(1, 4).map((p) => `${p.a.songId}/${p.b.songId} ${p.d.toFixed(3)}`).join('   '));
+    console.log(`   mean over all pairs   : ${mean.toFixed(3)}`);
+    if (adjMin) {
+      console.log(`   closest CONSECUTIVE   : ${adjMin.a.songId} -> ${adjMin.b.songId}`
+        + `   ${adjMin.d.toFixed(3)}`);
+      console.log('   every consecutive step: '
+        + adj.map((p) => p.d.toFixed(2)).join(' '));
+    }
+    /* Each song's nearest neighbour, because "which stage does mine sound like"
+       is the question a fix acts on, and the global minimum only names one. */
+    console.log('   nearest neighbour per song:');
+    for (const r of rows) {
+      const near = pairs.filter((p) => p.a === r || p.b === r)
+        .reduce((m, p) => (p.d < m.d ? p : m));
+      const other = near.a === r ? near.b : near.a;
+      console.log(`     ${pad(r.songId, 10)} -> ${pad(other.songId, 10)} ${near.d.toFixed(3)}`);
+    }
+  }
 
   /* The one line that stops the ramp mode's headline being read as good news. */
   if (RAMP) {

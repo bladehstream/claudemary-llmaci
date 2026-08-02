@@ -146,6 +146,14 @@ const COMP = {
  * @param {boolean} hurry the last-30s arrangement
  */
 export function barPlan(song, seed, absBar, inten, hurry) {
+  /* ⚠ THE SAME TREATMENTS AT THE SAME RATES ARE THEMSELVES A UNIFORMITY.
+     A stage meant to be playful wants a fill at every phrase end and a bass
+     that moves; a stage meant to be contemplative wants three quarters of that
+     taken away, and "take it away" is a per-song number, not a global one.
+     `song.form` scales each probability and may replace the melody-treatment
+     weights outright. Everything defaults to the values the twelve songs were
+     first balanced at, so a song that says nothing behaves exactly as before. */
+  const F = song.form || {};
   const bars = song.bars;
   const cyc = Math.floor(absBar / bars);        // which time round the tune we are
   const inSong = absBar % bars;                 // where in the tune
@@ -157,7 +165,7 @@ export function barPlan(song, seed, absBar, inten, hurry) {
      structural contrast available for free, and it is deliberately rare and
      deliberately NOT at cycle 0: the first pass through a tune has to be the
      tune, or the player never learns what is being varied. */
-  const brk = cyc > 0 && hash01(seed, cyc, 9) < 0.13 && !hurry;
+  const brk = cyc > 0 && hash01(seed, cyc, 9) < 0.13 * (F.break ?? 1) && !hurry;
 
   /* ---- drums ---- */
   let fill = null;
@@ -166,7 +174,9 @@ export function barPlan(song, seed, absBar, inten, hurry) {
     /* A phrase end takes a fill about half the time; the eight-bar turn nearly
        always does. Every four bars without fail is a metronome with extra
        steps — the point of a fill is that the ear cannot predict it. */
-    if (r < (bigTurn ? 0.86 : 0.46)) fill = FILLS[Math.floor(hash01(seed, absBar, 2) * FILLS.length)];
+    if (r < (bigTurn ? 0.86 : 0.46) * (F.fill ?? 1)) {
+      fill = FILLS[Math.floor(hash01(seed, absBar, 2) * FILLS.length)];
+    }
   }
 
   /* Drop one non-downbeat kick, or add one ghost rim. Small, per bar, and
@@ -175,13 +185,14 @@ export function barPlan(song, seed, absBar, inten, hurry) {
   let ghostRim = -1;
   if (!brk) {
     const r = hash01(seed, absBar, 3);
-    if (r < 0.16) dropKick = 1 + Math.floor(hash01(seed, absBar, 4) * 15);
-    else if (r < 0.42 && inten > 0.3) ghostRim = 1 + Math.floor(hash01(seed, absBar, 5) * 15);
+    const micro = F.micro ?? 1;
+    if (r < 0.16 * micro) dropKick = 1 + Math.floor(hash01(seed, absBar, 4) * 15);
+    else if (r < 0.42 * micro && inten > 0.3) ghostRim = 1 + Math.floor(hash01(seed, absBar, 5) * 15);
   }
   /* The lift: hats and shaker vanish for the back half of the bar, which is
      what a real player does going into a turnaround. Only where a fill is not
      already doing the job. */
-  const lift = !brk && !fill && phraseEnd && hash01(seed, absBar, 6) < 0.3;
+  const lift = !brk && !fill && phraseEnd && hash01(seed, absBar, 6) < 0.3 * (F.lift ?? 1);
 
   /* ---- bass ---- */
   const legal = BASS.filter((b) => inten >= b.min);
@@ -192,7 +203,7 @@ export function barPlan(song, seed, absBar, inten, hurry) {
   let comp = pick(hash01(seed, absBar, 8), table);
   /* Lay out for a bar. Not on the first bar of a phrase, where the chord change
      needs stating. */
-  if (brk || (absBar % 4 !== 0 && hash01(seed, absBar, 10) < 0.16)) comp = null;
+  if (brk || (absBar % 4 !== 0 && hash01(seed, absBar, 10) < 0.16 * (F.compOut ?? 1))) comp = null;
   /* Invert the voicing. Same chord, different top note — the cheapest real
      variety there is, and it stops four bars of comping being four copies. */
   const compLow = 58 + Math.floor(hash01(seed, absBar, 11) * 3) * 3;
@@ -203,9 +214,8 @@ export function barPlan(song, seed, absBar, inten, hurry) {
      break never is: state the tune, then vary it. */
   let melody = 'plain';
   if (cyc > 0) {
-    melody = pick(hash01(seed, cyc, 12), [
-      [34, 'plain'], [16, 'ornament'], [14, 'octave'], [12, 'sparse'], [8, 'layout'],
-    ]);
+    const T = F.treat || { plain: 34, ornament: 16, octave: 14, sparse: 12, layout: 8 };
+    melody = pick(hash01(seed, cyc, 12), Object.entries(T).map(([k, w]) => [w, k]));
     /* Never two silent cycles running — that is not space, that is a bug. */
     if (melody === 'layout' && hash01(seed, cyc - 1, 12) > 0.92) melody = 'plain';
   }
@@ -235,18 +245,23 @@ export function treatMelody(melody, treatment) {
     case 'layout':
       return [];
     case 'octave':
-      return melody.map(([s, n, d]) => [s, n + 12, d]);
+      return melody.map(([s, n, d, v]) => [s, n + 12, d, v]);
     case 'sparse':
       /* Only the notes that land on a strong beat, held longer. Half as many
-         notes and twice the air; the tune is still recognisably itself. */
-      return melody.filter(([s]) => s % 8 === 0).map(([s, n, d]) => [s, n, Math.min(d * 2, 8)]);
+         notes and twice the air; the tune is still recognisably itself.
+         ⚠ NEVER SHORTER than it was written — an earlier version capped the
+         result at 8 sixteenths, which on the universe theme turned a
+         seven-second choir note into a one-second one and made the sparsest
+         treatment in the game the busiest-sounding. */
+      return melody.filter(([s]) => s % 8 === 0)
+        .map(([s, n, d, v]) => [s, n, Math.max(d, Math.min(d * 2, 32)), v]);
     case 'ornament': {
       /* An upper neighbour a 16th before anything long enough to carry one.
          Grace notes are short and quiet — see the `amp` scaling in Music. */
       const out = [];
-      for (const [s, n, d] of melody) {
+      for (const [s, n, d, v] of melody) {
         if (d >= 4 && s > 0) out.push([s - 1, n + 2, 1, 'grace']);
-        out.push([s, n, d]);
+        out.push([s, n, d, v]);
       }
       return out;
     }

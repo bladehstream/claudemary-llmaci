@@ -34,6 +34,16 @@ import { clamp } from '../util/math.js';
 const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.14;
 
+/**
+ * Level trim per voice, so a role can change instrument without changing the
+ * mix. Measured against `vibe` at 1.0 — these are the ratios that made the
+ * five tonal voices sit at the same perceived level in `voicelab`.
+ */
+const VOICE_GAIN = { vibe: 1, pluck: 0.62, brass: 0.78, scat: 0.58, bass: 1.5 };
+
+/** What a song gets if it does not say. Exactly what every song did before. */
+const DEFAULT_VOICES = { melody: 'vibe', comp: 'pluck', bass: 'bass', double: 'vibe' };
+
 export class Music {
   constructor(engine) {
     this.engine = engine;
@@ -65,6 +75,8 @@ export class Music {
     this.stop();
     this.song = song;
     this.seed = songSeed(song.id);
+    this._seedFor = song.id;
+    e.space = song.space ?? 1;
     this.step = 0;
     this.bar = 0;
     this._planBar = -1;
@@ -176,6 +188,34 @@ export class Music {
     return this.song.prog[bar];
   }
 
+  /**
+   * Play `name` — one of the engine's five tonal voices — as a role.
+   *
+   * ⚠ THIS IS WHY THE STAGES STOPPED SOUNDING ALIKE. Melody was hard-coded to
+   * `vibe`, comping to `pluck` and the bass line to `bass` for all twelve
+   * songs, so eleven stages spanning forty orders of magnitude were played by
+   * the same trio. Which voice takes which role is now the song's decision,
+   * and it is a bigger character change than any amount of new notes: the same
+   * eight bars on a plucked guitar and on a wordless choir are not the same
+   * music.
+   *
+   * ⚠ THE GAIN TABLE IS NOT DECORATION. These voices were tuned individually
+   * and their natural levels differ by more than 2:1 — `vibe` sits at 0.3 and
+   * `scat` at 0.16 for the same perceived loudness. Swapping a role to a new
+   * voice without renormalising is how a melody change turns into a mix bug.
+   */
+  _play(name, t, freq, dur, gain, vowel = 0) {
+    const e = this.engine;
+    const g = gain * (VOICE_GAIN[name] ?? 1);
+    switch (name) {
+      case 'pluck': return e.pluck(t, freq, dur, g);
+      case 'brass': return e.brass(t, freq, dur, g);
+      case 'scat': return e.scat(t, freq, dur, g, vowel);
+      case 'bass': return e.bass(t, freq, dur, g);
+      case 'vibe': default: return e.vibe(t, freq, dur, g);
+    }
+  }
+
   /** Build a close voicing above `low` for a chord. */
   _voicing(root, type, low = 60, max = 5) {
     const ivs = CHORDS[type] || CHORDS.maj7;
@@ -219,7 +259,15 @@ export class Music {
       this.seed = songSeed(s.id);
       this._planBar = -1;
       this._melCyc = -1;
+      /* The room the song plays in. Set here rather than only in `play()` for
+         the same reason as the seed: two harnesses assign `music.song`
+         directly and never call it, and a render of the universe theme in the
+         house's small room is a render of a different piece. */
+      e.space = s.space ?? 1;
     }
+    const V = s.voices || DEFAULT_VOICES;
+    const SUS = s.sustain || {};
+    const GN = s.gain || {};
 
     /* The plan is per bar, and the whole point of it is that it is the same
        for all sixteen steps of that bar. Recomputing it per step would be
@@ -282,28 +330,59 @@ export class Music {
         // chromatic approach into the next bar's root
         n = this.song.prog[(bar + 1) % this.song.prog.length][0] + s.bassOct - 1;
       } else n = bassRoot + iv;
-      e.bass(t, mtof(n), this.stepDuration * dur, amp);
+      /* `amp` is in BASS units (0.44 is the shipped root). `_play` works in
+         vibe units, so convert once here rather than at eight call sites. */
+      this._play(V.bass || 'bass', t, mtof(n),
+        this.stepDuration * dur * (SUS.bass ?? 1),
+        (amp / VOICE_GAIN.bass) * (GN.bass ?? 1));
     }
 
     /* ---------------- comping ---------------- */
     if (inten > 0.2 && p.comp && p.comp.includes(inBar)) {
       const notes = this._voicing(root, type, p.compLow, 4);
-      const amp = 0.11 * (0.5 + inten * 0.7) * (inBar === 3 ? 1.1 : 0.85);
-      notes.forEach((n, i) => e.pluck(t + i * 0.004, mtof(n), this.stepDuration * 3.4, amp));
+      /* 0.11 was the shipped comping level IN PLUCK UNITS. Converted to vibe
+         units once, so moving the role to a choir or a horn section keeps the
+         same place in the mix instead of arriving 4dB out. */
+      const amp = (0.11 / VOICE_GAIN.pluck) * (0.5 + inten * 0.7)
+        * (inBar === 3 ? 1.1 : 0.85) * (GN.comp ?? 1);
+      const dur = this.stepDuration * 3.4 * (SUS.comp ?? 1);
+      /* The 4ms stagger is a strum. It is right for a plucked voice and wrong
+         for a sustained one — a choir that enters four milliseconds apart is a
+         choir that is late, so a slow `sustain.comp` spreads the entry wider
+         and lets the chord bloom instead. */
+      const spread = (SUS.comp ?? 1) > 2 ? 0.05 : 0.004;
+      notes.forEach((n, i) => this._play(V.comp || 'pluck', t + i * spread, mtof(n), dur, amp, i % 5));
     }
 
     /* ---------------- melody ---------------- */
     if (inten > 0.34) {
       for (const [ms, note, dur, kind] of this._mel) {
         if (ms !== pos) continue;
+        const mv = V.melody || 'vibe';
+        const amp = GN.melody ?? 1;
+        /* The 4th element is a VOWEL when the melody is written for the scat
+           voice and the marker string 'grace' when `treatMelody` put an
+           ornament there. Both live in the same slot because `songs.js` has
+           always spelled a scat note as [step, note, dur, vowel] and there was
+           no reason to invent a second shape for a note that is one field
+           longer. Anything that is not a number is not a vowel. */
+        const vowel = typeof kind === 'number' ? kind : 0;
         if (kind === 'grace') {
           /* A grace note is an approach, not a note: short, quiet, and never
              doubled, or it reads as the melody having changed. */
-          e.vibe(t, mtof(note), this.stepDuration * 0.6, 0.08 + inten * 0.05);
+          this._play(mv, t, mtof(note), this.stepDuration * 0.6, (0.08 + inten * 0.05) * amp, 1);
           continue;
         }
-        e.vibe(t, mtof(note), this.stepDuration * dur * 0.95, 0.2 + inten * 0.14);
-        if (inten > 0.55) e.vibe(t + 0.012, mtof(note + 12), this.stepDuration * dur * 0.5, 0.05);
+        this._play(mv, t, mtof(note), this.stepDuration * dur * 0.95 * (SUS.melody ?? 1),
+          (0.2 + inten * 0.14) * amp, vowel);
+        /* The octave double is a colour, not a part — `double: null` turns it
+           off for songs where a second voice an octave up is one voice too
+           many, which is most of the quiet ones. */
+        if (inten > 0.55 && V.double) {
+          this._play(V.double, t + 0.012, mtof(note + 12),
+            this.stepDuration * dur * 0.5 * (SUS.melody ?? 1),
+            0.05 / (VOICE_GAIN[V.double] || 1), 4);
+        }
       }
     }
 
