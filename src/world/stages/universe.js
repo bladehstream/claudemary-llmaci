@@ -128,6 +128,27 @@ export const universeStage = {
      still standing at the whistle, which is the right amount left to chase;
      at 12:00 there were none. Joint longest stage in the game with the galaxy,
      which is the shape the last two should have. */
+  /* ⚠ 2026-08-02: THE 66% ABOVE IS NO LONGER TRUE, AND NOTHING IN THIS FILE
+     CHANGED. The space-prop rebuild ghosted the flat and hollow parts of 24 of
+     this stage's 29 archetypes, and a ghosted part is not only a smaller
+     obstacle — it is a smaller TARGET. Measured with
+     `balance --only=universe --runs=15` (skill 0.9, sweeper) against a
+     `git worktree` at the commit just before "Let a prop's shape stop being its
+     collision volume", the first of that work:
+
+       goal reached   6:51  ->  8:14      (65% of the clock -> 78%)
+       props left       19  ->   328      of 3360
+
+     Mass available moved by 0.0005%; pickup density, size ceiling and
+     reachability are identical to the digit. Only the shapes moved. Every seed
+     still reaches the goal, 15 of 15.
+
+     The padding above the bot's number is there to pay the SEARCH cost the bot
+     never incurs, and it has quietly gone from ~215s to ~136s on the largest
+     map in the game. Spending it is a decision for the player and not a bug, so
+     `time` and `goal` are LEFT ALONE — but do not read the paragraph above as
+     current. If this stage draws a "too hard" report, this is the cause and
+     `time` is the lever. */
   time: 630,
   speed: 330,
   density: 1,

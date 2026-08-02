@@ -100,6 +100,15 @@ export const galaxyStage = {
      ladder, the median stage uses 49% of its clock to reach the goal; this one
      was at 56% and is the CLIMAX, so it should be tighter than the middle of
      the game rather than looser. */
+  /* 2026-08-02, after the space-prop rebuild: goal reached at 5:37 of 10:30,
+     15 of 15 seeds, whole map swept. That is 54%, and a `git worktree` at the
+     commit just before "Let a prop's shape stop being its collision volume" —
+     the first of the rebuild — measures 5:43, so THIS STAGE DID NOT MOVE; the
+     6s is noise. (The universe, on the same rebuild, moved
+     6:51 -> 8:14. See the note on its clock.) ⚠ The 56% and the "galaxy's 71%"
+     quoted in universe.js both predate this measurement and neither reproduces
+     at `--runs=15` skill 0.9; whatever settings produced them are not recorded,
+     which is the whole reason this note says how it was measured. */
   time: 630,
   speed: 330,
   density: 1,
