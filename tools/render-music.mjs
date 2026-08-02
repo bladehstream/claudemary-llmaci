@@ -236,9 +236,11 @@ async function renderInPage(o) {
   music.intensity = o.ramp ? 0.2 : o.intensity;
 
   /* Music._tick's loop body, with the audio clock and the setInterval taken
-     out. The step advance and the wrap must stay identical to _tick's or this
-     is rendering a song nobody plays. */
-  const loopSteps = song.bars * 16;
+     out. The step advance must stay identical to _tick's or this is rendering
+     a song nobody plays — and since `form.js` arrived that means NOT wrapping
+     it: `_scheduleStep` takes the absolute step and derives the loop position
+     itself. Feed it a wrapped step and every bar is bar N of cycle 0, so the
+     render is of a score with the variation layer switched off. */
   const end = o.start + o.seconds;
   let t = o.start;
   let steps = 0;
@@ -252,9 +254,9 @@ async function renderInPage(o) {
       /* The real game flips this at 30s remaining. Rendering it lets you hear
          the transition rather than trusting that it is not jarring. */
       if (o.hurry === 'last') music.hurrying = played > o.seconds - 30;
-      music._scheduleStep(music.step, t);
+      music._scheduleStep(steps, t);
       t += music.stepDuration;
-      music.step = (music.step + 1) % loopSteps;
+      music.step = steps;
       steps++;
     }
   };

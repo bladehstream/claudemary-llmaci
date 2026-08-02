@@ -23,8 +23,17 @@
                     only variant with pitch stripped out. Drums
                     and bass loop far faster than the melody and
                     that difference is invisible in the headline.
-     UNIQUE BARS    distinct bar-length patterns / bars played.
-                    "8 unique of 192" is the shape of the problem.
+     FAMILIARITY    for each bar, the best overlap with any EARLIER
+                    bar; reported as a mean, plus the count of bars
+                    that are under half-familiar ("novel"). This is
+                    the headline. ⚠ It replaced a plain count of
+                    bit-distinct bars, which saturated at 97% the
+                    moment the arrangement started varying one
+                    ghost rim per bar — see `familiarity()`. A
+                    metric a cosmetic change can max out is not
+                    measuring what the player complained about.
+     EXACT-UNIQUE   that old count, kept as a secondary and
+                    labelled for what it is.
      ONSET HISTOGRAM  where in the bar each voice is ever allowed
                     to start a note. Exposes hard-coded grids —
                     a bass that only ever speaks on 0/6/10/14 has
@@ -229,12 +238,16 @@ function simulate(songId, seconds, { intensity, ramp, hurry, seed }) {
          shape with the ends squared off, and it crosses every one of the five
          hardcoded layer thresholds, which is the point of the ramp mode. */
       if (ramp) music.intensity = 0.2 + 0.8 * (t / seconds);
-      engine.step = music.step;
+      engine.step = n % loopSteps;
       engine.absStep = n;
       engine.stepDur = music.stepDuration;
-      music._scheduleStep(music.step, t);
+      /* ⚠ THE ABSOLUTE STEP, not the wrapped one. `_scheduleStep` derives the
+         loop position itself and needs to know which time round the tune this
+         is; hand it `n % loopSteps` and `form.js` sees bar 3 of cycle 0 every
+         time, so the variation layer is measured as though it did not exist. */
+      music._scheduleStep(n, t);
       t += music.stepDuration;
-      music.step = (music.step + 1) % loopSteps;
+      music.step = n;
       n++;
     }
     if (music.stepDuration !== stepDur) {
@@ -322,6 +335,77 @@ function matchAt(seq, L) {
   return same / span;
 }
 
+/**
+ * How much of each bar the listener has already heard.
+ *
+ * ⚠ THIS EXISTS BECAUSE `uniqueChunks` SATURATED AND WAS BELIEVED FOR ABOUT
+ * TEN MINUTES. It counts EXACTLY distinct bars, so the moment `form.js` began
+ * varying one ghost rim per bar the score measured 97.3% "new material" —
+ * against 6.2% before — while most bars were still 90% the same as a bar the
+ * player had already heard four times. That is the same trap this file's own
+ * header describes for amplitude: a crescendo is not variety, and neither is a
+ * dropped hi-hat. **A metric that a cosmetic change can max out is not
+ * measuring the thing the player complained about.**
+ *
+ * So: for each bar, the best Jaccard similarity of its (position, event) token
+ * set against every EARLIER bar. 1.0 means "you have heard exactly this",
+ * 0.0 means "nothing about this bar has occurred before". A bar counts as
+ * NOVEL below `NOVEL_AT`, which is deliberately generous — half the bar has
+ * to be new before it earns the word.
+ *
+ * Cost is O(bars^2) in bar count, which for a 360s round is ~200 bars and
+ * about 20k set intersections. Nothing here runs in the game.
+ */
+const NOVEL_AT = 0.5;
+
+function barTokens(fps, b) {
+  const set = new Set();
+  for (let i = 0; i < 16; i++) {
+    const f = fps[b * 16 + i];
+    if (!f || f === '.') continue;
+    for (const part of f.split('|')) set.add(`${i}:${part}`);
+  }
+  return set;
+}
+
+function jaccard(a, b) {
+  if (!a.size && !b.size) return 1;
+  let inter = 0;
+  const [small, big] = a.size < b.size ? [a, b] : [b, a];
+  for (const x of small) if (big.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+function familiarity(fps) {
+  const nBars = Math.floor(fps.length / 16);
+  const toks = [];
+  const best = [];
+  for (let b = 0; b < nBars; b++) {
+    const t = barTokens(fps, b);
+    let hi = 0;
+    for (let p = 0; p < b; p++) {
+      const s = jaccard(t, toks[p]);
+      if (s > hi) hi = s;
+      if (hi === 1) break;
+    }
+    toks.push(t);
+    best.push(b === 0 ? 0 : hi);
+  }
+  /* Bar 0 is excluded from the mean: it is novel by definition and including
+     it flatters a short round. */
+  const rest = best.slice(1);
+  const mean = rest.length ? rest.reduce((a, x) => a + x, 0) / rest.length : 0;
+  return {
+    best,
+    mean,
+    novel: 1 + rest.filter((x) => x < NOVEL_AT).length,
+    total: nBars,
+    /* The other end of the same question: how much of the round is a bar the
+       player has heard note for note before. */
+    identical: rest.filter((x) => x >= 0.999).length,
+  };
+}
+
 /** Distinct N-step chunks vs total chunks. */
 function uniqueChunks(fps, size) {
   const seen = new Set();
@@ -377,6 +461,11 @@ function analyse(songId, seconds, opts) {
 
   const bars = uniqueChunks(fpFull, 16);
   const loops = uniqueChunks(fpFull, loopSteps);
+  /* ⚠ The STRING fingerprints, not the interned ints. Familiarity needs to see
+     inside a step — "kick and a rim" overlapping "kick and a hat" is most of a
+     match — and interning has already thrown that away by collapsing each step
+     to one opaque id. */
+  const fam = familiarity(fingerprints(engine.events, steps, KEY_FULL));
 
   /* An intensity ramp inflates the unique-bar count without writing a single
      new note: bar 40 differs from bar 8 only because the scat gate opened in
@@ -394,7 +483,7 @@ function analyse(songId, seconds, opts) {
     events: engine.events.length,
     loopFull, loopNear,
     matchAtSongLoop: matchAt(fpFull, loopSteps),
-    perVoice, perGroup, bars, loops,
+    perVoice, perGroup, bars, loops, fam,
     phases: phases.size,
     barsPerPhase: bars.unique / phases.size,
   };
@@ -439,8 +528,12 @@ function reportSong(r) {
     console.log(`  near-loop (95% identical): ${fmtSec(nearSec)} = ${(r.loopNear / 16).toFixed(1)} bars`);
   }
   console.log(`  self-similarity at the ${song.bars}-bar song loop: ${(r.matchAtSongLoop * 100).toFixed(1)}%`);
-  console.log(`  UNIQUE BARS:  ${r.bars.unique} unique of ${r.bars.total} played`
-    + `   (${(100 * r.bars.unique / r.bars.total).toFixed(1)}% of the round is new material)`);
+  console.log(`  FAMILIARITY:  mean ${(r.fam.mean * 100).toFixed(1)}% of a bar has been heard before`
+    + `   (${r.fam.identical} bars note-for-note repeats)`);
+  console.log(`  NOVEL BARS:   ${r.fam.novel} of ${r.fam.total}`
+    + `   (${(100 * r.fam.novel / r.fam.total).toFixed(1)}% of the round is new material)`);
+  console.log(`  EXACT-UNIQUE BARS: ${r.bars.unique} of ${r.bars.total}`
+    + '   (bit-identical test — saturates on cosmetic variation, see familiarity() )');
   console.log(`  UNIQUE LOOPS: ${r.loops.unique} unique of ${r.loops.total} played`);
   if (r.phases > 1) {
     console.log(`  ...but ${r.phases} of those distinctions are the intensity ramp opening a gate:`);
@@ -466,8 +559,8 @@ function reportTable(rows) {
   console.log(` SUMMARY   ${RAMP ? 'intensity ramp 0.2->1.0' : `intensity ${FIXED_INTENSITY}`}`
     + `   ${HURRY ? 'HURRYING' : 'not hurrying'}   round ${STAGE_SECONDS ? 'per stage' : SECONDS_ARG + 's'}`);
   console.log('=============================================================================================');
-  console.log(' song       bpm bars kit       round   LOOP  bars  reps  uniqBars  |  drumkit   bass   comp  melody');
-  console.log(' ---------- --- ---- --------- ------ ------ ----- ----- --------- + ------- ------ ------ -------');
+  console.log(' song       bpm bars kit       round   LOOP  reps  famil  novel  exact  |  drumkit   bass   comp  melody');
+  console.log(' ---------- --- ---- --------- ------ ------ ----- ------ ------ ------ + ------- ------ ------ -------');
   for (const r of rows) {
     const loopSec = r.loopFull == null ? null : r.loopFull * r.secPerStep;
     const reps = loopSec ? (r.seconds / loopSec).toFixed(0) : '-';
@@ -477,8 +570,9 @@ function reportTable(rows) {
     const rhy = (p) => (p && p.rhythm != null ? fmtSec(p.rhythm * r.secPerStep) : p ? '>half' : '-');
     console.log(` ${pad(r.songId, 10)} ${lpad(r.song.bpm, 3)} ${lpad(r.song.bars, 4)} ${pad(r.song.kit, 9)}`
       + ` ${lpad(r.seconds + 's', 6)} ${lpad(fmtSec(loopSec), 6)}`
-      + ` ${lpad(loopSec ? (r.loopFull / 16).toFixed(0) : '-', 5)} ${lpad(reps, 5)}`
-      + ` ${lpad(r.bars.unique + '/' + r.bars.total, 9)} |`
+      + ` ${lpad(reps, 5)} ${lpad((r.fam.mean * 100).toFixed(0) + '%', 6)}`
+      + ` ${lpad((100 * r.fam.novel / r.fam.total).toFixed(0) + '%', 6)}`
+      + ` ${lpad((100 * r.bars.unique / r.bars.total).toFixed(0) + '%', 6)} |`
       + ` ${lpad(rhy(r.perGroup.drums), 7)} ${lpad(rhy(r.perVoice.bass), 6)}`
       + ` ${lpad(rhy(r.perGroup.comp), 6)} ${lpad(rhy(r.perGroup.melody), 7)}`);
   }
@@ -486,12 +580,15 @@ function reportTable(rows) {
   /* One number to watch across proposals. Averaging the per-song share of new
      material weights every song equally, which is right: a fix that only helps
      the four 16-bar songs has not fixed the game. */
-  const share = rows.reduce((a, r) => a + r.bars.unique / r.bars.total, 0) / rows.length;
-  const worst = rows.reduce((a, r) => (a.bars.unique / a.bars.total < r.bars.unique / r.bars.total ? a : r));
+  const share = rows.reduce((a, r) => a + r.fam.novel / r.fam.total, 0) / rows.length;
+  const worst = rows.reduce((a, r) => (a.fam.novel / a.fam.total < r.fam.novel / r.fam.total ? a : r));
+  const famMean = rows.reduce((a, r) => a + r.fam.mean, 0) / rows.length;
   console.log('');
-  console.log(` NEW-MATERIAL SHARE (mean unique bars / bars played): ${(share * 100).toFixed(1)}%`);
-  console.log(` WORST SONG: ${worst.songId} at ${(100 * worst.bars.unique / worst.bars.total).toFixed(1)}%`
-    + ` (${worst.bars.unique} unique bars in a ${worst.seconds}s round)`);
+  console.log(` NEW-MATERIAL SHARE (mean novel bars / bars played, novel = <${NOVEL_AT * 100}% heard before):`
+    + ` ${(share * 100).toFixed(1)}%`);
+  console.log(` FAMILIARITY (mean share of a bar the player has already heard): ${(famMean * 100).toFixed(1)}%`);
+  console.log(` WORST SONG: ${worst.songId} at ${(100 * worst.fam.novel / worst.fam.total).toFixed(1)}%`
+    + ` (${worst.fam.novel} novel bars in a ${worst.seconds}s round)`);
 
   /* The one line that stops the ramp mode's headline being read as good news. */
   if (RAMP) {

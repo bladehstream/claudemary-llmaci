@@ -6,15 +6,29 @@
    ~140ms, so timing comes from the audio clock rather than from
    rAF and never drifts.
 
-   Arrangement is adaptive. `intensity` (driven by how close you
-   are to the goal) fades layers in: drums and bass are always
-   there, comping arrives early, the melody and scat come in as
-   you grow, brass only once you are doing well. The last 30
-   seconds shift into a faster, brighter "hurry" arrangement.
+   Arrangement is adaptive in two directions. `intensity` (driven
+   by how close you are to the goal) fades LAYERS in: drums and
+   bass are always there, comping arrives early, the melody and
+   scat come in as you grow, brass only once you are doing well.
+   The last 30 seconds shift into a faster, brighter "hurry"
+   arrangement. And `form.js` varies the TREATMENT of those layers
+   bar by bar — fills, bass patterns, comping placements, what
+   happens to the tune this time round.
+
+   ⚠ `step` IS ABSOLUTE AND DOES NOT WRAP. It used to wrap at
+   `song.bars * 16`, which made the score's period exactly equal
+   to the loop's: 9.2s in the menu, heard 39 times a round, with
+   6.2% of a round being new material. `form.js` needs to know
+   which time round the tune this is, so the counter runs on and
+   the wrapped position is derived where it is needed. Anything
+   driving `_scheduleStep` from outside (`test-repetition`,
+   `render-music`) must pass the ABSOLUTE step, or it measures a
+   variation layer that never varies.
    ============================================================ */
 
 import { mtof } from './AudioEngine.js';
 import { SONGS, CHORDS, KITS, RESULTS_FANFARE } from './songs.js';
+import { barPlan, songSeed, treatMelody } from './form.js';
 import { clamp } from '../util/math.js';
 
 const LOOKAHEAD_MS = 25;
@@ -32,6 +46,14 @@ export class Music {
     this.hurrying = false;
     this._targetIntensity = 0.55;
     this.bar = 0;
+    /* Set from the song id in `play`. Two songs must never draw the same dice
+       for the same bar index, or every stage takes its fills in unison. */
+    this.seed = 0;
+    this._seedFor = null;
+    this._planBar = -1;
+    this._plan = null;
+    this._melCyc = -1;
+    this._mel = [];
   }
 
   play(songId) {
@@ -42,8 +64,11 @@ export class Music {
     if (this.song === song && this.playing) return;
     this.stop();
     this.song = song;
+    this.seed = songSeed(song.id);
     this.step = 0;
     this.bar = 0;
+    this._planBar = -1;
+    this._melCyc = -1;
     this.nextTime = e.now + 0.08;
     this.playing = true;
     this.timer = setInterval(() => this._tick(), LOOKAHEAD_MS);
@@ -135,12 +160,19 @@ export class Music {
         this._scheduleStep(this.step, this.nextTime);
       } catch { /* drop the note, keep the transport */ }
       this.nextTime += this.stepDuration;
-      this.step = (this.step + 1) % (this.song.bars * 16);
+      /* ⚠ NOT `% (bars * 16)`. See the header — wrapping here is what made the
+         piece's period equal to one loop of it. The wrapped position is derived
+         inside `_scheduleStep`; this counter is how far into the piece we are,
+         and `form.js` is a function of it. At 148bpm the longest stage reaches
+         about 6,600 before the round ends, so nothing here needs a modulus for
+         precision either. */
+      this.step += 1;
     }
   }
 
-  _chordAt(step) {
-    const bar = Math.floor(step / 16) % this.song.prog.length;
+  /** @param {number} pos position WITHIN the loop, not the absolute step. */
+  _chordAt(pos) {
+    const bar = Math.floor(pos / 16) % this.song.prog.length;
     return this.song.prog[bar];
   }
 
@@ -157,71 +189,136 @@ export class Music {
     return out;
   }
 
-  _scheduleStep(step, t) {
+  /**
+   * @param {number} absStep steps since the music started. NOT wrapped — see
+   *   the file header. The position within the loop is derived here.
+   */
+  _scheduleStep(absStep, t) {
     const e = this.engine;
     const s = this.song;
     const kit = KITS[s.kit];
     const inten = this.intensity;
-    const g = step % 32;
-    const bar = Math.floor(step / 16);
+    const loop = s.bars * 16;
+    /* Double modulus: a driver is allowed to hand us a negative step and the
+       loop position must stay a valid index either way. */
+    const pos = ((absStep % loop) + loop) % loop;
+    const g = pos % 32;
+    const inBar = pos % 16;
+    const bar = Math.floor(pos / 16);
+    const absBar = Math.floor(absStep / 16);
+
+    /* ⚠ ARM THE SEED HERE, NOT ONLY IN `play()`. Two harnesses drive this
+       method with `music.song` assigned directly and never call `play`, and a
+       seed left at 0 means every song draws the same dice for the same bar —
+       twelve stages taking their fills in unison, which measures perfectly
+       well and would sound absurd. Making it a property of the song rather
+       than of how playback started removes the footgun from every future
+       driver too. */
+    if (this._seedFor !== s.id) {
+      this._seedFor = s.id;
+      this.seed = songSeed(s.id);
+      this._planBar = -1;
+      this._melCyc = -1;
+    }
+
+    /* The plan is per bar, and the whole point of it is that it is the same
+       for all sixteen steps of that bar. Recomputing it per step would be
+       wrong as well as wasteful — every voice would draw its own dice. */
+    if (absBar !== this._planBar) {
+      this._planBar = absBar;
+      this._plan = barPlan(s, this.seed, absBar, inten, this.hurrying);
+    }
+    const p = this._plan;
+
+    /* The tune's treatment lasts a whole cycle, so the rewritten note list is
+       cached for that cycle. `treatMelody` walks the entire melody; running it
+       once per 16th would be sixteen times the work for the same answer. */
+    if (p.cyc !== this._melCyc) {
+      this._melCyc = p.cyc;
+      this._mel = treatMelody(s.melody, p.melody);
+    }
+
     const jitter = (Math.random() - 0.5) * 0.006;
     t += jitter;
 
-    /* ---------------- drums ---------------- */
-    if (kit.kick[g]) e.kick(t, kit.kick[g] * 0.62);
-    if (kit.rim[g]) e.rim(t, kit.rim[g] * 0.3);
-    if (kit.snare && kit.snare[g]) e.snare(t, kit.snare[g] * 0.3);
-    if (kit.shaker[g] && inten > 0.12) e.shaker(t, kit.shaker[g] * (0.7 + inten * 0.5));
-    if (kit.hat[g] && inten > 0.3) e.hat(t, kit.hat[g] * (0.6 + inten * 0.6), false);
-    if (kit.tom && kit.tom[g] && inten > 0.6) e.tom(t, 200, kit.tom[g] * 0.5);
-    if (this.hurrying && step % 2 === 0) e.hat(t, 0.055, false);
+    /* ---------------- drums ----------------
+       Three overrides, in order of authority: the break silences the kit down
+       to rim and shaker, a fill takes over the bar from `fill.from`, and the
+       lift takes the hats out of the back half. Nothing may touch step 0. */
+    const hushed = p.fill && inBar >= p.fill.from;
+    if (!p.brk && !hushed && kit.kick[g] && inBar !== p.dropKick) e.kick(t, kit.kick[g] * 0.62);
+    if (!hushed && kit.rim[g]) e.rim(t, kit.rim[g] * 0.3);
+    if (!p.brk && inBar === p.ghostRim && !kit.rim[g] && !hushed) e.rim(t, 0.13);
+    if (!p.brk && !hushed && kit.snare && kit.snare[g]) e.snare(t, kit.snare[g] * 0.3);
+    const lifted = p.lift && inBar >= 8;
+    if (kit.shaker[g] && inten > 0.12 && !lifted && !hushed) {
+      e.shaker(t, kit.shaker[g] * (0.7 + inten * 0.5));
+    }
+    if (!p.brk && kit.hat[g] && inten > 0.3 && !lifted && !hushed) {
+      e.hat(t, kit.hat[g] * (0.6 + inten * 0.6), false);
+    }
+    if (!p.brk && !hushed && kit.tom && kit.tom[g] && inten > 0.6) e.tom(t, 200, kit.tom[g] * 0.5);
+    if (p.fill) {
+      for (const [fs, voice, vel] of p.fill.hits) {
+        if (fs !== inBar) continue;
+        /* Scaled by intensity like every other kit voice, so a fill in a quiet
+           menu is a quiet fill rather than an announcement. */
+        const a = vel * (0.55 + inten * 0.55);
+        if (voice === 'kick') e.kick(t, a);
+        else if (voice === 'snare') e.snare(t, a);
+        else if (voice === 'rim') e.rim(t, a);
+        else if (voice === 'tom') e.tom(t, 168 + fs * 7, a);
+      }
+    }
+    if (this.hurrying && pos % 2 === 0) e.hat(t, 0.055, false);
 
     /* ---------------- bass ---------------- */
-    const [root, type] = this._chordAt(step);
-    const inBar = step % 16;
+    const [root, type] = this._chordAt(pos);
     const bassRoot = root + s.bassOct;
-    const fifth = bassRoot + 7;
-    if (inBar === 0) e.bass(t, mtof(bassRoot), this.stepDuration * 5.5, 0.44);
-    else if (inBar === 6) e.bass(t, mtof(fifth), this.stepDuration * 3.5, 0.34);
-    else if (inBar === 10 && inten > 0.5) e.bass(t, mtof(bassRoot), this.stepDuration * 2.5, 0.24);
-    else if (inBar === 14 && inten > 0.72) {
-      // approach note into the next bar
-      const nxt = this.song.prog[(bar + 1) % this.song.prog.length][0] + s.bassOct;
-      e.bass(t, mtof(nxt - 1), this.stepDuration * 1.6, 0.22);
+    for (const [bs, iv, dur, amp] of p.bass) {
+      if (bs !== inBar) continue;
+      let n;
+      if (iv === -1) {
+        // chromatic approach into the next bar's root
+        n = this.song.prog[(bar + 1) % this.song.prog.length][0] + s.bassOct - 1;
+      } else n = bassRoot + iv;
+      e.bass(t, mtof(n), this.stepDuration * dur, amp);
     }
 
     /* ---------------- comping ---------------- */
-    if (inten > 0.2) {
-      const compSteps = s.kit === 'samba' ? [3, 6, 11, 14] : s.kit === 'drive' ? [4, 10] : [3, 6, 10, 14];
-      if (compSteps.includes(inBar)) {
-        const notes = this._voicing(root, type, 58, 4);
-        const amp = 0.11 * (0.5 + inten * 0.7) * (inBar === 3 ? 1.1 : 0.85);
-        notes.forEach((n, i) => e.pluck(t + i * 0.004, mtof(n), this.stepDuration * 3.4, amp));
-      }
+    if (inten > 0.2 && p.comp && p.comp.includes(inBar)) {
+      const notes = this._voicing(root, type, p.compLow, 4);
+      const amp = 0.11 * (0.5 + inten * 0.7) * (inBar === 3 ? 1.1 : 0.85);
+      notes.forEach((n, i) => e.pluck(t + i * 0.004, mtof(n), this.stepDuration * 3.4, amp));
     }
 
     /* ---------------- melody ---------------- */
-    if (inten > 0.34 && s.melody) {
-      for (const [ms, note, dur] of s.melody) {
-        if (ms === step) {
-          e.vibe(t, mtof(note), this.stepDuration * dur * 0.95, 0.2 + inten * 0.14);
-          if (inten > 0.55) e.vibe(t + 0.012, mtof(note + 12), this.stepDuration * dur * 0.5, 0.05);
+    if (inten > 0.34) {
+      for (const [ms, note, dur, kind] of this._mel) {
+        if (ms !== pos) continue;
+        if (kind === 'grace') {
+          /* A grace note is an approach, not a note: short, quiet, and never
+             doubled, or it reads as the melody having changed. */
+          e.vibe(t, mtof(note), this.stepDuration * 0.6, 0.08 + inten * 0.05);
+          continue;
         }
+        e.vibe(t, mtof(note), this.stepDuration * dur * 0.95, 0.2 + inten * 0.14);
+        if (inten > 0.55) e.vibe(t + 0.012, mtof(note + 12), this.stepDuration * dur * 0.5, 0.05);
       }
     }
 
     /* ---------------- scat voice ---------------- */
-    if (inten > 0.6 && s.scat) {
+    if (inten > 0.6 && s.scat && p.scat && p.melody !== 'layout') {
       for (const [ms, note, dur, vowel] of s.scat) {
-        if (ms === step) e.scat(t, mtof(note - 12), this.stepDuration * dur * 0.9, 0.1 + inten * 0.07, vowel);
+        if (ms === pos) e.scat(t, mtof(note - 12), this.stepDuration * dur * 0.9, 0.1 + inten * 0.07, vowel);
       }
     }
 
     /* ---------------- brass ---------------- */
-    if ((inten > 0.78 || this.hurrying) && s.brass) {
+    if ((inten > 0.78 || this.hurrying) && s.brass && p.brass && !p.brk) {
       for (const [ms, notes, dur] of s.brass) {
-        if (ms === step) {
-          notes.forEach((n, i) => e.brass(t + i * 0.003, mtof(n), this.stepDuration * dur * 0.9, 0.09));
+        if (ms === pos) {
+          notes.forEach((n, i) => e.brass(t + i * 0.003, mtof(n + p.brassOct), this.stepDuration * dur * 0.9, 0.09));
         }
       }
     }
