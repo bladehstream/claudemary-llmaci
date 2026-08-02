@@ -255,46 +255,67 @@ function arm(b, R, H, a0, sweep, n, cols, y) {
    GALAXIES — one at a time, smallest first
    ================================================================== */
 
-P({ id: 'u_dsph', name: 'Dwarf Spheroidal', cat: 'galaxy', fill: 0.12, variants: 3, weight: 17,
+P({ id: 'u_dsph', name: 'Dwarf Spheroidal', cat: 'galaxy', sizeMul: 0.98481, fill: 0.1146, variants: 3, weight: 17,
   build(b, r, v) {
+    /* A dwarf spheroidal is the FAINTEST thing in the catalogue — a smudge of
+       old stars you can barely resolve — and it was the most solid-looking, a
+       gold egg with six pebbles sealed inside it. The stars are the object, so
+       they go outside the body where you can see them, and the body shrinks to
+       the unresolved glow at the middle.
+
+       ⚠ 665 INSTANCES. The single most-placed archetype in the game, 20% of
+       this stage's props. `swarm` at 5x3 segments and fourteen points is the
+       whole budget it gets. */
     const S = SP.dsph, H = S * 1.5;
-    envelope(b, S, H, U_.goldDim, 0.86 + v * 0.06);
-    for (let i = 0; i < 6; i++) {
-      const a = r() * TAU, d = S * 0.6 * Math.sqrt(r());
-      b.sphere(S * (0.09 + r() * 0.07), i % 3 ? U_.redDim : U_.gold,
-        { x: Math.cos(a) * d, y: H * (0.28 + r() * 0.44), z: Math.sin(a) * d }, 6, 4);
-    }
+    const sq = 0.86 + v * 0.06;
+    core(b, S, H * 0.5, S * sq, U_.goldDim, { y: H * 0.5, k: 1, seg: 8, hseg: 6 });
+    b.decor((d) => {
+      kitSwarm(d, S * 1.28, H * 0.62, S * 1.28 * sq, 14,
+        [U_.goldDim, U_.redDim, U_.gold], r,
+        { y: H * 0.5, lo: 0.07, hi: 0.13, bias: 1.5, seg: 5, hseg: 3 });
+    });
   } });
 
-P({ id: 'u_dwarf', name: 'Dwarf Galaxy', cat: 'galaxy', fill: 0.18, variants: 4, weight: 16,
+P({ id: 'u_dwarf', name: 'Dwarf Galaxy', cat: 'galaxy', sizeMul: 0.98481, fill: 0.1719, variants: 4, weight: 16,
   build(b, r, v) {
+    /* Lumpy and still forming, which is the difference from the spheroidal
+       above — the clumps are blue because they are young. They were all inside
+       the envelope; they are outside the core now, which is where a clump has
+       to be to be a clump. */
     const S = SP.dwarf, H = S * 1.34;
-    envelope(b, S, H, U_.spaceLit, 0.9);
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * TAU + r() * 0.9, d = S * (0.18 + r() * 0.5);
-      b.ellip(S * (0.15 + r() * 0.13), H * (0.13 + r() * 0.12), S * 0.14,
-        i % 3 === 0 ? U_.blue : (i % 3 === 1 ? U_.goldDim : U_.redDim),
-        { x: Math.cos(a) * d, y: H * (0.3 + r() * 0.4), z: Math.sin(a) * d, ry: r() * TAU }, 7, 5);
-    }
-    if (v % 2) b.sphere(S * 0.12, U_.bluePale, { y: H * 0.54 }, 6, 4);
+    core(b, S, H * 0.5, S * 0.9, U_.spaceLit, { y: H * 0.5, k: 1, seg: 8, hseg: 6 });
+    b.decor((d) => {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + r() * 0.9, dd = S * (1.05 + r() * 0.45);
+        d.ellip(S * (0.15 + r() * 0.12), H * (0.13 + r() * 0.11), S * 0.14,
+          i % 3 === 0 ? U_.blue : (i % 3 === 1 ? U_.goldDim : U_.redDim),
+          { x: Math.cos(a) * dd, y: H * (0.3 + r() * 0.4), z: Math.sin(a) * dd, ry: r() * TAU }, 6, 4);
+      }
+      if (v % 2) d.sphere(S * 0.13, U_.bluePale, { y: H * 0.78 }, 6, 4);
+    });
   } });
 
-P({ id: 'u_irregular', name: 'Irregular Galaxy', cat: 'galaxy', fill: 0.2, variants: 4, weight: 15,
+P({ id: 'u_irregular', name: 'Irregular Galaxy', cat: 'galaxy', sizeMul: 0.99193, fill: 0.1952, variants: 4, weight: 15,
   build(b, r, v) {
+    /* "No symmetry at all: a torn sheet of star formation" — the comment was
+       right and the envelope made it a symmetrical egg anyway. The sheet now
+       runs right across and past the core, which is the only way an asymmetry
+       can be seen: it has to break the silhouette, not sit inside it. */
     const S = SP.irregular, H = S * 1.24;
-    envelope(b, S, H, U_.spaceLit, 0.82);
-    // no symmetry at all: a torn sheet of star formation
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      const x = -S * 0.72 + t * S * 1.44 + (r() - 0.5) * S * 0.2;
-      const z = Math.sin(t * 4.1 + v) * S * 0.4;
-      b.ellip(S * (0.13 + r() * 0.13), H * (0.12 + r() * 0.16), S * (0.1 + r() * 0.1),
-        i % 4 === 3 ? U_.bluePale : (i % 2 ? U_.blue : U_.blueDim),
-        { x, y: H * (0.3 + r() * 0.38), z, ry: r() * TAU }, 7, 5);
-    }
-    for (let i = 0; i < 2; i++) {
-      b.sphere(S * 0.1, U_.ice, { x: (r() - 0.5) * S, y: H * 0.55, z: (r() - 0.5) * S * 0.7 }, 6, 4);
-    }
+    core(b, S, H * 0.5, S * 0.82, U_.spaceLit, { y: H * 0.5, k: 1, seg: 8, hseg: 6 });
+    b.decor((d) => {
+      for (let i = 0; i < 10; i++) {
+        const t = i / 9;
+        const x = -S * 1.35 + t * S * 2.7 + (r() - 0.5) * S * 0.22;
+        const z = Math.sin(t * 4.1 + v) * S * 0.52;
+        d.ellip(S * (0.13 + r() * 0.13), H * (0.12 + r() * 0.15), S * (0.1 + r() * 0.1),
+          i % 4 === 3 ? U_.bluePale : (i % 2 ? U_.blue : U_.blueDim),
+          { x, y: H * (0.3 + r() * 0.38), z, ry: r() * TAU }, 6, 4);
+      }
+      for (let i = 0; i < 2; i++) {
+        d.sphere(S * 0.11, U_.ice, { x: (r() - 0.5) * S * 1.6, y: H * 0.6, z: (r() - 0.5) * S }, 6, 4);
+      }
+    });
   } });
 
 /* ⚠ THIS IS THE PROP THE PLAYER NAMED. *"a galaxy should not look like a blob.
@@ -373,7 +394,7 @@ P({ id: 'u_barred', name: 'Barred Spiral', cat: 'galaxy', sizeMul: 1.3715, fill:
     });
   } });
 
-P({ id: 'u_lenticular', name: 'Lenticular Galaxy', cat: 'galaxy', sizeMul: 1.2947, fill: 0.8681, variants: 3, weight: 12,
+P({ id: 'u_lenticular', name: 'Lenticular Galaxy', cat: 'galaxy', sizeMul: 1.2948, fill: 0.8683, variants: 3, weight: 12,
   build(b, r, v) {
     /* A spiral that ran out of gas: big bulge, smooth disc, NO arms. The
        absence is the identity, so the disc has to be visibly a disc for the
@@ -393,18 +414,26 @@ P({ id: 'u_lenticular', name: 'Lenticular Galaxy', cat: 'galaxy', sizeMul: 1.294
     });
   } });
 
-P({ id: 'u_elliptical', name: 'Elliptical Galaxy', cat: 'galaxy', fill: 0.44, variants: 3, weight: 12,
+P({ id: 'u_elliptical', name: 'Elliptical Galaxy', cat: 'galaxy', sizeMul: 0.99044, fill: 0.4275, variants: 3, weight: 12,
   build(b, r, v) {
+    /* ⚠ AN ELLIPTICAL GALAXY REALLY IS A SMOOTH BLOB, and that is not the
+       problem here. The problem is that it was a smooth blob with THREE more
+       smooth blobs and seven globular clusters hidden inside it — the comment
+       calls them "the only structure it has left" and not one was visible.
+
+       So the body stays an ellipsoid, because that is honest, and the only
+       thing that changes is that its halo is now outside it. That is the whole
+       difference between an elliptical and a rock. */
     const S = SP.elliptical, H = S * 1.1;
-    envelope(b, S, H, U_.goldDim, 0.84 + v * 0.06);
-    b.ellip(S * 0.66, H * 0.36, S * 0.58, U_.gold, { y: H * 0.5, ry: v * 0.5 }, 9, 6);
-    b.ellip(S * 0.3, H * 0.19, S * 0.28, U_.goldPale, { y: H * 0.5 }, 9, 6);
-    // globular clusters, the only structure it has left
-    for (let i = 0; i < 7; i++) {
-      const a = r() * TAU, d = S * (0.4 + r() * 0.52);
-      b.sphere(S * 0.045, i % 3 ? U_.goldPale : U_.red,
-        { x: Math.cos(a) * d, y: H * (0.24 + r() * 0.52), z: Math.sin(a) * d }, 6, 4);
-    }
+    const sq = 0.84 + v * 0.06;
+    core(b, S, H * 0.5, S * sq, U_.gold, { y: H * 0.5, k: 1, ry: v * 0.5, seg: 9, hseg: 6 });
+    b.decor((d) => {
+      for (let i = 0; i < 9; i++) {
+        const a = r() * TAU, dd = S * (1.08 + r() * 0.45);
+        d.sphere(S * 0.05, i % 3 ? U_.goldPale : U_.red,
+          { x: Math.cos(a) * dd, y: H * (0.2 + r() * 0.6), z: Math.sin(a) * dd }, 5, 4);
+      }
+    });
   } });
 
 P({ id: 'u_quasar', name: 'Quasar', cat: 'active', fill: 0.2, variants: 3, weight: 11,
@@ -425,22 +454,28 @@ P({ id: 'u_quasar', name: 'Quasar', cat: 'active', fill: 0.2, variants: 3, weigh
     }
   } });
 
-P({ id: 'u_giantell', name: 'Giant Elliptical', cat: 'galaxy', fill: 0.46, variants: 3, weight: 11,
+P({ id: 'u_giantell', name: 'Giant Elliptical', cat: 'galaxy', sizeMul: 0.96698, fill: 0.4159, variants: 3, weight: 11,
   build(b, r, v) {
+    /* ⚠ "SHELLS, FROM THE SMALLER GALAXIES IT HAS EATEN." That line has been
+       in this file the whole time, describing the one feature that makes a
+       giant elliptical different from an ordinary one — the faint concentric
+       arcs of a swallowed galaxy still unwinding — and all three of them were
+       drawn at 0.5 to 0.82 S inside an envelope of S. Nobody has ever seen
+       them. They are outside the body now, at 1.05 to 1.5 S, which is where a
+       shell actually is. */
     const S = SP.giantell, H = S * 1.06;
-    envelope(b, S, H, U_.goldDim, 0.88);
-    b.ellip(S * 0.72, H * 0.4, S * 0.64, U_.gold, { y: H * 0.5, ry: v * 0.6 }, 9, 6);
-    b.ellip(S * 0.4, H * 0.24, S * 0.36, U_.amber, { y: H * 0.5 }, 9, 6);
-    b.ellip(S * 0.14, H * 0.1, S * 0.13, U_.goldPale, { y: H * 0.5 }, 7, 5);
-    // shells, from the smaller galaxies it has eaten
-    for (let i = 0; i < 3; i++) {
-      const d = S * (0.5 + i * 0.16);
-      b.ellip(d, H * 0.05, d * 0.9, U_.red, { y: H * (0.36 + i * 0.14), ry: i * 0.9 }, 9, 4);
-    }
-    for (let i = 0; i < 8; i++) {
-      const a = r() * TAU, d = S * (0.4 + r() * 0.55);
-      b.sphere(S * 0.04, U_.goldPale, { x: Math.cos(a) * d, y: H * (0.24 + r() * 0.5), z: Math.sin(a) * d }, 6, 4);
-    }
+    core(b, S, H * 0.5, S * 0.88, U_.gold, { y: H * 0.5, k: 1, ry: v * 0.6, seg: 9, hseg: 6 });
+    b.decor((d) => {
+      for (let i = 0; i < 3; i++) {
+        const dd = S * (1.05 + i * 0.22);
+        d.ellip(dd, H * 0.045, dd * 0.9, U_.red, { y: H * (0.4 + i * 0.1), ry: i * 0.9 }, 9, 4);
+      }
+      for (let i = 0; i < 9; i++) {
+        const a = r() * TAU, dd = S * (1.12 + r() * 0.5);
+        d.sphere(S * 0.045, U_.goldPale,
+          { x: Math.cos(a) * dd, y: H * (0.2 + r() * 0.6), z: Math.sin(a) * dd }, 5, 4);
+      }
+    });
   } });
 
 /* ==================================================================
