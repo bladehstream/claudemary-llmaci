@@ -474,6 +474,18 @@ P({ id: 'u_quasar', name: 'Quasar', cat: 'active', fill: 0.2, variants: 3, weigh
       }
       b.sphere(S * (0.1 + v * 0.02), U_.bluePale, { y: H * (0.5 + s * 0.46) }, 7, 5);
     }
+    /* ⚠ "A STUB OF BEAM EITHER WAY" — on the one object in the catalogue whose
+       entire fame is a beam you can see from the other side of the universe.
+       The stubs stay exactly as they are, because they set the vertical extent
+       of the box and shrinking a solid body is what cost the disc galaxies two
+       runs in fifteen. The REAL jets are ghost and run on past them, four times
+       the height of the prop, ending in the lobes where they finally stop. */
+    b.decor((d) => {
+      for (const s of [-1, 1]) {
+        jet(d, H * (0.5 + s * 0.5), H * 1.5, U_.jet,
+          { up: s, r: 0.012, knots: 4, hot: U_.bluePale, lobe: 0.075 });
+      }
+    });
   } });
 
 P({ id: 'u_giantell', name: 'Giant Elliptical', cat: 'galaxy', sizeMul: 0.96698, fill: 0.4159, variants: 3, weight: 11,
@@ -524,7 +536,11 @@ P({ id: 'u_pair', name: 'Interacting Pair', cat: 'group', fill: 0.24, variants: 
     b.ellip(R2, R2 * 0.72, R2 * 0.86, U_.goldDim, { x: S * 0.52, y: R1 * 0.55, ry: 0.7 + v * 0.3 }, 9, 6);
     b.ellip(R2 * 0.3, R2 * 0.34, R2 * 0.24, U_.goldPale, { x: S * 0.52, y: R1 * 0.55 }, 7, 5);
     strand(b, -S * 0.36 + R1 * 0.7, 0, S * 0.52 - R2 * 0.7, 0, R1 * 0.5, S * 0.05, 4, U_.blue, r, R1 * 0.14);
-    // tidal tails, thrown up and out rather than flat and far
+    /* "Tidal tails, thrown up and out rather than flat and far" — up and out
+       because flat and far was a fence. The stubs stay (they pin the box); the
+       tails they were standing in for are ghost, and they are long and they
+       CURVE, because a tidal tail is a piece of a disc being unwound and that
+       is the only thing that distinguishes it from a smear. */
     for (const s of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
         const t = (i + 1) / 3;
@@ -534,6 +550,13 @@ P({ id: 'u_pair', name: 'Interacting Pair', cat: 'group', fill: 0.24, variants: 
         }, 7, 4);
       }
     }
+    b.decor((d) => {
+      for (const s of [-1, 1]) {
+        spiralArm(d, S * 0.6, S * 1.85, s > 0 ? 0.3 : Math.PI + 0.3, s * 1.5,
+          [U_.blueDim, U_.blue, U_.bluePale],
+          { y: R1 * 0.62, w: 0.055, h: 0.3, seg: 5, hseg: 3 }, 12);
+      }
+    });
   } });
 
 P({ id: 'u_lyman', name: 'Lyman-alpha Blob', cat: 'gas', fill: 0.08, variants: 3, weight: 10,
@@ -583,6 +606,17 @@ P({ id: 'u_merger', name: 'Merging Pair', cat: 'group', fill: 0.26, variants: 4,
         }, 7, 4);
       }
     }
+    /* THE ANTENNAE. Two galaxies mid-merger throw two enormous curved tails in
+       opposite directions, and that pair of arcs is the most recognisable
+       picture in extragalactic astronomy — it is what the object is NAMED for.
+       They reached 0.62 S. They reach 2.1 S now, ghost, and they curve. */
+    b.decor((d) => {
+      for (const s of [-1, 1]) {
+        spiralArm(d, S * 0.5, S * 2.1, (s > 0 ? 0.5 : Math.PI + 0.5) + v * 0.4, s * 1.9,
+          [U_.blueDim, U_.redDim, U_.ice],
+          { y: R * 0.55, w: 0.05, h: 0.28, seg: 5, hseg: 3 }, 14);
+      }
+    });
   } });
 
 P({ id: 'u_agn', name: 'Active Nucleus', cat: 'active', surface: 'air', flyHeight: 96,
@@ -750,6 +784,19 @@ P({ id: 'u_ripple', name: 'CMB Ripple', cat: 'web', fill: 0.035, variants: 3, we
     }
     b.ellip(S * 0.24, H * 0.2, S * 0.24, U_.violetDim, { y: H * 0.66 }, 9, 6);
     b.sphere(S * 0.08, U_.hollowRim, { y: H * 0.8 }, 7, 5);
+    /* ⚠ "ONE FLAT TORUS WOULD FENCE OFF A THOUSAND MEGAPARSECS OF GROUND WHILE
+       READING AS EDIBLE." True when written, retired by ghost — and it is the
+       whole difference between this prop and `u_halo`, which was the other
+       scattered-lozenge field and indistinguishable from it. Broken arcs read
+       as scattered blobs; continuous rings read as rings, and rings are the
+       only thing the oldest light in the universe looks like. The arc blobs
+       stay solid and keep pinning the box; the rings ride on them. */
+    b.decor((d) => {
+      for (let k = 0; k < 3; k++) {
+        ring(d, S * (0.94 - k * 0.3), k % 2 ? U_.violet : U_.haloLit,
+          { y: H * (0.16 + k * 0.2), tube: 0.055 - k * 0.008 }, 26);
+      }
+    });
   } });
 
 P({ id: 'u_halo', name: 'Dark Matter Halo', cat: 'web', fill: 0.05, variants: 3, weight: 7,
