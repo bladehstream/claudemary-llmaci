@@ -207,6 +207,28 @@ function envelope(b, R, H, col, squash = 1) {
  * `n` little galaxies filling a lens of radius R and height H, crowded toward
  * the middle by `bias`. The workhorse behind every group and cluster.
  */
+/**
+ * Members STRADDLING the surface of an envelope of half-width R, rather than
+ * distributed through its volume.
+ *
+ * ⚠ THE WHOLE UNIVERSE STAGE USED `swarm` FOR ITS CLUSTERS AND EVERY MEMBER
+ * WAS INVISIBLE. `swarm`'s radial bias pulls points towards the centre, which
+ * is correct for how galaxies are actually distributed and exactly wrong for
+ * whether you can see any of them: they end up inside an opaque envelope. This
+ * places them in a shell from 0.9 R to 1.25 R, so the silhouette becomes a
+ * crowd of galaxies with the halo behind them.
+ */
+function ringSwarm(b, R, H, n, cols, rnd, sMin, sMax) {
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * TAU;
+    const d = R * (0.9 + rnd() * 0.35);
+    const rr = R * (sMin + rnd() * (sMax - sMin));
+    b.ellip(rr, rr * (0.45 + rnd() * 0.42), rr * (0.8 + rnd() * 0.4),
+      cols[Math.floor(rnd() * cols.length)],
+      { x: Math.cos(a) * d, y: H * (0.24 + rnd() * 0.6), z: Math.sin(a) * d, ry: rnd() * TAU }, 6, 4);
+  }
+}
+
 function swarm(b, R, H, n, cols, rnd, sMin, sMax, bias = 1.7) {
   for (let i = 0; i < n; i++) {
     const a = rnd() * TAU;
@@ -587,25 +609,45 @@ P({ id: 'u_agn', name: 'Active Nucleus', cat: 'active', surface: 'air', flyHeigh
 
 P({ id: 'u_compact', name: 'Compact Group', cat: 'group', fill: 0.2, variants: 4, weight: 9,
   build(b, r, v) {
+    /* ⚠ THIS PROP RENDERED AS A SOLID BLACK EGG AND EVERY GALAXY IN IT WAS
+       REAL, DRAWN, AND INVISIBLE. `envelope()` paints `U_.space` — the darkest
+       colour in the set — across the full size of the prop, FIRST, and the
+       five galaxies were then built at 0.56 S, comfortably inside it.
+
+       ⚠ AND GHOST DOES NOT HELP WITH THIS. Ghost geometry is still drawn
+       opaquely; it only means "not measured". So there is no version of this
+       where the contents sit inside the envelope and can be seen. Either the
+       envelope goes, or the contents come out.
+
+       The envelope STAYS — it is what pins the box, and shrinking a solid body
+       is what cost the disc galaxies two runs in fifteen. The galaxies move out
+       to straddle its surface instead, which is both visible and right: a
+       compact group is galaxies studding a common halo of stripped stars, not
+       galaxies buried in one. Same trick as the red giant's lumpy limb, and
+       like that one it changes nothing `balance` can feel. */
     const S = SP.compact, H = S * 0.82;
-    // five galaxies almost touching, one of them being torn apart
-    envelope(b, S, H, U_.space, 0.96);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * TAU + v * 0.4;
-      const d = S * (i === 0 ? 0.1 : 0.56);
-      const rr = S * (i === 0 ? 0.32 : 0.22 + r() * 0.08);
-      b.ellip(rr, rr * (0.4 + r() * 0.35), rr * 0.92, i % 2 ? U_.goldDim : U_.spaceLit,
-        { x: Math.cos(a) * d, y: H * 0.4, z: Math.sin(a) * d, ry: r() * TAU }, 9, 6);
-      b.cyl(rr * 0.6, rr * 0.6, H * 0.08, i % 2 ? U_.amber : U_.blueDim,
-        { x: Math.cos(a) * d, y: H * 0.42, z: Math.sin(a) * d }, 10);
-      b.sphere(rr * 0.18, U_.goldPale, { x: Math.cos(a) * d, y: H * 0.44, z: Math.sin(a) * d }, 6, 4);
-    }
-    // the common envelope of stripped stars, painted low so it is not a lid
-    for (let i = 0; i < 6; i++) {
-      const a = r() * TAU, d = S * (0.26 + r() * 0.46);
-      b.ellip(S * 0.16, H * 0.06, S * 0.1, U_.slateLit,
-        { x: Math.cos(a) * d, y: H * (0.14 + r() * 0.12), z: Math.sin(a) * d, ry: -a }, 7, 4);
-    }
+    envelope(b, S, H, U_.spaceLit, 0.96);
+    b.decor((d) => {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU + v * 0.4;
+        const dd = S * (i === 0 ? 0.34 : 0.96);
+        const rr = S * (i === 0 ? 0.34 : 0.24 + r() * 0.08);
+        const yy = H * (i === 0 ? 0.78 : 0.52);
+        d.ellip(rr, rr * (0.4 + r() * 0.35), rr * 0.92, i % 2 ? U_.goldDim : U_.spaceLit,
+          { x: Math.cos(a) * dd, y: yy, z: Math.sin(a) * dd, ry: r() * TAU }, 8, 5);
+        d.cyl(rr * 0.62, rr * 0.62, H * 0.07, i % 2 ? U_.amber : U_.blueDim,
+          { x: Math.cos(a) * dd, y: yy + H * 0.02, z: Math.sin(a) * dd }, 9);
+        d.sphere(rr * 0.2, U_.goldPale, { x: Math.cos(a) * dd, y: yy + H * 0.04, z: Math.sin(a) * dd }, 6, 4);
+      }
+      // the tidal bridge between the two closest, which is what "compact" means
+      for (let i = 0; i < 5; i++) {
+        const t = i / 4, a = 0.2 + v * 0.4;
+        d.ellip(S * 0.13, H * 0.05, S * 0.07, U_.slateLit, {
+          x: Math.cos(a) * S * (0.5 + t * 0.9), y: H * (0.56 + Math.sin(t * 3) * 0.1),
+          z: Math.sin(a) * S * (0.5 + t * 0.9), ry: -a,
+        }, 6, 4);
+      }
+    });
   } });
 
 P({ id: 'u_lobes', name: 'Radio Lobe Pair', cat: 'active', surface: 'air', flyHeight: 128,
@@ -639,7 +681,7 @@ P({ id: 'u_lobes', name: 'Radio Lobe Pair', cat: 'active', surface: 'air', flyHe
   } });
 
 P({ id: 'u_lens', name: 'Lensing Arc', cat: 'gas', surface: 'air', flyHeight: 164,
-  fill: 0.05, variants: 3, weight: 8,
+  sizeMul: 2.2268, fill: 0.5521, variants: 3, weight: 8,
   build(b, r, v) {
     const S = SP.lens, H = S * 0.9;
     // the cluster doing the bending, small and gold in the middle
@@ -650,24 +692,20 @@ P({ id: 'u_lens', name: 'Lensing Arc', cat: 'gas', surface: 'air', flyHeight: 16
       b.ellip(S * 0.07, H * 0.06, S * 0.07, U_.amber,
         { x: Math.cos(a) * d, y: H * (0.38 + r() * 0.24), z: Math.sin(a) * d }, 6, 4);
     }
-    /* THE ARCS. Broken into three separate sweeps at three azimuths, each of
-       small tilted pieces, so the footprint stays as deep as it is wide and the
-       collision boxes stay small. One long thin ring instead would have a
-       collision radius of the whole span while reading as something you could
-       swallow — the classic wide-flat fence. */
-    for (let k = 0; k < 3; k++) {
-      const rad = S * (0.66 + k * 0.15);
-      const a0 = (k / 3) * TAU + v * 0.5;
-      const sweep = 1.3 + k * 0.2;
-      const n = 5;
-      for (let i = 0; i < n; i++) {
-        const a = a0 + (i / (n - 1) - 0.5) * sweep;
-        b.ellip(S * 0.045, H * (0.1 + k * 0.02), S * 0.02, k === 1 ? U_.ice : U_.bluePale, {
-          x: Math.cos(a) * rad, y: H * (0.42 + k * 0.08), z: Math.sin(a) * rad,
-          ry: -a, rx: 0.45,
-        }, 7, 4);
+    /* ⚠ "ONE LONG THIN RING WOULD HAVE A COLLISION RADIUS OF THE WHOLE SPAN
+       WHILE READING AS SOMETHING YOU COULD SWALLOW — THE CLASSIC WIDE-FLAT
+       FENCE." Correct, and retired: ghost has no collision radius at all. The
+       arcs were five separate tilted pips per sweep, which is a dotted line,
+       and a lensing arc is the one thing in astronomy that is famously a
+       smooth continuous streak. Three real arcs now, each a partial surface of
+       revolution — the shape `sheet()` exists for. */
+    b.decor((d) => {
+      for (let k = 0; k < 3; k++) {
+        sheet(d, S * (0.78 + k * 0.22), H * (0.1 + k * 0.02), 1.3 + k * 0.25,
+          k === 1 ? U_.ice : U_.bluePale,
+          { y: H * (0.42 + k * 0.06), t: 0.02, bow: 0.05, phi0: (k / 3) * TAU + v * 0.5 }, 18);
       }
-    }
+    });
   } });
 
 /* ==================================================================
@@ -676,17 +714,21 @@ P({ id: 'u_lens', name: 'Lensing Arc', cat: 'gas', surface: 'air', flyHeight: 16
 
 P({ id: 'u_group', name: 'Galaxy Group', cat: 'group', fill: 0.19, variants: 4, weight: 8,
   build(b, r, v) {
+    /* Same fix as `u_compact`. The dominant spiral sits proud on TOP of the
+       halo rather than in the middle of it, which is the only place a
+       "dominant" anything can be seen, and the hangers-on ring the surface. */
     const S = SP.group, H = S * 0.72;
-    // a dominant spiral and a dozen hangers-on, all inside one faint envelope
-    envelope(b, S, H, U_.space, 0.96);
-    b.ellip(S * 0.3, H * 0.14, S * 0.3, U_.spaceLit, { y: H * 0.42 }, 9, 6);
-    b.cyl(S * 0.26, S * 0.26, H * 0.07, U_.blueDim, { y: H * 0.44 }, 11);
-    b.ellip(S * 0.09, H * 0.09, S * 0.09, U_.amber, { y: H * 0.45 }, 7, 5);
-    swarm(b, S * 0.78, H, 13 + v, [U_.goldDim, U_.blueDim, U_.spaceLit, U_.redDim], r, 0.07, 0.14, 1.25);
-    for (let i = 0; i < 4; i++) {
-      const a = r() * TAU, d = S * (0.3 + r() * 0.42);
-      b.sphere(S * 0.035, U_.goldPale, { x: Math.cos(a) * d, y: H * (0.3 + r() * 0.4), z: Math.sin(a) * d }, 6, 4);
-    }
+    envelope(b, S, H, U_.spaceLit, 0.96);
+    b.decor((d) => {
+      d.ellip(S * 0.34, H * 0.16, S * 0.34, U_.spaceLit, { y: H * 0.86 }, 9, 6);
+      d.cyl(S * 0.29, S * 0.29, H * 0.07, U_.blueDim, { y: H * 0.88 }, 11);
+      d.ellip(S * 0.1, H * 0.1, S * 0.1, U_.amber, { y: H * 0.9 }, 7, 5);
+      ringSwarm(d, S, H, 12 + v, [U_.goldDim, U_.blueDim, U_.spaceLit, U_.redDim], r, 0.07, 0.13);
+      for (let i = 0; i < 4; i++) {
+        const a = r() * TAU, dd = S * (0.95 + r() * 0.3);
+        d.sphere(S * 0.04, U_.goldPale, { x: Math.cos(a) * dd, y: H * (0.35 + r() * 0.5), z: Math.sin(a) * dd }, 6, 4);
+      }
+    });
   } });
 
 P({ id: 'u_ripple', name: 'CMB Ripple', cat: 'web', fill: 0.035, variants: 3, weight: 7,
@@ -731,44 +773,49 @@ P({ id: 'u_halo', name: 'Dark Matter Halo', cat: 'web', fill: 0.05, variants: 3,
     if (v) b.ellip(S * 0.12, H * 0.06, S * 0.11, U_.blueDim, { x: S * 0.3, y: H * 0.56, z: -S * 0.24 }, 7, 5);
   } });
 
-P({ id: 'u_shock', name: 'Shock Front', cat: 'gas', fill: 0.06, variants: 3, weight: 7,
+P({ id: 'u_shock', name: 'Shock Front', cat: 'gas', sizeMul: 1.3991, fill: 0.1643, variants: 3, weight: 7,
   build(b, r, v) {
+    /* ⚠ "AN ARC OF TALL THICK SEGMENTS" IS A PALISADE. The old comment
+       explains the segments as deliberate — vertical extent on purpose,
+       because a curved sheet lying flat reads as a floor at chest height —
+       and it is the same wrong axis the solar stage's bow shock and
+       heliopause were stuck on. Thirteen tall elements in a row flute
+       whatever they are made of. A shock front is ONE surface; `sheet()`
+       makes one, and ghost means it no longer has to lie flat OR be chopped
+       up to be safe. */
     const S = SP.shock, H = S * 0.86;
-    /* Two cluster-sized gas clouds ran into each other and this is the bow wave.
-       An arc of tall thick segments — vertical extent on purpose, because a
-       curved sheet lying flat is exactly the thing that reads as a floor at
-       chest height. */
     const sweep = 2.0 + v * 0.2;
-    for (let k = 0; k < 2; k++) {
-      const rad = S * (0.94 - k * 0.26);
-      const n = 7 - k;
-      for (let i = 0; i < n; i++) {
-        const a = -sweep / 2 + (i / (n - 1)) * sweep;
-        b.ellip(S * 0.22, H * (0.44 - k * 0.12), S * 0.09, k ? U_.ember : U_.shock, {
-          x: Math.cos(a) * rad, y: H * (0.44 - k * 0.06), z: Math.sin(a) * rad, ry: -a, rz: 0.14,
-        }, 7, 5);
+    b.ellip(S * 0.6, H * 0.42, S * 0.6, U_.redDim, { y: H * 0.44 }, 9, 6);
+    b.decor((d) => {
+      sheet(d, S * 1.05, H * 0.86, sweep, U_.shock, { y: H * 0.06, t: 0.04, bow: 0.2 }, 22);
+      sheet(d, S * 0.78, H * 0.6, sweep * 0.86, U_.ember, { y: H * 0.14, t: 0.045, bow: 0.24 }, 18);
+      // the gas being ploughed, trailing behind the front
+      for (let i = 0; i < 6; i++) {
+        const a = -sweep / 2 + r() * sweep;
+        const dd = S * (0.7 + r() * 0.5);
+        d.ellip(S * 0.2, H * 0.16, S * 0.14, U_.redDim,
+          { x: Math.cos(a) * dd, y: H * (0.2 + r() * 0.3), z: Math.sin(a) * dd, ry: -a }, 6, 4);
       }
-    }
-    // the gas being ploughed, trailing behind the front
-    for (let i = 0; i < 6; i++) {
-      const a = -sweep / 2 + r() * sweep;
-      const d = S * (0.2 + r() * 0.4);
-      b.ellip(S * 0.2, H * 0.16, S * 0.14, U_.redDim,
-        { x: Math.cos(a) * d, y: H * (0.2 + r() * 0.2), z: Math.sin(a) * d, ry: -a }, 7, 5);
-    }
-    b.ellip(S * 0.18, H * 0.2, S * 0.16, U_.gold, { x: -S * 0.36, y: H * 0.28 }, 9, 6);
+      d.ellip(S * 0.2, H * 0.22, S * 0.18, U_.gold, { x: -S * 0.5, y: H * 0.3 }, 9, 6);
+    });
   } });
 
 P({ id: 'u_cluster', name: 'Galaxy Cluster', cat: 'cluster', fill: 0.34, variants: 4, weight: 7,
   build(b, r, v) {
+    /* Four nested ellipsoids at the centre — slate, slate-lit, gold, gold-pale,
+       a whole brightness gradient — every one of them inside the envelope and
+       none ever seen. The gradient is gone; the galaxies are on the surface,
+       where a hundred galaxies in a bag of hot gas actually read as a hundred
+       galaxies rather than as the bag. */
     const S = SP.cluster, H = S * 0.84;
-    // a hundred galaxies in a bag of hot gas; twenty-two of them get drawn
-    envelope(b, S, H, U_.space, 0.95);
-    b.ellip(S * 0.5, H * 0.4, S * 0.48, U_.slate, { y: H * 0.46 }, 9, 6);
-    b.ellip(S * 0.28, H * 0.24, S * 0.27, U_.slateLit, { y: H * 0.46 }, 9, 6);
-    b.ellip(S * 0.2, H * 0.12, S * 0.19, U_.gold, { y: H * 0.46 }, 9, 6);
-    b.ellip(S * 0.07, H * 0.06, S * 0.07, U_.goldPale, { y: H * 0.47 }, 7, 5);
-    swarm(b, S * 0.8, H, 19 + v, [U_.goldDim, U_.redDim, U_.blueDim, U_.spaceLit, U_.amber], r, 0.06, 0.12, 1.4);
+    envelope(b, S, H, U_.spaceLit, 0.95);
+    b.decor((d) => {
+      // the brightest cluster galaxy, sitting proud at the top of the well
+      d.ellip(S * 0.3, H * 0.2, S * 0.29, U_.slateLit, { y: H * 0.88 }, 9, 6);
+      d.ellip(S * 0.16, H * 0.12, S * 0.15, U_.gold, { y: H * 0.92 }, 8, 5);
+      d.ellip(S * 0.06, H * 0.05, S * 0.06, U_.goldPale, { y: H * 0.95 }, 6, 4);
+      ringSwarm(d, S, H, 18 + v, [U_.goldDim, U_.redDim, U_.blueDim, U_.spaceLit, U_.amber], r, 0.055, 0.11);
+    });
   } });
 
 P({ id: 'u_void', name: 'Cosmic Void', cat: 'web', fill: 0.03, variants: 3, weight: 7,
@@ -805,35 +852,44 @@ P({ id: 'u_void', name: 'Cosmic Void', cat: 'web', fill: 0.03, variants: 3, weig
 
 P({ id: 'u_protocluster', name: 'Protocluster', cat: 'cluster', fill: 0.18, variants: 3, weight: 6,
   build(b, r, v) {
+    /* The web rides ON the halo rather than inside it — see `u_compact`. For
+       the filament props that means lifting the whole structure to the top
+       surface, which is also the angle this stage is played from. */
     const S = SP.protocluster, H = S * 0.8;
-    // a cluster still assembling: blue-white clumps and three strands feeding in
-    envelope(b, S, H, U_.space, 0.96);
-    node(b, 0, 0, S * 0.4, H, 9, [U_.bluePale, U_.blue, U_.cyan, U_.ice], r);
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * TAU + v * 0.6;
-      const ex = Math.cos(a) * S * 0.78, ez = Math.sin(a) * S * 0.78;
-      strand(b, Math.cos(a) * S * 0.28, Math.sin(a) * S * 0.28, ex, ez, H * 0.34, S * 0.055, 4, U_.blueDim, r, H * 0.1);
-      node(b, ex * 0.9, ez * 0.9, S * 0.15, H * 0.7, 3, [U_.blue, U_.blueDim, U_.goldDim], r);
-    }
-    b.ellip(S * 0.16, H * 0.14, S * 0.16, U_.ice, { y: H * 0.44 }, 9, 6);
+    envelope(b, S, H, U_.spaceLit, 0.96);
+    b.decor((d) => {
+      node(d, 0, 0, S * 0.42, H * 1.6, 9, [U_.bluePale, U_.blue, U_.cyan, U_.ice], r, H * 0.32);
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * TAU + v * 0.6;
+        const ex = Math.cos(a) * S * 1.05, ez = Math.sin(a) * S * 1.05;
+        strand(d, Math.cos(a) * S * 0.3, Math.sin(a) * S * 0.3, ex, ez, H * 0.86, S * 0.06, 5, U_.blueDim, r, H * 0.12);
+        node(d, ex * 0.94, ez * 0.94, S * 0.17, H * 1.1, 3, [U_.blue, U_.blueDim, U_.goldDim], r, H * 0.3);
+      }
+      d.ellip(S * 0.17, H * 0.15, S * 0.17, U_.ice, { y: H * 0.95 }, 9, 6);
+    });
   } });
 
 P({ id: 'u_core', name: 'Cluster Core', cat: 'cluster', fill: 0.42, variants: 3, weight: 6,
   build(b, r, v) {
+    /* The cD galaxy is the subject of this prop and it was at dead centre,
+       inside the envelope, invisible. It rides on top now — which is also what
+       "sitting in the bottom of the well" looks like from outside, since the
+       well is the thing you cannot see. */
     const S = SP.core, H = S * 0.96;
-    // a cD galaxy the size of a small group, sitting in the bottom of the well
     envelope(b, S, H, U_.slate, 0.94);
-    b.ellip(S * 0.54, H * 0.42, S * 0.5, U_.goldDim, { y: H * 0.5, ry: v * 0.5 }, 9, 6);
-    b.ellip(S * 0.3, H * 0.26, S * 0.28, U_.gold, { y: H * 0.5 }, 9, 6);
-    b.ellip(S * 0.13, H * 0.12, S * 0.12, U_.goldPale, { y: H * 0.5 }, 7, 5);
-    b.sphere(S * 0.05, U_.glow, { y: H * 0.5 }, 7, 5);
-    // the cannibalised galaxies still falling in
-    swarm(b, S * 0.86, H, 14, [U_.redDim, U_.amber, U_.goldDim, U_.blueDim], r, 0.05, 0.11, 1.6);
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * TAU + 0.4;
-      b.ellip(S * 0.06, H * 0.1, S * 0.02, U_.ice,
-        { x: Math.cos(a) * S * 0.44, y: H * 0.56, z: Math.sin(a) * S * 0.44, ry: -a, rx: 0.4 }, 7, 4);
-    }
+    b.decor((d) => {
+      d.ellip(S * 0.5, H * 0.26, S * 0.46, U_.goldDim, { y: H * 0.84, ry: v * 0.5 }, 9, 6);
+      d.ellip(S * 0.28, H * 0.18, S * 0.26, U_.gold, { y: H * 0.88 }, 9, 6);
+      d.ellip(S * 0.12, H * 0.1, S * 0.11, U_.goldPale, { y: H * 0.92 }, 7, 5);
+      d.sphere(S * 0.05, U_.glow, { y: H * 0.95 }, 7, 5);
+      ringSwarm(d, S, H, 14, [U_.redDim, U_.amber, U_.goldDim, U_.blueDim], r, 0.05, 0.1);
+      // the cold fronts, sloshing round the core
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * TAU + 0.4;
+        d.ellip(S * 0.1, H * 0.12, S * 0.03, U_.ice,
+          { x: Math.cos(a) * S * 1.02, y: H * 0.62, z: Math.sin(a) * S * 1.02, ry: -a, rx: 0.4 }, 7, 4);
+      }
+    });
   } });
 
 P({ id: 'u_filament', name: 'Filament Strand', cat: 'web', fill: 0.05, variants: 4, weight: 6,
@@ -855,14 +911,29 @@ P({ id: 'u_filament', name: 'Filament Strand', cat: 'web', fill: 0.05, variants:
       b.ellip(rr, H * (0.3 + Math.sin(t * Math.PI) * 0.2), rr * 0.85, U_.slate,
         { x, y: H * 0.42, z, ry: r() * TAU }, 7, 5);
     }
-    // the warm-hot gas bridging the knots, hung on the same line but standing UP
-    for (let i = 0; i < 5; i++) {
-      const t = (i + 0.5) / 5;
-      b.ellip(S * 0.11, H * 0.38, S * 0.05, U_.haloLit, {
-        x: -S * 0.54 + t * S * 1.08, y: H * 0.42,
-        z: Math.sin(t * 3.3 + v) * S * 0.26, ry: -Math.cos(t * 3.3 + v) * 0.5,
-      }, 7, 5);
-    }
+    /* ⚠ THE GAS WAS FIVE SLABS STANDING ON END, "hung on the same line but
+       standing UP" — vertical because a horizontal one would have been a
+       fence. Five tall elements in a row flute, which is why this prop read
+       as a palisade. Ghost has no fence, so the gas lies ALONG the chain the
+       way a filament's gas actually does: elements turned to follow the
+       curve, welding into a tube rather than standing across it. */
+    b.decor((d) => {
+      /* ⚠ AND IT HAS TO BE FAT ENOUGH TO WELD THEM. First pass made the gas
+         thin and the prop still fluted, because the pickets are the SOLID
+         bodies and those cannot move without touching the box. So the gas is
+         wide and heavily overlapping instead — it swallows the gaps between
+         the knots and the chain reads as one strand with lumps in it, which
+         is what a filament is. Ghost, so none of it is measured. */
+      for (let i = 0; i < 11; i++) {
+        const t = (i + 0.5) / 11;
+        const x = -S * 0.62 + t * S * 1.24;
+        const z = Math.sin(t * 3.3 + v) * S * 0.26;
+        const dz = Math.cos(t * 3.3 + v) * 3.3 * S * 0.26;
+        d.ellip(S * 0.24, H * (0.2 + Math.sin(t * Math.PI) * 0.1), S * 0.18, U_.slateLit, {
+          x, y: H * 0.44, z, ry: -Math.atan2(dz, S * 1.24),
+        }, 6, 4);
+      }
+    });
   } });
 
 P({ id: 'u_wall', name: 'Wall of Galaxies', cat: 'web', fill: 0.05, variants: 3, weight: 5,
@@ -884,56 +955,76 @@ P({ id: 'u_wall', name: 'Wall of Galaxies', cat: 'web', fill: 0.05, variants: 3,
           { x, y: H * (0.1 + u * 0.82), z, ry: r() * TAU }, 7, 5);
       }
     }
-    // the gas between them, a dim curtain hung on the same plane
-    for (let i = 0; i < 5; i++) {
-      const t = (i + 0.5) / 5;
-      b.ellip(S * 0.19, H * 0.42, S * 0.05, U_.slate, {
-        x: -S * 0.8 + t * S * 1.6, y: H * 0.44,
-        z: Math.sin(t * 2.6 + v) * S * 0.34, ry: -Math.cos(t * 2.6 + v) * 0.4,
-      }, 7, 5);
-    }
+    /* ⚠ AND THE CURTAIN WAS FIVE MORE SLABS. `sheet()` makes a single
+       continuous surface, which is exactly what "a dim curtain hung on the
+       same plane" means and what five separate panels can never be — under
+       flat shading each keeps its own silhouette however far they overlap.
+       A wide arc of a big circle is a gently buckled plane, which is the
+       shape a wall of galaxies has. */
+    b.decor((d) => {
+      /* ⚠ `sheet()` REVOLVES ABOUT THE ORIGIN, so an arc of radius R sits a
+         whole R away from the middle of the prop. First pass put a perfectly
+         good wall 1.55 S off to one side of the galaxies it is supposed to be
+         the wall OF, and the prop read as a crowd standing next to a screen.
+         Translating by -R brings the arc's midpoint back to the centre, so the
+         sheet now runs through the galaxy plane the way the comment always
+         said it did. */
+      /* ⚠ `sheet()` REVOLVES ABOUT THE ORIGIN, so an arc of radius R sits a
+         whole R from the middle of the prop, and `LatheGeometry` puts the
+         phi = PI/2 midpoint on +X — not +Z, which is where the first repair
+         translated it to. Two passes lost to that. Offsetting by -R on the
+         RIGHT axis brings the arc's midpoint to the centre, so the sheet runs
+         through the galaxy plane the way the comment always claimed. */
+      const R = S * 1.55;
+      sheet(d, R, H * 0.8, 1.2, U_.slate,
+        { y: H * 0.06, x: -R, t: 0.03, bow: 0.1, phi0: Math.PI / 2 }, 20);
+    });
   } });
 
 P({ id: 'u_supercluster', name: 'Supercluster', cat: 'super', fill: 0.26, variants: 3, weight: 5,
   build(b, r, v) {
     const S = SP.supercluster, H = S * 0.78;
     // four clusters and the filaments that tie them together
-    envelope(b, S, H, U_.space, 0.97);
-    const pts = [];
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * TAU + v * 0.5;
-      const d = S * (k === 0 ? 0.15 : 0.56);
-      pts.push([Math.cos(a) * d, Math.sin(a) * d, k === 0 ? 0.32 : 0.19 + r() * 0.05]);
-    }
-    for (const [x, z, w] of pts) {
-      b.ellip(S * w * 0.8, H * w * 0.7, S * w * 0.76, U_.slate, { x, y: H * 0.42, z }, 9, 6);
-      node(b, x, z, S * w, H, 5, [U_.goldDim, U_.amber, U_.redDim, U_.blueDim], r);
-      b.ellip(S * w * 0.24, H * w * 0.3, S * w * 0.22, U_.gold, { x, y: H * 0.44, z }, 7, 5);
-    }
-    for (let k = 1; k < 4; k++) {
-      strand(b, pts[0][0], pts[0][1], pts[k][0] * 0.86, pts[k][1] * 0.86, H * 0.34, S * 0.055, 4, U_.haloLit, r, H * 0.08);
-    }
-    b.sphere(S * 0.05, U_.glow, { x: pts[0][0], y: H * 0.46, z: pts[0][1] }, 7, 5);
+    envelope(b, S, H, U_.spaceLit, 0.97);
+    b.decor((d) => {
+      const pts = [];
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * TAU + v * 0.5;
+        const dd = S * (k === 0 ? 0.2 : 0.82);
+        pts.push([Math.cos(a) * dd, Math.sin(a) * dd, k === 0 ? 0.3 : 0.19 + r() * 0.05]);
+      }
+      for (const [x, z, w] of pts) {
+        d.ellip(S * w * 0.8, H * w * 0.7, S * w * 0.76, U_.slate, { x, y: H * 0.84, z }, 8, 5);
+        node(d, x, z, S * w, H * 1.3, 5, [U_.goldDim, U_.amber, U_.redDim, U_.blueDim], r, H * 0.34);
+        d.ellip(S * w * 0.24, H * w * 0.3, S * w * 0.22, U_.gold, { x, y: H * 0.88, z }, 7, 5);
+      }
+      for (let k = 1; k < 4; k++) {
+        strand(d, pts[0][0], pts[0][1], pts[k][0] * 0.9, pts[k][1] * 0.9, H * 0.84, S * 0.055, 5, U_.haloLit, r, H * 0.08);
+      }
+      d.sphere(S * 0.05, U_.glow, { x: pts[0][0], y: H * 0.9, z: pts[0][1] }, 7, 5);
+    });
   } });
 
-P({ id: 'u_attractor', name: 'Great Attractor', cat: 'super', fill: 0.42, variants: 3, weight: 4,
+P({ id: 'u_attractor', name: 'Great Attractor', cat: 'super', sizeMul: 1.0063, fill: 0.4280, variants: 3, weight: 4,
   build(b, r, v) {
     const S = SP.attractor, H = S * 0.92;
     // whatever it is, everything for a hundred megaparsecs is falling into it
     envelope(b, S, H, U_.slate, 0.96);
-    b.ellip(S * 0.52, H * 0.46, S * 0.5, U_.slateLit, { y: H * 0.5 }, 9, 6);
-    b.ellip(S * 0.3, H * 0.3, S * 0.28, U_.goldDim, { y: H * 0.5 }, 9, 6);
-    b.ellip(S * 0.14, H * 0.15, S * 0.13, U_.amber, { y: H * 0.5 }, 7, 5);
-    b.sphere(S * 0.06, U_.glow, { y: H * 0.5 }, 7, 5);
-    // the streams, coming in from every side
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * TAU + v * 0.4;
-      strand(b, Math.cos(a) * S * 0.9, Math.sin(a) * S * 0.9,
-        Math.cos(a) * S * 0.24, Math.sin(a) * S * 0.24, H * 0.42, S * 0.05, 4,
-        k % 2 ? U_.haloLit : U_.redDim, r, H * 0.1);
-      node(b, Math.cos(a) * S * 0.82, Math.sin(a) * S * 0.82, S * 0.16, H * 0.8, 2,
-        [U_.goldDim, U_.blueDim, U_.redDim], r);
-    }
+    b.decor((d) => {
+      d.ellip(S * 0.36, H * 0.24, S * 0.34, U_.slateLit, { y: H * 0.86 }, 9, 6);
+      d.ellip(S * 0.22, H * 0.16, S * 0.2, U_.goldDim, { y: H * 0.9 }, 9, 6);
+      d.ellip(S * 0.11, H * 0.1, S * 0.1, U_.amber, { y: H * 0.94 }, 7, 5);
+      d.sphere(S * 0.06, U_.glow, { y: H * 0.97 }, 7, 5);
+      // the streams, coming in from every side and OVER the rim
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * TAU + v * 0.4;
+        strand(d, Math.cos(a) * S * 1.2, Math.sin(a) * S * 1.2,
+          Math.cos(a) * S * 0.28, Math.sin(a) * S * 0.28, H * 0.84, S * 0.05, 5,
+          k % 2 ? U_.haloLit : U_.redDim, r, H * 0.12);
+        node(d, Math.cos(a) * S * 1.1, Math.sin(a) * S * 1.1, S * 0.17, H * 1.2, 2,
+          [U_.goldDim, U_.blueDim, U_.redDim], r, H * 0.3);
+      }
+    });
   } });
 
 /* THE BIGGEST THING IN THE UNIVERSE, AND IT HAS TO BE EDIBLE.
@@ -957,26 +1048,27 @@ P({ id: 'u_complex', name: 'Supercluster Complex', cat: 'super', fill: 0.44, var
     const S = SP.complex, H = S * 0.84;
     // the whole web in one object: three superclusters, their filaments, and a
     // void in between that you can see into
-    envelope(b, S, H, U_.space, 0.97);
-    const pts = [[0, 0, 0.4], [0.6, -0.42, 0.26], [-0.5, 0.56, 0.28], [0.52, 0.58, 0.2], [-0.62, -0.5, 0.19]];
-    for (const [fx, fz, w] of pts) {
-      const x = fx * S, z = fz * S;
-      b.ellip(S * w * 0.84, H * w * 0.66, S * w * 0.8, U_.slate, { x, y: H * 0.44, z }, 9, 6);
-      b.ellip(S * w * 0.44, H * w * 0.42, S * w * 0.42, U_.slateLit, { x, y: H * 0.44, z }, 9, 6);
-      node(b, x, z, S * w * 0.9, H, 5, [U_.goldDim, U_.amber, U_.redDim, U_.blueDim, U_.spaceLit], r);
-      b.ellip(S * w * 0.2, H * w * 0.26, S * w * 0.18, U_.gold, { x, y: H * 0.46, z }, 7, 5);
-    }
-    for (let k = 1; k < pts.length; k++) {
-      strand(b, pts[0][0] * S * 0.5, pts[0][1] * S * 0.5, pts[k][0] * S * 0.82, pts[k][1] * S * 0.82,
-        H * 0.36, S * 0.045, 5, k % 2 ? U_.haloLit : U_.halo, r, H * 0.07);
-    }
-    // the void: a rim of dim galaxies round a piece of nothing
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * TAU + v * 0.4;
-      b.ellip(S * 0.06, H * 0.07, S * 0.05, i % 3 ? U_.violet : U_.violetDim, {
-        x: Math.cos(a) * S * 0.3 - S * 0.06, y: H * 0.3, z: Math.sin(a) * S * 0.3 + S * 0.06, ry: -a,
-      }, 7, 4);
-    }
-    b.sphere(S * 0.045, U_.glow, { y: H * 0.48 }, 7, 5);
-    b.sphere(S * 0.03, C.black, { y: H * 0.86 }, 6, 4);
+    envelope(b, S, H, U_.spaceLit, 0.97);
+    b.decor((d) => {
+      const pts = [[0, 0, 0.4], [0.78, -0.55, 0.26], [-0.66, 0.72, 0.28], [0.68, 0.74, 0.2], [-0.8, -0.64, 0.19]];
+      for (const [fx, fz, w] of pts) {
+        const x = fx * S, z = fz * S;
+        d.ellip(S * w * 0.84, H * w * 0.6, S * w * 0.8, U_.slate, { x, y: H * 0.84, z }, 8, 5);
+        d.ellip(S * w * 0.44, H * w * 0.38, S * w * 0.42, U_.slateLit, { x, y: H * 0.86, z }, 8, 5);
+        node(d, x, z, S * w * 0.9, H * 1.2, 5, [U_.goldDim, U_.amber, U_.redDim, U_.blueDim, U_.spaceLit], r, H * 0.34);
+        d.ellip(S * w * 0.2, H * w * 0.24, S * w * 0.18, U_.gold, { x, y: H * 0.9, z }, 7, 5);
+      }
+      for (let k = 1; k < pts.length; k++) {
+        strand(d, pts[0][0] * S * 0.5, pts[0][1] * S * 0.5, pts[k][0] * S * 0.86, pts[k][1] * S * 0.86,
+          H * 0.84, S * 0.045, 5, k % 2 ? U_.haloLit : U_.halo, r, H * 0.07);
+      }
+      // the void: a rim of dim galaxies round a piece of nothing
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + v * 0.4;
+        d.ellip(S * 0.07, H * 0.08, S * 0.06, i % 3 ? U_.violet : U_.violetDim, {
+          x: Math.cos(a) * S * 0.42 - S * 0.06, y: H * 0.88, z: Math.sin(a) * S * 0.42 + S * 0.06, ry: -a,
+        }, 7, 4);
+      }
+      d.sphere(S * 0.045, U_.glow, { y: H * 0.92 }, 7, 5);
+    });
   } });
