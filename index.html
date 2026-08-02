@@ -109,7 +109,16 @@
             <button class="mc-btn mc-pan" data-mc="drive-fwd" aria-label="Roll forward">▲</button>
             <button class="mc-btn mc-pan" data-mc="drive-back" aria-label="Roll backward">▼</button>
           </div>
-          <button class="mc-btn mc-dash" data-mc="dash" aria-label="Dash">DASH</button>
+          <!-- The dash button IS the meter. There was no dash readout anywhere in
+               the game, which was survivable while a dash was a flat 1.2s and is
+               not once it can be five times that: a charge that builds over forty
+               seconds and cannot be seen is not a feature, it is a coincidence.
+               Same fill idiom as the quit button above. -->
+          <button class="mc-btn mc-dash" data-mc="dash" aria-label="Dash">
+            <span class="md-fill"><i id="mc-dash-fill"></i></span>
+            <span class="md-ring"><i id="mc-dash-ring"></i></span>
+            <span class="md-label">DASH</span>
+          </button>
         </div>
       </div>
 

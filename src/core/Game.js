@@ -320,6 +320,13 @@ export class Game {
     this.buildTime = performance.now() - t0;
 
     this.kat = new Katamari(this.scene.material, 0.05);
+    /* ⚠ THE ONLY PLACE THE SUPER DASH IS TURNED ON. Same device test as the
+       magnet's default, and for the same reason — see the TUNING block in
+       Katamari.js. Deliberately NOT an option row: it is the phone's version
+       of a control the desktop already has, not a difficulty setting, and a
+       checkbox would invite exactly the "why can't I have it too" the honest
+       answer to which is "you can chain dashes with a keyboard". */
+    this.kat.superDash = isCoarsePointer();
     this.scene.scene.add(this.kat.group);
     this.kat.group.visible = false;
 
@@ -1109,6 +1116,7 @@ export class Game {
     this.hud.setGoalProgress(d, this.stage.goal, this.goalMet);
     this.hud.setStats(kat.collectedCount, kat.uniqueIds.size);
     this.hud.setSpeed(kat.speedFrac);
+    if (kat.superDash) this.hud.setDash(kat.dash, kat.superCharge);
 
     /* ---- milestones ---- */
     while (this.milestoneIdx < this.milestones.length && d >= this.milestones[this.milestoneIdx]) {

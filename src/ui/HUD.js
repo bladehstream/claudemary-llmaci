@@ -257,6 +257,10 @@ export class HUD {
        chip on screen for the whole next round. */
     this._quitFrac = -1;
     this.setQuitHold(0);
+    /* Same forced write, same reason — see `setDash`. */
+    this._dashFrac = -1;
+    this._dashCharge = -1;
+    this.setDash(1, 0);
     this.countEl.textContent = '0';
     this.uniqueEl.textContent = '0';
     this.timerEl.classList.remove('urgent');
@@ -342,6 +346,39 @@ export class HUD {
       this.flashEl.style.transition = 'opacity 400ms ease';
       this.flashEl.style.opacity = '0';
     });
+  }
+
+  /**
+   * Draw the dash meter on the phone's DASH button.
+   *
+   * @param {number} reserve  the dash bar, 0..1
+   * @param {number} charge   the super-dash charge, 0..1
+   *
+   * ⚠ SAME SHORT-CIRCUIT AS `setQuitHold`, AND THE SAME TRAP WITH IT. Both
+   * values are quantised before comparing, because they change by a few
+   * ten-thousandths every frame and an un-quantised guard never fires — this
+   * would then write two style properties sixty times a second forever. And
+   * because it short-circuits, `reset()` has to force `_dashFrac = -1` or a
+   * round that ended mid-dash leaves a half-empty button for the next one.
+   *
+   * Both writes are composited properties (`transform`, a custom property
+   * feeding a gradient) so neither costs layout.
+   */
+  setDash(reserve, charge) {
+    if (!this._mdFill) {
+      this._mdFill = document.getElementById('mc-dash-fill');
+      this._mdRing = document.getElementById('mc-dash-ring');
+      this._mdBtn = document.querySelector('.mc-dash');
+    }
+    if (!this._mdFill) return;
+    const r = Math.round(clamp(reserve, 0, 1) * 100) / 100;
+    const c = Math.round(clamp(charge, 0, 1) * 100) / 100;
+    if (r === this._dashFrac && c === this._dashCharge) return;
+    this._dashFrac = r;
+    this._dashCharge = c;
+    this._mdFill.style.transform = `scaleY(${r.toFixed(2)})`;
+    if (this._mdRing) this._mdRing.style.setProperty('--charge', c.toFixed(2));
+    if (this._mdBtn) this._mdBtn.classList.toggle('charged', c > 0.995);
   }
 
   setSpeed(frac) {

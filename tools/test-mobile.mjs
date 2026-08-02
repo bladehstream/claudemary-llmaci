@@ -499,6 +499,77 @@ console.log('\n=== the thumb buttons ===');
   });
   check('dash is a held state', dash.on === true && dash.off === false);
 
+  /* ---- SUPER DASH ----
+     Phone only, and the assertions are about the LAW rather than a spot value:
+     a full charge must make the dash last about five times as long, and the
+     desktop katamari must be untouched. Driven through `kat.step` at a fixed
+     dt so it is arithmetic, not a race with a real clock. */
+  const sup = await page.evaluate(() => {
+    const g = window.__llmaci;
+    const k = g.kat;
+    const inp = { moveX: 0, moveZ: -1, dash: true };
+    /* How many seconds of held dash before the meter bottoms out, at a given
+       starting charge. `step` is called with the world so climbing and ground
+       resolution behave exactly as they do in play. */
+    const secondsOfDash = (charge, superOn) => {
+      k.superDash = superOn;
+      k.dash = 1;
+      k.superCharge = charge;
+      /* Release the button first. The boost is latched on the RISING edge of
+         dashing, which is exactly what a player does between two dashes, and
+         measuring without it tests a state the game cannot be in. */
+      k.step(1 / 60, { moveX: 0, moveZ: -1, dash: false }, 0, g.world);
+      k.dash = 1;
+      k.superCharge = charge;
+      let t = 0;
+      while (k.dash > 0.081 && t < 60) { k.step(1 / 60, inp, 0, g.world); t += 1 / 60; }
+      return t;
+    };
+    const plain = secondsOfDash(0, false);
+    const empty = secondsOfDash(0, true);
+    const full = secondsOfDash(1, true);
+    /* And the charge itself: it must fill from nothing while NOT dashing. */
+    k.superDash = true;
+    k.superCharge = 0;
+    const idle = { moveX: 0, moveZ: -1, dash: false };
+    for (let i = 0; i < 60 * 20; i++) k.step(1 / 60, idle, 0, g.world);
+    const after20s = k.superCharge;
+    /* Off by default on a fresh katamari — the balance bot must not inherit it. */
+    const K = g.kat.constructor;
+    const fresh = new K(g.scene.material, 0.05);
+    return { plain, empty, full, after20s, freshOff: fresh.superDash === false };
+  });
+  check('the super dash is OFF on a fresh katamari', sup.freshOff);
+  check('no charge changes nothing', Math.abs(sup.empty - sup.plain) < 0.05,
+    `${sup.plain.toFixed(2)}s vs ${sup.empty.toFixed(2)}s`);
+  /* 500% was the brief and this asserts it is actually delivered. ⚠ The first
+     build measured 3.35x here, because the boost was sampled every frame and
+     therefore decayed as the charge was spent — the band is deliberately tight
+     enough that that version fails it. */
+  const ratio = sup.full / sup.plain;
+  check('a full charge multiplies the dash by ~5x', ratio > 4.5 && ratio <= 5.1,
+    `${sup.plain.toFixed(2)}s -> ${sup.full.toFixed(2)}s = ${ratio.toFixed(2)}x`);
+  check('the charge builds while not dashing', sup.after20s > 0.45 && sup.after20s < 0.55,
+    `${sup.after20s.toFixed(3)} after 20s`);
+
+  const dashUi = await page.evaluate(() => {
+    const g = window.__llmaci;
+    g.hud.setDash(0.5, 0.2);
+    const mid = {
+      fill: document.getElementById('mc-dash-fill').style.transform,
+      charged: document.querySelector('.mc-dash').classList.contains('charged'),
+    };
+    g.hud.setDash(1, 1);
+    return {
+      mid,
+      full: document.querySelector('.mc-dash').classList.contains('charged'),
+      ring: document.getElementById('mc-dash-ring').style.getPropertyValue('--charge'),
+    };
+  });
+  check('the dash meter draws its reserve', dashUi.mid.fill === 'scaleY(0.5)', dashUi.mid.fill);
+  check('and only flags CHARGED at the top', !dashUi.mid.charged && dashUi.full);
+  check('the charge ring follows the charge', dashUi.ring.trim() === '1.00', dashUi.ring);
+
   // Leaving play must not leave a button stuck down.
   const afterPause = await page.evaluate(() => {
     const el = document.querySelector('[data-mc="pan-left"]');

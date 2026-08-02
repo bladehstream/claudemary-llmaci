@@ -259,6 +259,31 @@ export const TUNING = {
   dashDrain: 0.85,
   dashRecover: 0.4,
 
+  /* ------------------------------------------------------------
+     SUPER DASH — phone only. See `Katamari.superDash`.
+
+     Requested as "charges up over time to increase the DURATION of
+     the dash up to 500%". So it does not touch `dashMul`: the ball is
+     no faster, it simply stays fast for longer. That is the whole
+     distinction, and it is what keeps this from being a speed cheat —
+     top speed governs the size ceiling and the climb budget, and
+     nothing here goes near either.
+
+     ⚠ WHY PHONE ONLY, HONESTLY. The same reason `magnet` defaults
+     higher on touch: a thumb on a 44px button and a tilt sensor with a
+     dead zone cannot chain short dashes the way a finger on Shift can,
+     so the phone gets the length it cannot earn by dexterity. It is
+     not a bonus for playing on a phone, it is the phone's version of a
+     control the desktop already has.
+     ------------------------------------------------------------ */
+  /** Extra duration multiplier at full charge. 4 => a 5x-long dash. */
+  superDashMax: 4,
+  /** Charge per second while NOT dashing: full in 40s of ordinary rolling. */
+  superChargeRate: 1 / 40,
+  /** Charge spent per second while dashing. Tuned so ONE full-length super
+      dash spends exactly one full bar — see the latch in `step`. */
+  superSpend: 1 / 5.4,
+
   /**
    * Gravity, in KATAMARI RADII per second squared — not metres.
    *
@@ -405,6 +430,22 @@ export class Katamari {
 
     this.dash = 1;                 // 1 = full, drains while dashing
     this.dashing = false;
+    /**
+     * Super-dash charge, 0..1. Fills while not dashing, spent while dashing,
+     * and divides the dash meter's drain rate so a full bar makes the dash
+     * last five times as long.
+     *
+     * ⚠ AND `superDash` DEFAULTS FALSE, WHICH IS LOAD-BEARING FOR THE
+     * HARNESS. `tools/balance.mjs` drives this class directly and dashes on
+     * half its ticks; if this were on by default the bot would inherit a
+     * phone-only feature and every clear rate in the game would move for a
+     * reason nobody could see. `Game` turns it on for a coarse pointer and
+     * nothing else does.
+     */
+    this.superCharge = 0;
+    this.superDash = false;
+    /** Latched at the start of each dash; see `step`. 1 = no super dash. */
+    this._dashBoost = 1;
     this.wobble = 0;               // grows with lumpiness, used for the bob
     this.lumpy = 0;
     this.rollDistance = 0;
@@ -455,6 +496,19 @@ export class Katamari {
     this.rampTop = -Infinity;
     this.spinner.quaternion.identity();
     this.dash = 1;
+    /* Not carried between rounds: a charge earned in the house should not be
+       spent in the galaxy, and starting empty makes the first one an event.
+       ⚠ `dashing` AND THE LATCHED BOOST HAVE TO GO WITH IT. The boost is
+       latched on the rising edge of `dashing`, so a round that ENDED mid-dash
+       leaves that flag true, the next round's first press is not an edge, and
+       the player inherits whatever multiplier the last round happened to
+       finish on. Found by a harness that measured two dashes back to back and
+       got 1.00x for the second — the same shape as the quit chip's stale fill,
+       which is the second time an edge-triggered thing has survived a reset
+       here. */
+    this.dashing = false;
+    this._dashBoost = 1;
+    this.superCharge = 0;
     this.lumpy = 0;
     this.wobble = 0;
     this.rollDistance = 0;
@@ -691,9 +745,30 @@ export class Katamari {
     const mag = Math.hypot(wx, wz);
 
     // ---- dash meter ----
+    const wasDashing = this.dashing;
     this.dashing = inp.dash && mag > 0.1 && this.dash > 0.08;
-    if (this.dashing) this.dash = clamp(this.dash - TUNING.dashDrain * dt, 0, 1);
-    else this.dash = clamp(this.dash + TUNING.dashRecover * dt, 0, 1);
+    /* ⚠ THE BOOST IS LATCHED ON THE RISING EDGE, NOT SAMPLED EVERY FRAME.
+       Sampling it live was the obvious build and it measured 3.35x against a
+       brief of 500%: the charge is being spent while the dash runs, so the
+       multiplier decays from 5 towards 1 underneath the very dash it is
+       supposed to be lengthening, and the achieved figure is the AVERAGE of
+       that decay rather than its peak. Latching also plays better — the dash
+       you started is the dash you get, with no mid-dash sag to explain. */
+    if (this.dashing && !wasDashing) {
+      this._dashBoost = this.superDash ? 1 + TUNING.superDashMax * this.superCharge : 1;
+    }
+    const boost = this.dashing ? this._dashBoost : 1;
+    if (this.dashing) {
+      this.dash = clamp(this.dash - (TUNING.dashDrain / boost) * dt, 0, 1);
+      if (this.superDash) {
+        this.superCharge = clamp(this.superCharge - TUNING.superSpend * dt, 0, 1);
+      }
+    } else {
+      this.dash = clamp(this.dash + TUNING.dashRecover * dt, 0, 1);
+      if (this.superDash) {
+        this.superCharge = clamp(this.superCharge + TUNING.superChargeRate * dt, 0, 1);
+      }
+    }
 
     /* ---- THE INPUT MAGNITUDE IS A THROTTLE ----
 
