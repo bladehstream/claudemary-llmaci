@@ -24,12 +24,20 @@
         premise is that the world is still loaded behind it — so
         this asserts the beat count advances, that the world
         survives, and that it lands back on the title.
+
+        ⚠ AND THERE ARE TWO OF THEM NOW. The swept version opens
+        on "Nothing is left", which is a claim about the player's
+        save, so the thing worth asserting is not that an ending
+        plays — it is that the RIGHT one plays. Both directions
+        are checked: clearing the universe at 1.1x the goal must
+        NOT earn it, and emptying the stage must.
    ============================================================ */
 
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SWEPT_BEATS, MAKING_BEATS, VARIANTS } from '../src/ui/Ending.js';
 
 const ROOT = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const server = await createServer({ root: ROOT, server: { port: 5213 }, logLevel: 'error' });
@@ -219,6 +227,27 @@ check('the title stops offering the ending',
 
 console.log('\n=== the ending ===');
 
+/* The beat lists are plain data and `Ending.js` touches the DOM only inside the
+   class constructor, so these need no browser. Assert them on both lists — the
+   monotonic-veil rule was written down once and then a second list appeared. */
+for (const [name, beats] of Object.entries(VARIANTS)) {
+  check(`${name}: the backdrop darkens monotonically end to end`,
+    beats.every((b, i) => i === 0 || b.veil >= beats[i - 1].veil),
+    beats.map((b) => b.veil).join(' -> '));
+  check(`${name}: it is fully black by the last beat`, beats[beats.length - 1].veil === 1);
+  check(`${name}: the last beat holds, and only the last`,
+    beats[beats.length - 1].hold === true && beats.slice(0, -1).every((b) => !b.hold));
+  check(`${name}: every beat has text`, beats.every((b) => (b.text || '').trim().length > 3));
+  check(`${name}: the music goes out and stays out`,
+    beats.filter((b) => b.music === 'out').length === 1
+    && beats.findIndex((b) => b.music === 'in') < beats.findIndex((b) => b.music === 'out'));
+}
+check('the two endings are actually different', SWEPT_BEATS[0].text !== MAKING_BEATS[0].text);
+/* The whole point of the making version's last card is that it tells you the
+   other one exists. Lose that line and the swept ending becomes unfindable. */
+check('the making version points at the swept one',
+  /universe/i.test(MAKING_BEATS[MAKING_BEATS.length - 1].foot || ''));
+
 /* Reached the way a player reaches it: the last stage, cleared. Rather than
    actually rolling the universe up, put the katamari past the goal and finish. */
 await page.evaluate(async () => {
@@ -244,10 +273,18 @@ const results = await page.evaluate(() => ({
   endBtn: !document.getElementById('btn-ending-results').classList.contains('hidden'),
   retryBig: document.getElementById('btn-retry').classList.contains('btn-big'),
   next: !document.getElementById('btn-next').classList.contains('hidden'),
+  swept: window.__llmaci.save.swept.slice(),
+  variant: window.__llmaci.endingVariant(),
+  live: window.__llmaci.world.field.liveCount,
 }));
 check('clearing the last stage offers the ending', results.offered && results.endBtn);
 check('"Roll Again" is demoted', !results.retryBig);
 check('there is no "Next Stage" to offer', !results.next);
+/* THE POINT OF THE WHOLE SPLIT. This run met the goal with the stage barely
+   touched, so it must not have earned an ending that says nothing is left. */
+check('a goal-met run with props still standing is NOT a sweep',
+  results.swept.length === 0 && results.live > 0, `${results.live} left, swept ${results.swept.length}`);
+check('so the making version is what it earned', results.variant === 'making', results.variant);
 
 const opened = await page.evaluate(() => {
   window.__llmaci.onAction('ending');
@@ -258,8 +295,13 @@ const opened = await page.evaluate(() => {
     visible: !document.getElementById('ending-screen').classList.contains('hidden'),
     text: (document.querySelector('#ending-body .end-text')?.textContent || '').slice(0, 40),
     hudHidden: document.getElementById('hud').classList.contains('hidden'),
+    variant: g.ending.variant,
+    onScreen: document.querySelector('#ending-body .end-text')?.textContent || '',
   };
 });
+check('and the making version is the one that plays',
+  opened.variant === 'making' && opened.onScreen === MAKING_BEATS[0].text,
+  `${opened.variant}: "${opened.text}…"`);
 check('it opens on the first beat', opened.active && opened.idx === 0 && opened.visible, `idx ${opened.idx}`);
 check('the state is its own', opened.state === 'ending', `state ${opened.state}`);
 check('the world is still loaded behind it', opened.world && opened.kat,
@@ -311,10 +353,59 @@ const rewatch = await page.evaluate(() => {
   window.__llmaci.onAction('ending');
   const g = window.__llmaci;
   const ok = g.ending.active && g.state === 'ending';
+  const variant = g.ending.variant;
   while (g.ending.active) g.ending.next();
-  return ok;
+  return { ok, variant };
 });
-check('and it replays from the title with no world loaded', rewatch);
+check('and it replays from the title with no world loaded', rewatch.ok);
+check('the title replay also gives what was earned', rewatch.variant === 'making', rewatch.variant);
+
+/* The other direction, played rather than asserted into the save: roll the
+   universe until nothing is standing. `field.remove` is how `shot-ui` empties a
+   stage; `collectedFraction` reads `liveCount`, so this exercises the real path
+   from an empty field to the swept ending rather than writing `save.swept`. */
+await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.onAction('pick-stage', { dataset: { stage: 'universe' } });
+});
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
+const swept = await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.begin();
+  g.kat.radius = (g.stage.goal * 1.1) / 2;
+  const f = g.world.field;
+  for (let i = 0; i < f.n; i++) if (f.alive[i]) f.remove(i);
+  g.finish('cleared');
+  return {
+    live: f.liveCount,
+    frac: g.world.collectedFraction(),
+    swept: g.save.swept.slice(),
+    variant: g.endingVariant(),
+    stored: JSON.parse(localStorage.getItem('claudemary-llmaci-save-v1') || '{}').swept || [],
+  };
+});
+check('emptying the stage counts as a sweep',
+  swept.live === 0 && swept.frac >= 1 && swept.swept.includes('universe'),
+  `live ${swept.live}, frac ${swept.frac}, swept ${JSON.stringify(swept.swept)}`);
+check('and the sweep survives a save', swept.stored.includes('universe'), JSON.stringify(swept.stored));
+check('now the swept version is what it earned', swept.variant === 'swept', swept.variant);
+
+const sweptPlay = await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.onAction('ending');
+  const out = {
+    variant: g.ending.variant,
+    onScreen: document.querySelector('#ending-body .end-text')?.textContent || '',
+  };
+  let guard = 0;
+  while (g.ending.active && guard++ < 200) g.ending.next();
+  out.terminated = !g.ending.active;
+  return out;
+});
+check('and it is the one that plays',
+  sweptPlay.variant === 'swept' && sweptPlay.onScreen === SWEPT_BEATS[0].text,
+  `${sweptPlay.variant}: "${sweptPlay.onScreen.slice(0, 40)}…"`);
+check('the swept sequence terminates too', sweptPlay.terminated);
 
 check('no page errors anywhere', errors.length === 0, errors.slice(0, 3).join(' | ').slice(0, 200));
 

@@ -194,7 +194,11 @@ export class Game {
          replaying the ladder has not asked to be made serious again. */
       fart: false,
     };
-    this.save = { best: {}, cleared: [], found: [] };
+    /* `swept` is stage ids the player left with NOTHING standing — not the same
+       as `cleared`, which only means the goal was met. It gates the ending: see
+       the header of ui/Ending.js for why telling somebody "nothing is left"
+       while a tenth of the stage is still out there was worth a save field. */
+    this.save = { best: {}, cleared: [], found: [], swept: [] };
 
     this._load();
     this.screens.syncOptions(this.options);
@@ -357,7 +361,14 @@ export class Game {
       }
       if (raw) {
         const d = JSON.parse(raw);
-        this.save = { best: d.best || {}, cleared: d.cleared || [], found: d.found || [] };
+        /* `swept` post-dates the first release, so an existing save has none.
+           Defaulting it empty is the right answer and not a migration problem:
+           it means a returning player is asked to earn the swept ending once,
+           which is exactly what somebody who has never rolled up every last
+           thing should be asked to do. */
+        this.save = {
+          best: d.best || {}, cleared: d.cleared || [], found: d.found || [], swept: d.swept || [],
+        };
         const shipped = TUNING.speedP;
         if (d.options) Object.assign(this.options, d.options);
         /* A saved speed curve the player never chose is just an old build's
@@ -403,7 +414,7 @@ export class Game {
    * already rejected.
    */
   resetProgress() {
-    this.save = { best: {}, cleared: [], found: [] };
+    this.save = { best: {}, cleared: [], found: [], swept: [] };
     this._persist();
     this.screens.buildStageCards(STAGES, this.save);
     this.screens.setEndingAvailable(false);
@@ -554,6 +565,18 @@ export class Game {
    * finished still turning behind the text, and `_stepIdle` picks that up from
    * `this.world` being non-null. `onEndingDone` is what finally tears it down.
    */
+  /**
+   * Which closing sequence this save has earned.
+   *
+   * ONE RULE FOR BOTH ROUTES — the results panel and the title screen's replay
+   * button — so the answer never depends on which door you came through. The
+   * run that sweeps the universe records it in `finish` before the panel offers
+   * the ending, so sweeping it earns the swept version on the spot.
+   */
+  endingVariant() {
+    return this.save.swept.includes(STAGES[STAGES.length - 1].id) ? 'swept' : 'making';
+  }
+
   showEnding() {
     if (this.ending.active) return;
     this.state = 'ending';
@@ -563,7 +586,7 @@ export class Game {
     this.hud.hide();
     this.screens.hideAll();
     this.music.stop();
-    this.ending.start();
+    this.ending.start(this.endingVariant());
   }
 
   onEndingDone() {
@@ -876,9 +899,16 @@ export class Game {
     for (const id of this.foundThisRun) if (!this.save.found.includes(id)) this.save.found.push(id);
 
     const idx = STAGES.indexOf(this.stage);
+    const frac = this.world ? this.world.collectedFraction() : 0;
     const res = this.screens.showResults(this.stage, this.kat, this.save,
-      idx === STAGES.length - 1, reason, this.world ? this.world.collectedFraction() : 0);
+      idx === STAGES.length - 1, reason, frac);
     if (res.cleared && !this.save.cleared.includes(this.stage.id)) this.save.cleared.push(this.stage.id);
+    /* Left NOTHING standing. ⚠ Tested on the fraction, not on `reason`:
+       `reason === 'cleared'` comes from `canStillGrow`, which goes false when
+       nothing COLLECTABLE-AT-THIS-SIZE remains, and that is a weaker claim than
+       an empty stage. `collectedFraction` is (n - live) / n over integers, so
+       `>= 1` is exact and means exactly what it says. */
+    if (frac >= 1 && !this.save.swept.includes(this.stage.id)) this.save.swept.push(this.stage.id);
     /* Clearing the last stage is the end of the game, so the panel offers the
        ending as its primary button and Enter means that instead of "again".
        Remembered here because `_onKey` cannot re-derive it — `showResults` owns
