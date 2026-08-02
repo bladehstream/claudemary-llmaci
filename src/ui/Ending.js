@@ -315,10 +315,21 @@ export class Ending {
     if (beat.music === 'in') {
       /* `finish` stopped the music and fired the fanfare, so the theme has to be
          restarted rather than merely faded. Quiet: this is underscore, and the
-         player is reading. */
+         player is reading.
+         ⚠ 0.45, NOT THE 0.2 THIS SHIPPED WITH. That number was chosen when the
+         universe theme ran on the four-on-the-floor `anthem` kit and still had
+         a groove at a fifth intensity. It now runs on `vast` — one kick every
+         other bar at 52bpm — and 0.2 is below the melody gate (0.34) and the
+         comping gate (0.2, exclusive), so the underscore came out as a bass
+         note and a heartbeat: 453 note events in six minutes, no tune at all.
+         Which matters because SILENCE IS THE EFFECT HERE — six beats play with
+         the music stopped, and near-silence beforehand leaves nothing for that
+         to be a contrast with. 0.45 opens the choir and the comping and
+         nothing else; measured, 3 events a second of four-second notes. The
+         song changed underneath a constant that was tuned for the old one. */
       g.music.play('universe');
       g.music.setHurry(false);
-      g.music.setIntensity(0.2);
+      g.music.setIntensity(0.45);
     } else if (beat.music === 'out') {
       /* The silence from here to the last card is the point. See the header. */
       g.music.stop();
