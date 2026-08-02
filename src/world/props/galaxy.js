@@ -77,7 +77,7 @@ import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
 import {
   TAU, corona, prominence, shell, jet, ring, annulus, gradedDisc,
-  spiralArm, swarm, wisps, pillars, core,
+  spiralArm, swarm, wisps, pillars, sheet, core,
 } from './spacekit.js';
 
 const U = 'light';
@@ -199,10 +199,15 @@ function belt(b, R, lat, width, col) {
     { y: R + Math.sin(lat) * R, ghost: true }, 11, 3);
 }
 
-P({ id: 'g_rogue', name: 'Rogue Planet', cat: 'planet', sizeMul: 1.0103, fill: 0.5155, variants: 3, weight: 12,
+P({ id: 'g_rogue', name: 'Rogue Planet', cat: 'planet', sizeMul: 1.0258, fill: 0.5395, variants: 3, weight: 12,
   build(b, r, v) {
+    /* ⚠ FACETED, AND THAT IS FREE. A sphere at 12x9 is smooth; at 7x6 it is a
+       visible polyhedron, costs 40% fewer triangles, and stops this reading as
+       the ninth ball in a row. It is also the only PLANET in a stage of stars,
+       so looking like a chunk of frozen rock rather than a small sun is the
+       correct read as well as the varied one. */
     const R = 8;
-    b.sphere(R, [G.dust, G.rust, G.plum][v], { y: R }, 12, 9);
+    b.sphere(R, [G.dust, G.rust, G.plum][v], { y: R }, 7, 6);
     // No star to light it: a cold cap, a couple of basins, and a faint rim so
     // the silhouette survives against the void.
     spot(b, R, 0, 0.28, 0.42, G.ash);
@@ -214,10 +219,13 @@ P({ id: 'g_rogue', name: 'Rogue Planet', cat: 'planet', sizeMul: 1.0103, fill: 0
     });
   } });
 
-P({ id: 'g_browndwarf', name: 'Brown Dwarf', cat: 'star', sizeMul: 1.0022, fill: 0.5033, variants: 3, weight: 12,
+P({ id: 'g_browndwarf', name: 'Brown Dwarf', cat: 'star', sizeMul: 0.98479, fill: 0.4775, variants: 3, weight: 12,
   build(b, r, v) {
+    /* Faceted at 8x6 rather than smooth at 13x9: a brown dwarf is barely a
+       star and mostly a very large planet, and the banding reads better on
+       flats than on a curve. Cheaper too. */
     const R = 10.5;
-    b.sphere(R, G.rust, { y: R }, 13, 9);
+    b.sphere(R, G.rust, { y: R }, 8, 6);
     // Belts, drawn as bands hugging the surface rather than as discs punched
     // through it — the old version's equator read as a seam.
     const bands = [G.emberDk, G.plum, G.dustWarm];
@@ -246,11 +254,16 @@ P({ id: 'g_reddwarf', name: 'Red Dwarf', cat: 'star', sizeMul: 1.0022, fill: 0.5
    and the ladder would have two rungs at one height.
    ⚠ They are ghost now, so they no longer set `pickup` either; `sizeMul` below
    carries that instead. See tools/reghost.mjs. */
-P({ id: 'g_whitedwarf', name: 'White Dwarf', cat: 'star', sizeMul: 1.3241, fill: 0.6964, variants: 3, weight: 13,
+P({ id: 'g_whitedwarf', name: 'White Dwarf', cat: 'star', sizeMul: 1.3908, fill: 0.8071, variants: 3, weight: 13,
   build(b, r, v) {
+    /* ⚠ WHITE DWARFS CRYSTALLISE. That is not a stylisation — as they cool,
+       the carbon-oxygen interior freezes into a lattice, and it was discovered
+       in real data. So this one gets to be a faceted solid at 6x5 instead of a
+       smooth ball, which is both the honest shape and 45% cheaper on a prop
+       placed 217 times. */
     const R = 17;
-    core(b, R, R, R, G.blueWhite, { y: R, k: 0.78 });
-    b.sphere(R * 0.4, G.white, { y: R }, 11, 8);
+    core(b, R, R, R, G.blueWhite, { y: R, k: 0.78, seg: 6, hseg: 5 });
+    b.sphere(R * 0.4, G.white, { y: R }, 7, 6);
     b.decor((d) => {
       // A diffraction cross: long, needle-thin, tapering to nothing. The old
       // version used square bars of constant thickness and read as scaffolding.
@@ -308,12 +321,30 @@ P({ id: 'g_binary', name: 'Binary Pair', cat: 'star', sizeMul: 0.9804, fill: 0.3
     });
   } });
 
-P({ id: 'g_redgiant', name: 'Red Giant', cat: 'star', sizeMul: 0.985, fill: 0.4778, variants: 3, weight: 11,
+P({ id: 'g_redgiant', name: 'Red Giant', cat: 'star', sizeMul: 0.96789, fill: 0.4533, variants: 3, weight: 11,
   build(b, r, v) {
+    /* ⚠ THE ONE STAR THAT SHOULD NOT BE ROUND. A red giant's convection cells
+       are a third the width of the star — Betelgeuse has been imaged and it is
+       measurably NOT a circle. Every other star here is a sphere because a
+       star is a sphere; this one is a sphere because nobody looked it up.
+
+       The lumps are ghost and straddle the limb, so the SILHOUETTE breaks
+       while the solid body is untouched — no change to `pickup`, `volume`,
+       collision radius or anything `balance` can feel. That is the cheap way
+       to buy a different outline on a prop placed 231 times. */
     const R = 33.5;
-    b.sphere(R, G.ember, { y: R }, 13, 9);
-    // Huge, ragged and shedding: a long corona, big loops, and convection cells
-    // the size of the whole star, which is what a red giant actually has.
+    b.sphere(R, G.ember, { y: R }, 12, 8);
+    b.decor((d) => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + v * 0.7, e = 0.7 + ((i * 5) % 7) * 0.24;
+        const k = R * (0.34 + (i % 3) * 0.09);
+        const dx = Math.sin(e) * Math.cos(a), dy = Math.cos(e), dz = Math.sin(e) * Math.sin(a);
+        d.ellip(k * 1.25, k, k * 1.25, i % 2 ? G.ember : G.emberDk, {
+          x: dx * R * 0.88, y: R + dy * R * 0.88, z: dz * R * 0.88,
+        }, 6, 5);
+      }
+    });
+    // a long corona, big loops, and convection cells the size of the star
     for (let i = 0; i < 4; i++) {
       prominence(b, R, [G.amber, G.gold, G.rust][i % 3], (i / 4) * TAU + v,
         0.24 + (i % 2) * 0.12, { y: R, lift: 0.2 + (i % 3) * 0.22, tilt: 0.7 + i * 0.2, tube: 0.07 });
@@ -331,6 +362,14 @@ P({ id: 'g_supergiant', name: 'Blue Supergiant', cat: 'star', sizeMul: 0.984, fi
     b.decor((d) => {
       ring(d, R * 1.22, G.cyan, { y: R * 1.02, rx: 0.22, tube: 0.022 }, 22);
       ring(d, R * 1.34, G.halo, { y: R * 1.0, rx: 0.07, rz: 0.4, tube: 0.016 }, 22);
+      /* ⚠ A BOW SHOCK, because most blue supergiants are runaways — kicked out
+         of the cluster that made them and ploughing through the interstellar
+         medium fast enough to pile it up in front. It is the one feature that
+         makes this silhouette not-a-ball, and `sheet()` (added for the solar
+         stage's shock fronts) is exactly the primitive for it. Ghost, so the
+         solid body and every number off it are untouched. */
+      sheet(d, R * 1.62, R * 0.92, 1.65, G.halo,
+        { y: R * 0.42, t: 0.03, bow: 0.26, phi0: v * 2.1 }, 16);
     });
     for (let i = 0; i < 5; i++) spot(b, R, (i / 5) * TAU, 0.5 + (i % 3) * 0.7, 0.16, G.blue);
   } });
