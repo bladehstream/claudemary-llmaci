@@ -175,12 +175,82 @@ await waitForHold(() => window.__llmaci.state === 'title');
 await page.keyboard.up('Enter');
 check('a fresh press afterwards does quit', true);
 
+console.log('\n=== the roll record ===');
+
+/* The score screen used to record the largest ball ever grown on a stage. It
+   records the largest FRACTION of the stage ever rolled up instead, so these two
+   rounds go through `field.remove` — the same path `collectedFraction` reads —
+   rather than writing `save.bestRoll` directly. Three properties, and the middle
+   one is the reason the format helper exists at all. */
+await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.toTitle();
+  g.save.bestRoll = {};
+  g.onAction('pick-stage', { dataset: { stage: 'quantum' } });
+});
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
+
+/* ONE prop left standing. On a stage of this size that is 99.9%, which
+   `Math.round` printed as "100%" — a stage advertised as fully rolled up while
+   holding something, and the swept ending is gated on an exact 1. */
+const nearly = await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.begin();
+  const f = g.world.field;
+  let left = f.liveCount;
+  for (let i = 0; i < f.n && left > 1; i++) if (f.alive[i]) { f.remove(i); left--; }
+  g.finish('time');
+  return {
+    n: f.n, live: f.liveCount, frac: g.world.collectedFraction(),
+    record: g.save.bestRoll.quantum,
+    best: document.getElementById('results-best').textContent,
+    run: document.getElementById('results-cleared').textContent,
+    swept: g.save.swept.includes('quantum'),
+  };
+});
+check('a round records the fraction it rolled up, not a size',
+  Math.abs(nearly.record - (nearly.n - 1) / nearly.n) < 1e-9,
+  `record ${nearly.record}, expected ${(nearly.n - 1) / nearly.n} of ${nearly.n}`);
+check('one prop standing out of a whole stage is 99%, NOT 100%',
+  nearly.run === '99%' && nearly.best === '99%' && nearly.live === 1,
+  `${nearly.live} live, run "${nearly.run}", best "${nearly.best}", frac ${nearly.frac}`);
+check('and that round is not a sweep', !nearly.swept);
+
+// A worse round must not overwrite the record — it is a maximum, not a last value.
+await page.evaluate(() => window.__llmaci.onAction('retry'));
+await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
+const worse = await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.begin();
+  const f = g.world.field;
+  const want = Math.floor(f.n * 0.4);
+  let gone = 0;
+  for (let i = 0; i < f.n && gone < want; i++) if (f.alive[i]) { f.remove(i); gone++; }
+  g.finish('time');
+  return {
+    gone, n: f.n, record: g.save.bestRoll.quantum,
+    best: document.getElementById('results-best').textContent,
+    run: document.getElementById('results-cleared').textContent,
+    stored: (JSON.parse(localStorage.getItem('claudemary-llmaci-save-v1') || '{}').bestRoll || {}).quantum,
+  };
+});
+const wantRun = `${Math.min(99, Math.floor((worse.gone / worse.n) * 100))}%`;
+check('a worse round shows its own number', worse.run === wantRun,
+  `run "${worse.run}", expected "${wantRun}" from ${worse.gone}/${worse.n}`);
+check('but the record is a maximum and does not fall',
+  worse.best === '99%' && Math.abs(worse.record - (worse.n - 1) / worse.n) < 1e-9,
+  `best "${worse.best}", record ${worse.record}`);
+check('and the record is written through to storage',
+  Math.abs((worse.stored ?? -1) - worse.record) < 1e-9, `stored ${worse.stored}`);
+
+await page.evaluate(() => window.__llmaci.toTitle());
+
 console.log('\n=== reset progress ===');
 
 await page.evaluate(() => {
   const g = window.__llmaci;
   g.save.cleared = ['quantum', 'atom'];
-  g.save.best = { quantum: 1.6 };
+  g.save.bestRoll = { quantum: 0.62 };
   g.save.found = ['q_gluon'];
   g.setOption('music', 0.31);
   g.onAction('options');
@@ -197,14 +267,14 @@ const done = await page.evaluate(() => {
   window.__llmaci.onAction('reset-progress');
   const g = window.__llmaci;
   return {
-    cleared: g.save.cleared.length, best: Object.keys(g.save.best).length,
+    cleared: g.save.cleared.length, best: Object.keys(g.save.bestRoll).length,
     found: g.save.found.length, music: g.options.music,
     danger: document.getElementById('btn-reset-progress').classList.contains('danger'),
     stored: JSON.parse(localStorage.getItem('claudemary-llmaci-save-v1') || '{}'),
   };
 });
 check('the second click clears the ladder', done.cleared === 0, `${done.cleared} cleared`);
-check('it clears best sizes and the collection', done.best === 0 && done.found === 0,
+check('it clears roll records and the collection', done.best === 0 && done.found === 0,
   `${done.best} bests, ${done.found} found`);
 check('it KEEPS settings', Math.abs(done.music - 0.31) < 1e-6, `music ${done.music}`);
 check('it disarms itself again', !done.danger);

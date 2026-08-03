@@ -182,6 +182,22 @@ export function formatSizeShort(value, unit = 'metric') {
   return s;
 }
 
+/**
+ * 0..1 of a stage rolled up, as a percentage: "0%", "62%", "99%", "100%".
+ *
+ * ⚠ FLOORS, AND WILL NOT SAY 100% UNLESS THE STAGE IS ACTUALLY EMPTY. The
+ * universe holds 3,360 objects, so `Math.round` prints "100%" from 3,343 of
+ * them — and the swept ending, which is the reward this number is advertising,
+ * is gated on an exact `>= 1`. A player reading 100% and not being given the
+ * ending would be right to call that a bug, and it would be one: the same class
+ * as the ending text itself, which used to claim "Nothing is left" while a
+ * tenth of the stage was still standing. The last percent has to be earned.
+ */
+export function formatRoll(frac) {
+  if (!(frac > 0)) return '0%';
+  return `${frac >= 1 ? 100 : Math.min(99, Math.floor(frac * 100))}%`;
+}
+
 export function formatTime(seconds) {
   const s = Math.max(0, Math.ceil(seconds));
   const m = Math.floor(s / 60);

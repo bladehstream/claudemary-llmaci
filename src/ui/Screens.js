@@ -2,7 +2,7 @@
    Menus, stage select, pause, results and the collection log.
    ============================================================ */
 
-import { formatSize, formatSizeShort, formatTime, clamp } from '../util/math.js';
+import { formatSize, formatSizeShort, formatTime, formatRoll, clamp } from '../util/math.js';
 import { TUNING } from '../world/Katamari.js';
 import { ARCHETYPES } from '../world/props/index.js';
 import { C } from '../render/palette.js';
@@ -548,7 +548,7 @@ export class Screens {
 
       const best = document.createElement('div');
       best.className = 'sc-best';
-      best.textContent = save.best[s.id] ? `Best: ${formatSize(save.best[s.id], s.unit)}` : '';
+      best.textContent = save.bestRoll[s.id] ? `Best: ${formatRoll(save.bestRoll[s.id])} rolled up` : '';
       card.appendChild(best);
 
       wrap.appendChild(card);
@@ -605,8 +605,10 @@ export class Screens {
     document.getElementById('results-count').textContent = String(kat.collectedCount);
     document.getElementById('results-kinds').textContent = String(kat.uniqueIds.size);
     document.getElementById('results-biggest').textContent = kat.biggest ? kat.biggest.name : '—';
-    document.getElementById('results-cleared').textContent = `${Math.round(clearedFrac * 100)}%`;
-    document.getElementById('results-best').textContent = save.best[stage.id] ? formatSize(save.best[stage.id], stage.unit) : '—';
+    /* ⚠ `formatRoll`, not a local round — see its header. Rounding printed
+       "100%" for a stage with seventeen things still standing on it. */
+    document.getElementById('results-cleared').textContent = formatRoll(clearedFrac);
+    document.getElementById('results-best').textContent = save.bestRoll[stage.id] ? formatRoll(save.bestRoll[stage.id]) : '—';
     document.getElementById('king-text').textContent = line;
     document.getElementById('results-rainbow').classList.toggle('hidden', band !== 'royal');
 

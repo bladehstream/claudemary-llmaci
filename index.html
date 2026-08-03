@@ -457,7 +457,12 @@
           <div><span class="rs-label">Kinds</span><span id="results-kinds">0</span></div>
           <div><span class="rs-label">Biggest</span><span id="results-biggest">—</span></div>
           <div><span class="rs-label">Rolled up</span><span id="results-cleared">—</span></div>
-          <div><span class="rs-label">Best ever</span><span id="results-best">—</span></div>
+          <!-- Was "Best ever", holding the largest ball ever grown here. It is a
+               roll percentage now: size is already what the goal measures, so a
+               best-size record only said "you beat the goal by more", while what
+               a player wants to know about a stage they have cleared is how much
+               of it they left standing. See `save.bestRoll` in core/Game.js. -->
+          <div><span class="rs-label">Best roll</span><span id="results-best">—</span></div>
         </div>
         <div class="king-box">
           <div class="king-face">

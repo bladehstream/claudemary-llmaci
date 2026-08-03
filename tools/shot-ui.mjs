@@ -110,6 +110,34 @@ await page.evaluate(() => window.__llmaci.onAction('reset-progress'));
 await page.waitForTimeout(250);
 await shot('05-reset-armed');
 
+/* ---- the stage cards, which carry the roll record. A swept stage, one a hair
+   under it and a nearly-empty round together, because that is where the format
+   is riskiest: 0.9994 must not print as the 100% that earns the ending.
+
+   ⚠ TAKEN HERE, WITH NO WORLD LOADED. The first attempt sat after the universe
+   round, where swiftshader renders at about a frame a second, and a 1200ms wait
+   photographed the backdrop with no panel on it — the DOM was correct the whole
+   time (a probe found eleven cards and the right strings). A wall-clock wait is
+   not a wait for a paint. */
+await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.screens.disarmReset();
+  g.toTitle();
+  g.save.cleared = g.stageIds().slice(0, 4);
+  g.save.bestRoll = { quantum: 1, atom: 0.9994, microbe: 0.44, house: 0.06 };
+  g.onAction('play');            // ⚠ 'play' IS the stage select; it rebuilds the cards
+});
+await page.waitForFunction(() => {
+  const el = document.getElementById('stage-select');
+  return el && !el.classList.contains('hidden') && el.getBoundingClientRect().height > 100;
+}, null, { timeout: 30000 });
+await page.evaluate(() => new Promise((res) => {
+  let n = 0;
+  const tick = () => (++n >= 3 ? res(null) : requestAnimationFrame(tick));
+  requestAnimationFrame(tick);
+}));
+await shot('05b-stage-cards');
+
 /* ---- results with the ending offered, then the ending itself ---- */
 await page.evaluate(() => {
   const g = window.__llmaci;
@@ -123,6 +151,21 @@ await page.evaluate(() => {
   const g = window.__llmaci;
   g.begin();
   g.kat.radius = (g.stage.goal * 1.15) / 2;
+  /* Roll part of the stage up, and seed a better previous attempt. The two
+     percentage rows are half the point of this photograph, and an untouched
+     stage prints them as "0%" and "—" — the one state that says nothing about
+     whether they read. 62% this round against a 71% record. */
+  const f = g.world.field;
+  const want = Math.floor(f.n * 0.62);
+  let gone = 0;
+  for (let i = 0; i < f.n && gone < want; i++) if (f.alive[i]) { f.remove(i); gone++; }
+  /* `field.remove` is not a pickup, so the counters the katamari keeps itself
+     stay at zero and the panel would photograph as "61% rolled up, 0 objects" —
+     a picture that contradicts itself, which is worse than an empty one. */
+  g.kat.collectedCount = gone;
+  for (let i = 0; i < 34; i++) g.kat.uniqueIds.add(`shot_${i}`);
+  g.kat.biggest = { name: 'Local Group' };
+  g.save.bestRoll[g.stage.id] = 0.71;
   g.finish('early');
 });
 await page.waitForTimeout(500);

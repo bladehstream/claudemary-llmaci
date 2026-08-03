@@ -197,8 +197,16 @@ export class Game {
     /* `swept` is stage ids the player left with NOTHING standing — not the same
        as `cleared`, which only means the goal was met. It gates the ending: see
        the header of ui/Ending.js for why telling somebody "nothing is left"
-       while a tenth of the stage is still out there was worth a save field. */
-    this.save = { best: {}, cleared: [], found: [], swept: [] };
+       while a tenth of the stage is still out there was worth a save field.
+
+       `bestRoll` is the per-stage record: the largest FRACTION of the stage
+       ever rolled up, 0..1. It replaced a record of the largest ball ever
+       grown, which measured the wrong thing — size is already the goal, so a
+       best-size record just said "you beat the goal by more", while the
+       question a returning player actually has about a stage they have cleared
+       is how much of it they left behind. It is also the number that leads
+       somewhere: `swept` is this record at exactly 1. */
+    this.save = { bestRoll: {}, cleared: [], found: [], swept: [] };
 
     this._load();
     this.screens.syncOptions(this.options);
@@ -372,9 +380,18 @@ export class Game {
            Defaulting it empty is the right answer and not a migration problem:
            it means a returning player is asked to earn the swept ending once,
            which is exactly what somebody who has never rolled up every last
-           thing should be asked to do. */
+           thing should be asked to do.
+
+           ⚠ `d.best` IS DELIBERATELY NOT READ. It held the largest ball ever
+           grown, in the stage's display units; `bestRoll` holds a fraction of
+           the stage, 0..1. There is no migration between them, and there is no
+           safe guess either — a diameter of 0.9 and a roll of 90% are the same
+           JSON number, so anything that tried to reuse the key would show the
+           house's old 12cm record as "12%" or its quantum record as "160%".
+           An old save therefore starts with no roll records, which is honest:
+           nobody has ever played a round that measured this. */
         this.save = {
-          best: d.best || {}, cleared: d.cleared || [], found: d.found || [], swept: d.swept || [],
+          bestRoll: d.bestRoll || {}, cleared: d.cleared || [], found: d.found || [], swept: d.swept || [],
         };
         const shipped = TUNING.speedP;
         if (d.options) Object.assign(this.options, d.options);
@@ -421,7 +438,7 @@ export class Game {
    * already rejected.
    */
   resetProgress() {
-    this.save = { best: {}, cleared: [], found: [], swept: [] };
+    this.save = { bestRoll: {}, cleared: [], found: [], swept: [] };
     this._persist();
     this.screens.buildStageCards(STAGES, this.save);
     this.screens.setEndingAvailable(false);
@@ -899,14 +916,15 @@ export class Game {
     this.sfx.timeUp();
     this.music.stop();
 
-    const d = this.kat.diameter;
-    const prev = this.save.best[this.stage.id] || 0;
-    const isBest = d > prev;
-    if (isBest) this.save.best[this.stage.id] = d;
+    const frac = this.world ? this.world.collectedFraction() : 0;
+    /* Recorded BEFORE the panel is built, which is what the old size record did
+       too: on a personal best the run's own number and the record are the same
+       number, and showing the player a "best" they have just beaten reads as a
+       bug. `>` not `>=`, so an equal round leaves the record alone. */
+    if (frac > (this.save.bestRoll[this.stage.id] || 0)) this.save.bestRoll[this.stage.id] = frac;
     for (const id of this.foundThisRun) if (!this.save.found.includes(id)) this.save.found.push(id);
 
     const idx = STAGES.indexOf(this.stage);
-    const frac = this.world ? this.world.collectedFraction() : 0;
     const res = this.screens.showResults(this.stage, this.kat, this.save,
       idx === STAGES.length - 1, reason, frac);
     if (res.cleared && !this.save.cleared.includes(this.stage.id)) this.save.cleared.push(this.stage.id);
