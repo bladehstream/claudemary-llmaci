@@ -289,6 +289,63 @@ const locked = await page.evaluate(() => {
 });
 check('the stage cards relock', locked[0] === false && locked.slice(1).every(Boolean),
   `${locked.filter(Boolean).length} of ${locked.length} locked`);
+
+/* THE RECORD IS A FOOTER, AND "the same place on every card" IS A LAYOUT CLAIM.
+   It cannot be read off the CSS: the cards stretch to the tallest in their row
+   and their content does not, so whether the line lands level depends on names
+   wrapping and stat pills wrapping, per card. Measured, not reasoned about —
+   the same rule the Options grid earned the hard way. Records are seeded on a
+   mix of long, short and absent so the cards differ where it matters. */
+const footer = await page.evaluate(() => {
+  const g = window.__llmaci;
+  g.save.cleared = g.stageIds();
+  g.save.bestRoll = { quantum: 1, atom: 0.9994, microbe: 0.44, house: 0.06, town: 0.5 };
+  g.onAction('back-title');
+  g.onAction('play');
+  const out = [...document.querySelectorAll('#stage-cards .stage-card')].map((c) => {
+    const b = c.querySelector('.sc-best');
+    const cr = c.getBoundingClientRect(), br = b.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(c).paddingBottom);
+    return {
+      name: c.querySelector('.sc-name').textContent.split(' ').pop(),
+      row: Math.round(cr.top),
+      // gap between the record's bottom edge and the card's content-box floor
+      foot: Math.round(cr.bottom - parseFloat(getComputedStyle(c).borderBottomWidth) - pad - br.bottom),
+      offCentre: Math.round(Math.abs((br.left + br.right) / 2 - (cr.left + cr.right) / 2)),
+      baseline: Math.round(br.bottom),
+      text: b.textContent,
+    };
+  });
+  /* ⚠ PUT THE SAVE BACK. This block seeds a fully cleared ladder to get every
+     card unlocked and measurable, and the very next check asserts the title has
+     stopped offering the ending — which it reads off `save.cleared`. Leaving the
+     seed in place fails that check with a failure that looks nothing like its
+     cause. Measure first, then restore, inside the one evaluate. */
+  g.save.cleared = [];
+  g.save.bestRoll = {};
+  return out;
+});
+const feet = [...new Set(footer.map((c) => c.foot))];
+check('every roll record sits on the floor of its card',
+  feet.length === 1 && Math.abs(feet[0]) <= 1,
+  footer.map((c) => `${c.name} ${c.foot}`).join(' '));
+check('and is centred across it', footer.every((c) => c.offCentre <= 1),
+  footer.map((c) => `${c.name} ${c.offCentre}`).join(' '));
+/* THE ACTUAL CLAIM: cards sharing a row carry the record on one line, whatever
+   their names and stat pills did above it. Grouped by their own top edge. */
+const rows = new Map();
+for (const c of footer) {
+  if (!rows.has(c.row)) rows.set(c.row, []);
+  rows.get(c.row).push(c);
+}
+const ragged = [...rows.values()].filter((r) => new Set(r.map((c) => c.baseline)).size > 1);
+check('so cards in a row carry it on the same line',
+  rows.size >= 2 && ragged.length === 0,
+  `${rows.size} rows of ${[...rows.values()].map((r) => r.length).join('/')}` +
+  (ragged.length ? `; ragged: ${ragged[0].map((c) => `${c.name}@${c.baseline}`).join(' ')}` : ''));
+check('a card with no record still reserves the strip',
+  footer.some((c) => c.text === '') && feet.length === 1,
+  `${footer.filter((c) => c.text === '').length} blank`);
 check('the title stops offering the ending',
   await page.evaluate(() => {
     window.__llmaci.onAction('back-title');
