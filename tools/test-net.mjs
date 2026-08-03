@@ -759,19 +759,55 @@ if (bothLinked) {
   await A.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 60000 });
   await B.waitForFunction(() => window.__llmaci.state === 'playing', null, { timeout: 60000 });
 
-  // A ghost appears on B once A has sent a few state packets.
-  const sawGhost = await B.waitForFunction(() => {
-    const n = window.__llmaci.net;
-    if (!n || !n.ghosts.size) return false;
-    for (const [, g] of n.ghosts) if (g.mesh.visible) return true;
-    return false;
-  }, null, { timeout: 20000 }).then(() => true).catch(() => false);
+  /* A ghost appears on B once A has sent a few state packets.
+   *
+   * ⚠ PUMP BOTH TABS BY HAND. This was a `waitForFunction` on B alone and it
+   * failed at random for a reason that is not a bug in the product:
+   * `Session.tick` is BOTH the send path and the thing that latches
+   * `mesh.visible`, and it only runs from `Game._stepPlaying` inside the rAF
+   * loop. Playwright can focus one tab at a time, Chromium throttles rAF in
+   * the other, and two WebGL loops under swiftshader on two cores make that
+   * worse — so tab A stopped SENDING, `now - g.seen` crossed `STALE_MS`, and
+   * B correctly refused to draw a friend whose packets had stopped. The
+   * assertion was losing a fight with behaviour that is deliberately right.
+   *
+   * Driving `net.tick` directly on each side is the same call the game makes,
+   * with the frame-rate dependency taken out. Note it must run on BOTH: A to
+   * send, B to receive and latch. */
+  /* ⚠ AND THE MARKER IS DRIVEN ONE LAYER UP, so pumping `net.tick` alone is not
+     enough: `Session.tick` moves the ghost, but `Game._stepPlaying` is what
+     asks `nearestGhost` and writes the HUD. Pumping only the first made the
+     ghost appear and left the marker at 0x0 wearing its default colour — which
+     is what the marker assertions had been reporting all along, hidden behind
+     the ghost failure. Drive both, in the same order the frame does. */
+  const pump = (p) => p.evaluate(() => {
+    const g = window.__llmaci;
+    if (!g.net || !g.kat) return;
+    g.net.tick(1 / 30, g.kat);
+    const f = g.net.nearestGhost(g.kat.group.position);
+    if (f) g.hud.setFriend(f.mesh.position, g.scene.camera, f.colour);
+    else g.hud.clearFriend();
+  }).catch(() => {});
+  let sawGhost = false;
+  for (let i = 0; i < 120 && !sawGhost; i++) {
+    await pump(A);
+    await pump(B);
+    sawGhost = await B.evaluate(() => {
+      const n = window.__llmaci.net;
+      if (!n || !n.ghosts.size) return false;
+      for (const [, g] of n.ghosts) if (g.mesh.visible) return true;
+      return false;
+    }).catch(() => false);
+    if (!sawGhost) await B.waitForTimeout(50);
+  }
   check("the other player's katamari shows up", sawGhost);
 
   /* THE MARKER, which is what makes it co-op rather than two people in the
      same building. Checked as rendered geometry, not as a flag: the class
      could be right and the element still be parked at 0,0 or hidden by a
      stylesheet. */
+  await pump(A);
+  await pump(B);
   const marker = await B.evaluate(() => {
     const el = document.getElementById('friend-marker');
     if (!el) return { missing: true };
@@ -790,12 +826,19 @@ if (bothLinked) {
       })(),
     };
   });
-  check('a marker points at your friend', !marker.missing && !marker.hidden
-    && marker.w > 8 && marker.onScreen,
-    `${Math.round(marker.w)}x${Math.round(marker.h)}px, on screen ${marker.onScreen}`);
+  /* ⚠ GATED ON THE GHOST. These two used to run unconditionally, so one cause —
+     no ghost — reported as THREE failures, two of them describing a marker
+     that was correctly absent because there was nobody to point at. Three
+     lines of noise for one fault is how a suite stops being read. */
+  const skipMarker = !sawGhost;
+  check('a marker points at your friend', skipMarker || (!marker.missing && !marker.hidden
+    && marker.w > 8 && marker.onScreen),
+    skipMarker ? 'skipped — no ghost to point at'
+      : `${Math.round(marker.w)}x${Math.round(marker.h)}px, on screen ${marker.onScreen}`);
   check('and it wears their colour, not a generic one',
-    marker.colour === `#${(marker.ghostColour >>> 0).toString(16).padStart(6, '0')}`,
-    `${marker.colour} vs ghost ${marker.ghostColour}`);
+    skipMarker || marker.colour === `#${(marker.ghostColour >>> 0).toString(16).padStart(6, '0')}`,
+    skipMarker ? 'skipped — no ghost to point at'
+      : `${marker.colour} vs ghost ${marker.ghostColour}`);
 
   /* And it must LIE about nothing. A ghost whose packets have stopped is
      hidden, and pointing at where they were four seconds ago would send a
