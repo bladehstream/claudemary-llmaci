@@ -72,6 +72,22 @@ const SAY = {
   ended: 'Your friend disconnected.',
   'room-full': 'Two people are already in that room.',
   'signal-closed': 'Lost the connection to the room.',
+  /* ⚠ THE ONE A PLAYER ACTUALLY HIT. Browsers do not keep a peer connection
+     alive across a page being frozen or put into the back/forward cache, which
+     is exactly what happens when you switch apps to paste the invite into a
+     chat — and the panel could not say so, because the DOM comes back intact
+     and only the connection is gone. The code is regenerated rather than
+     merely apologised for; a dead invite the player has already sent is worse
+     than no invite. */
+  'went-away': 'Your browser closed the connection while you were in another app, '
+    + 'so the code you sent is no longer valid. There is a fresh one above — send '
+    + 'that one instead, and it should work if you can paste the reply back without '
+    + 'leaving the game for too long.',
+  closed: 'The connection dropped before your friend replied.',
+  'ice-failed': 'Could not reach your friend\u2019s device.',
+  'refused-media': 'That invite tried to open a camera or microphone, which this game '
+    + 'never uses, so it was refused.',
+  protocol: 'Your friend\u2019s game sent something this version cannot read.',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -102,6 +118,9 @@ export class Coop {
     this.room = null;
     this.ice = null;          // TURN servers, if a room supplied any
     this.locked = false;
+    /** Set while the page is hidden; see `_watchVisibility`. */
+    this._wentAway = false;
+    this._watchVisibility();
     this.linked = false;
     this._bound = false;
   }
@@ -200,6 +219,11 @@ export class Coop {
         initiator: true,
         iceServers: this.ice,
         onLocalDescription: (d) => this._offerReady(d),
+        /* ⚠ THIS USED TO BE MISSING, and `Session.add` then overwrote the
+           default with its own, so NOTHING could tell the panel the peer had
+           died. The invite sat on screen looking alive for as long as the
+           player left it there. */
+        onClose: (why) => this._peerDied(why),
       });
       this.game.net.add(this.peer);
       this._say('Working out how to reach you…');
@@ -296,6 +320,7 @@ export class Coop {
         initiator: false,
         iceServers: this.ice,
         onLocalDescription: (d) => this._answerReady(d),
+        onClose: (why) => this._peerDied(why),
       });
       this.game.net.add(this.peer);
       this._say('Working out how to reach you…');
@@ -405,6 +430,81 @@ export class Coop {
         text: `Roll with me — paste this into "I Have an Invite":\n\n${box.value}`,
       });
     } catch { /* dismissed, which is not an error */ }
+  }
+
+  /**
+   * The peer died while the player was looking at the panel.
+   *
+   * Nothing here is reachable once a session is `linked` — a drop mid-game is
+   * the Session's business and shows as "Your friend disconnected". This is
+   * only about the exchange, where the player is holding a code in a chat app
+   * and has no idea the thing that generated it is gone.
+   */
+  _peerDied(why) {
+    if (this.linked || !this.peer) return;
+    const manual = this.phase === 'host-manual' || this.phase === 'join-manual';
+    /* Losing the page's connection while backgrounded is not a network fault
+       and must not read as one — the player did the thing the UI told them to
+       do. `_wentAway` is set by the visibility hook below. */
+    const reason = this._wentAway && manual ? 'went-away' : why;
+    this._wentAway = false;
+    if (this.role === 'host' && manual) return this._reviveHost(reason);
+    this._say(SAY[reason] || SAY.failed, true);
+    this._lock(false);
+  }
+
+  /**
+   * Build a fresh invite in place, keeping the panel where it is.
+   *
+   * ⚠ A BETTER ERROR WOULD NOT HAVE BEEN A FIX. The player's next move after
+   * "your connection died" is to press Cancel and start again, which rebuilds
+   * the world for no reason and loses the stage they picked. The world is
+   * still loaded and still correct — only the `RTCPeerConnection` is gone — so
+   * this replaces just that, and the code in the box updates under them.
+   */
+  async _reviveHost(reason) {
+    try {
+      this.peer = null;
+      this._newSession();
+      this.peer = new Peer({
+        initiator: true,
+        iceServers: this.ice,
+        onLocalDescription: (d) => this._offerReady(d),
+        onClose: (w) => this._peerDied(w),
+      });
+      this.game.net.add(this.peer);
+      await this.peer.createOffer();
+      this._say(SAY[reason] || SAY.failed, true);
+    } catch (err) {
+      this._die('Could not make a new invite. ' + String(err && err.message || err));
+    }
+  }
+
+  /**
+   * Notice that the page was frozen, backgrounded or bfcached.
+   *
+   * ⚠ THE CONNECTION IS ALREADY GONE BY THE TIME WE HEAR ABOUT IT. There is no
+   * event that says "your peer connection is about to be closed by the browser"
+   * — the page is simply suspended and a `close` arrives later, or the whole
+   * thing comes back from the back/forward cache with a dead pc and a perfectly
+   * intact DOM. So this only records that we went away, and `_peerDied` uses it
+   * to choose honest copy. Registered once, from the constructor, because the
+   * panel is built once and lives for the session.
+   */
+  _watchVisibility() {
+    const gone = () => { if (document.visibilityState === 'hidden') this._wentAway = true; };
+    document.addEventListener('visibilitychange', gone);
+    window.addEventListener('pagehide', () => { this._wentAway = true; });
+    /* Coming BACK is the moment to check, because a browser that closed the
+       connection on the way out may never fire anything on the peer at all. */
+    const back = () => {
+      if (this.linked || !this.peer || !this._wentAway) return;
+      if (this.peer.closed) this._peerDied('closed');
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') back();
+    });
+    window.addEventListener('pageshow', back);
   }
 
   /** Back out of an attempt without leaving the game. */

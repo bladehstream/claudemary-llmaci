@@ -130,7 +130,19 @@ export class Session {
       this._handshake();
     };
     peer.onMessage = (m) => this._apply(peer, m);
-    peer.onClose = (why) => this._drop(peer, why);
+    /* ⚠ CHAIN, DO NOT CLOBBER. This used to be a plain assignment, which
+       silently threw away whatever the peer's OWNER had installed — and the
+       owner is `Coop`, the only thing that can tell the player anything. The
+       symptom in the wild: the host's connection dies while the panel is open,
+       nothing on screen changes, and the paste minutes later reports
+       "signalingState is 'closed'" — WebRTC's internal words for a failure
+       that happened somewhere else, at a time nobody recorded.
+       A callback that belongs to somebody else is not a free slot. */
+    const ownerClose = peer.onClose;
+    peer.onClose = (why) => {
+      this._drop(peer, why);
+      try { ownerClose(why); } catch { /* the owner's problem, not the session's */ }
+    };
     peer.onStatus = (s) => this._setStatus(s);
     return peer;
   }

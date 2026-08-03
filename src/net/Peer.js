@@ -242,13 +242,40 @@ export class Peer {
       this._status('open');
       this.onOpen();
     };
-    ch.onclose = () => this._fail('closed');
+    /* Same rule as `_onConn`. The initiator creates this channel in the
+       constructor, long before there is anything to connect to, and a channel
+       that closes while the peer has never had a remote description has not
+       lost a connection — it never had one. Only `pc.close()` can get it there,
+       and that path already reports for itself. */
+    ch.onclose = () => { if (this.pc.remoteDescription) this._fail('closed'); };
     ch.onerror = () => { /* onclose follows; nothing useful to add */ };
     ch.onmessage = (e) => this._inbound(e.data);
   }
 
   _onConn() {
     if (this.closed) return;
+    /* ⚠ A FAILURE BEFORE THERE IS A REMOTE DESCRIPTION IS NOT A FAILURE, AND
+       ACTING ON IT KILLED REAL INVITES.
+     *
+     * Between `createOffer` and the answer being pasted in — minutes, on the
+     * copy-paste path, because a human is carrying the code — this side has
+     * NOBODY TO CONNECT TO. There are no remote candidates, so no pair can
+     * form, so "failed" here cannot be a statement about the eventual
+     * connection: it is a statement about gathering, and gathering failing is
+     * survivable (see the deadline above — whatever we have is a usable
+     * description, ICE just has fewer paths).
+     *
+     * Acting on it anyway closed the host's peer while its invite sat on
+     * screen looking alive. The player then pasted the reply and got
+     * "signalingState is 'closed'" — WebRTC describing the paste rather than
+     * the death, minutes late. ⚠ AND IT IS NETWORK-DEPENDENT, hence
+     * intermittent, hence "I tried again and it worked": whether gathering
+     * produces a candidate at all depends on whether a STUN server answers,
+     * which on a mobile network is not a constant.
+     *
+     * After `setRemoteDescription` the same event means what it says, and
+     * `_arm`'s watchdog is running by then anyway. */
+    if (!this.pc.remoteDescription) return;
     const s = this.pc.connectionState;
     /* `disconnected` is a phone changing networks, not a failure. It recovers
        on its own far more often than not, and the 30s watchdog is already the
@@ -341,6 +368,7 @@ export class Peer {
   }
 
   async acceptOffer(desc) {
+    this._assertLive();
     await this.pc.setRemoteDescription(desc);
     const d = await this.pc.createAnswer();
     await this.pc.setLocalDescription(d);
@@ -350,9 +378,28 @@ export class Peer {
   }
 
   async acceptAnswer(desc) {
+    this._assertLive();
     await this.pc.setRemoteDescription(desc);
     // NOW the network is the only thing left to blame, so start the clock.
     this._arm();
+  }
+
+  /**
+   * Refuse to work on a dead connection, in words somebody can act on.
+   *
+   * ⚠ WITHOUT THIS THE PLAYER GETS WEBRTC'S DIAGNOSIS OF OUR BUG. Calling
+   * `setRemoteDescription` on a closed `RTCPeerConnection` throws
+   * "The RTCPeerConnection's signalingState is 'closed'", which is accurate,
+   * useless, and describes the moment of the paste rather than the moment of
+   * the failure — which may have been minutes earlier and for a completely
+   * different reason. Reported by a player doing exactly that. `reason` is
+   * whatever `_fail` recorded, so the message can name the real cause.
+   */
+  _assertLive() {
+    if (!this.closed) return;
+    const e = new Error(`this connection had already closed (${this.reason || 'unknown'})`);
+    e.peerReason = this.reason || 'unknown';
+    throw e;
   }
 
   /** Milliseconds since this peer started trying. For honest UI copy. */

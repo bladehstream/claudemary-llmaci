@@ -229,6 +229,78 @@ if (live.connected) {
 /* ============================================================
    3. The architectural guarantee
    ============================================================ */
+/* ------------------------------------------------------------
+   The invite has to survive the wait
+   ------------------------------------------------------------
+
+   ⚠ REPORTED BY A PLAYER, INTERMITTENTLY: make an invite on one device, send
+   it, paste the reply back, and get "Failed to execute 'setRemoteDescription'
+   ... signalingState is 'closed'". WebRTC describing the paste rather than the
+   death, which had happened minutes earlier and silently.
+
+   Three things had to be true at once for that message to reach a human, and
+   each is asserted here:
+     1. a connection-state failure BEFORE any remote description killed the
+        peer — although with nobody to connect to it cannot mean anything;
+     2. `Session.add` overwrote the owner's `onClose`, so the panel was never
+        told and the dead invite stayed on screen;
+     3. `acceptAnswer` did not check `closed`, so the eventual paste reported
+        WebRTC's internal state instead of the recorded reason.
+   ------------------------------------------------------------ */
+console.log('\n=== an invite survives the wait for a reply ===');
+
+const waiting = await page.evaluate(async () => {
+  const { Peer } = await import('/src/net/Peer.js');
+  const { Session } = await import('/src/net/Session.js');
+  const out = {};
+
+  /* A host that has made an offer and is waiting on a human. */
+  const host = new Peer({ initiator: true });
+  await host.createOffer();
+
+  /* The event that used to kill it. `connectionState` is read-only, so drive
+     the handler the way the browser would and let it read the real pc — which
+     has no remote description, because no answer has been pasted. */
+  host.pc.dispatchEvent(new Event('connectionstatechange'));
+  host.pc.dispatchEvent(new Event('iceconnectionstatechange'));
+  out.aliveAfterStateChurn = !host.closed;
+
+  /* And the data channel closing before there was ever a connection. */
+  if (host.ch && host.ch.onclose) host.ch.onclose();
+  out.aliveAfterChannelClose = !host.closed;
+
+  /* The owner's onClose must survive being put in a Session. */
+  let ownerHeard = null;
+  const p2 = new Peer({ initiator: true, onClose: (why) => { ownerHeard = why; } });
+  const s = new Session({ stage: null, world: null, kat: null });
+  s.add(p2);
+  p2._fail('ice-failed');
+  out.ownerHeard = ownerHeard;
+  out.sessionDropped = s.peers.length === 0;
+
+  /* And a dead peer must refuse work in words that name the real cause. */
+  let msg = '';
+  let reason = '';
+  try {
+    await p2.acceptAnswer({ type: 'answer', sdp: 'v=0\r\n' });
+  } catch (e) { msg = String(e.message || e); reason = e.peerReason || ''; }
+  out.refuses = msg;
+  out.namesReason = reason;
+
+  host.close();
+  return out;
+});
+check('a state change before any answer does NOT kill the invite', waiting.aliveAfterStateChurn);
+check('nor does the data channel closing before there is a connection',
+  waiting.aliveAfterChannelClose);
+check('Session.add keeps the owner\u2019s onClose', waiting.ownerHeard === 'ice-failed',
+  `owner heard ${waiting.ownerHeard}`);
+check('and still drops the peer itself', waiting.sessionDropped);
+check('a dead peer refuses an answer in plain words',
+  /already closed/.test(waiting.refuses) && !/signalingState/.test(waiting.refuses),
+  waiting.refuses);
+check('and names the real cause', waiting.namesReason === 'ice-failed', waiting.namesReason);
+
 console.log('\n=== remote data cannot reach the simulation ===');
 
 const arch = await page.evaluate(async () => {
