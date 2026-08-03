@@ -35,6 +35,12 @@ _to_delete/
 # only survives on the device clone, never in the ephemeral container.
 HANDOFF.md
 
+# Retrospective written at the end of the development cycle, to carry into the
+# next project. Kept out of a PUBLIC repo on purpose: it quotes the collaborator
+# verbatim at length and characterises how they work, which is theirs to publish
+# and not the project's. Same caveat as HANDOFF.md -- it exists only here.
+LESSONS.md
+
 # Editor and OS droppings. The host is Windows, so Thumbs.db and desktop.ini are
 # the ones that actually turn up here; .DS_Store is for anyone on a Mac.
 .vscode/
