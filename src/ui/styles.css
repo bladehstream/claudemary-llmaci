@@ -779,8 +779,19 @@ html, body {
   font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: 1.05;
   color: var(--pink-deep); font-variant-numeric: tabular-nums;
 }
+/* ⚠ THREE EXPLICIT COLUMNS, NOT `auto-fit`. There are SIX stats, and six is a
+   complete rectangle at three across (3×2) or two across (2×3) and a ragged one
+   at every other width. `auto-fit, minmax(120px, 1fr)` chose four here, which
+   put four tiles on the top row and two on the bottom with a tile and a half of
+   dead space beside them — and because the columns were content-driven, nothing
+   in the second row lined up with anything in the first either.
+
+   ⚠ SO THE COUNT AND THE COLUMNS ARE COUPLED NOW. A seventh stat makes this
+   ragged again, and the fix then is an eighth stat or a different column count,
+   not a shrug. The phone override below is 2×3, which is the other complete
+   arrangement of six. */
 .results-stats {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 8px; margin-bottom: 16px;
 }
 .results-stats > div {
