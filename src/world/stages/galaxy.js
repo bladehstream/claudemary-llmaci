@@ -55,6 +55,7 @@
    ramp. `npm run decals` measures both.
    ============================================================ */
 
+import { specks } from './dress.js';
 import { G } from '../props/galaxy.js';
 
 /** Everything that hovers, so a pass can say "not those" when it wants floor. */
@@ -168,6 +169,7 @@ export const galaxyStage = {
     const Y_CORE = 340;
     const D_DUST = 1.6;       // spiral banding, on the disc floor
     const D_STAR = 4.4;       // field stars, above the banding
+    const D_SPECK = 7.0;      // the star specks, over both of those
     const D_DECK = 2.2;       // dust painted on a deck
     const D_DECK2 = 4.8;      // and a second layer over that
     const SINK = 60;          // how far a deck slab reaches below the disc
@@ -221,7 +223,8 @@ export const galaxyStage = {
 
     /* ---------------- the disc ---------------- */
     w.plat(-B, -B, B, B, 0);
-    t.quad(B * 2, B * 2, G.disc, { y: 0 });
+    // deep violet rather than G.disc's near-black, which the grade lifts to a flat grey
+    t.quad(B * 2, B * 2, 0x1a1242, { y: 0 });
 
     /* Faint spiral banding, four arms winding out of the core.
        GROUND DETAIL AND NOTHING ELSE: flat quads a light year or two off the
@@ -249,6 +252,16 @@ export const galaxyStage = {
         ry: r() * 3.14,
       });
     }
+
+    /* A disc made of stars: thousands of small self-lit specks over the
+       whole floor, one chance in every 150-unit cell, so the ball always has
+       a few within a couple of its own widths. Above the banding and the
+       field stars, and still a third of the starting radius under the ball's
+       middle. Placed by hash, never by r(). */
+    specks(t, -B, -B, B, B, D_SPECK, {
+      cell: 150, p: 0.5, rMin: 4, rMax: 11, seg: 4, glow: 0.8,
+      cols: [G.blueWhite, G.blueWhite, G.halo, G.gold],
+    });
 
     /* ---------------- the Arm ----------------
 

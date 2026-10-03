@@ -172,6 +172,33 @@ export function hexes(t, x0, z0, x1, z1, y, o = {}) {
   }
 }
 
+/** One flat disc lying in XZ, unit radius. */
+let DISC = null;
+
+/**
+ * Small flat discs scattered over a rectangle on a jittered grid: one chance
+ * per `cell`, taken with probability `p`, each disc's place, size and colour
+ * drawn from the hash of its cell. `glow` makes them self-lit (a field of
+ * stars on a dark floor).
+ */
+export function specks(t, x0, z0, x1, z1, y, o = {}) {
+  const cell = o.cell ?? 10, p = o.p ?? 0.5, seed = o.seed ?? 0;
+  const r0 = o.rMin ?? cell * 0.04, r1 = o.rMax ?? cell * 0.1, cols = o.cols;
+  DISC ??= new THREE.CircleGeometry(1, o.seg ?? 6).rotateX(-Math.PI / 2);
+  const nx = Math.floor((x1 - x0) / cell), nz = Math.floor((z1 - z0) / cell);
+  for (let i = 0; i < nx; i++) {
+    for (let k = 0; k < nz; k++) {
+      const a = i + seed * 131, b = k - seed * 71;
+      if (hash2(a, b) >= p) continue;
+      const rad = r0 + hash2(b, a) * (r1 - r0);
+      const x = x0 + (i + 0.15 + hash2(a + 3, b) * 0.7) * cell;
+      const z = z0 + (k + 0.15 + hash2(a, b + 3) * 0.7) * cell;
+      const col = cols[Math.floor(hash2(a + 9, b + 9) * cols.length)];
+      t.push(DISC.clone(), col, { x, y: y + (i + k) % 3 * (o.stagger ?? 0), z, sx: rad, sz: rad, glow: o.glow });
+    }
+  }
+}
+
 /**
  * Zebra crossing across a road. (cx, cz) is the crossing's centre, `width` the
  * road width it spans, `axis` the direction TRAFFIC runs ('x' or 'z'); the
