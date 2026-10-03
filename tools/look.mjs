@@ -76,6 +76,8 @@ for (const id of stages) {
   }, id);
   await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
   await page.evaluate(() => { window.__llmaci.begin(); window.__llmaci.hud.hide?.(); });
+  const mr = await page.evaluate(() => window.__llmaci.models);
+  if (mr) console.log(`${id}: models swapped ${mr.swapped} from [${mr.packs.join(', ')}]${mr.warned.length ? `, ${mr.warned.length} size warnings` : ''}`);
   for (const k of grows) {
     await page.evaluate((m) => {
       const g = window.__llmaci;
