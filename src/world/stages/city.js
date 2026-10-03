@@ -13,6 +13,7 @@
    ============================================================ */
 
 import { C } from '../../render/palette.js';
+import { hash2, shade, paving, lawn } from './dress.js';
 
 export const cityStage = {
   id: 'city',
@@ -124,6 +125,8 @@ export const cityStage = {
         t.quad(7, 0.8, C.offwhite, { x: s + 3.5, y: Y_MARKINGS, z: c });
       }
     }
+
+    dressCityBlocks(t, GRID, B);
 
     const avoid = [];
     const claim = (x, z, rad) => avoid.push({ x, z, r: rad });
@@ -248,7 +251,10 @@ export const cityStage = {
     /* ---------------- parkland ---------------- */
     const parks = [[-130, 300], [265, -145], [-300, -50], [95, 160], [-60, -300], [330, 330]];
     for (const [px, pz] of parks) {
-      t.quad(130, 130, C.grass, { x: px, y: 0.03, z: pz });
+      /* Above the dressed blocks (0.16-0.19) and under the streets (0.22): a
+         park is laid over the blocks it covers, not under them. v1 had it at
+         0.03, under the grass strips, which was fine while blocks were bare. */
+      lawn(t, px - 65, pz - 65, px + 65, pz + 65, 0.2, { col: C.grass, band: 6, axis: hash2(px, pz) < 0.5 ? 'x' : 'z' });
       for (let i = 0; i < n(26); i++) {
         const a = r() * Math.PI * 2, d = r() * 62;
         w.placeId(r() < 0.5 ? 'tree_round' : r() < 0.8 ? 'tree_pine' : 'tree_palm',
@@ -315,3 +321,66 @@ export const cityStage = {
     }
   },
 };
+
+/* ============================================================
+   Dressing (visual only, no stage RNG — see dress.js).
+
+   Every city block was bare asphalt between the streets. Now each
+   has a kerb and a slab pavement round it, and a middle that says
+   where you are: big two-tone plaza slabs downtown, a concrete lot
+   with parking bays in midtown, front lawns out in the suburbs.
+   Written in the ORIGINAL coordinates like the rest of `build`; the
+   stage's `spread` stretches it 4x with everything else, so a 2.5m
+   slab here is a 10m slab in play — the right grain for a katamari
+   that is already bus-sized.
+
+   Heights sit between the edge grass (0.10) and the streets (0.22), 2cm
+   apart: at 4x spread this ground is seen from kilometres away, and the
+   house's millimetre gaps would z-fight here.
+   ============================================================ */
+function dressCityBlocks(t, GRID, B) {
+  const Y = 0.12;
+  const HALF = GRID / 2 - 11;          // the streets are 22 wide
+  const KERB = 1.0, PAVE = 4.5;
+  for (let gx = -5; gx <= 4; gx++) {
+    for (let gz = -5; gz <= 4; gz++) {
+      const cx = gx * GRID + GRID / 2, cz = gz * GRID + GRID / 2;
+      if (Math.abs(cx) > 420 || Math.abs(cz) > 420) continue;
+      // the edge grass strips and the harbour are their own ground
+      if (cz - HALF < -B + 190 || cz + HALF > B - 160 || cx - HALF < -B + 160) continue;
+      if (cx + HALF > B - 180) continue;
+      const x0 = cx - HALF, x1 = cx + HALF, z0 = cz - HALF, z1 = cz + HALF;
+      const seed = gx * 37 + gz * 101;
+      // kerb
+      const kerb = shade(C.concrete, 1.1);
+      t.quad(x1 - x0, x1 - x0, kerb, { x: cx, y: Y, z: cz });
+      // pavement ring
+      const a = KERB, b = KERB + PAVE;
+      const pave = { tile: 2.5, col: C.concrete, seed, joint: 0.12, lift: 0.02 };
+      paving(t, x0 + a, z0 + a, x1 - a, z0 + b, Y + 0.02, pave);
+      paving(t, x0 + a, z1 - b, x1 - a, z1 - a, Y + 0.02, { ...pave, seed: seed + 1 });
+      paving(t, x0 + a, z0 + b, x0 + b, z1 - b, Y + 0.02, { ...pave, seed: seed + 2 });
+      paving(t, x1 - b, z0 + b, x1 - a, z1 - b, Y + 0.02, { ...pave, seed: seed + 3 });
+      // the middle
+      const d = Math.hypot(cx, cz);
+      const suburb = cx < -180 && cz > 150;
+      const ix0 = x0 + b, ix1 = x1 - b, iz0 = z0 + b, iz1 = z1 - b;
+      if (d < 175) {
+        paving(t, ix0, iz0, ix1, iz1, Y + 0.03,
+          { tile: 6, col: 0xd9d2c3, checker: 0xcbc3b2, vary: 0.04, seed: seed + 4, joint: 0.2, lift: 0.02 });
+      } else if (suburb) {
+        lawn(t, ix0, iz0, ix1, iz1, Y + 0.03,
+          { col: shade(C.grass, 0.94), band: 4, axis: hash2(seed, 5) < 0.5 ? 'x' : 'z' });
+      } else {
+        t.quad(ix1 - ix0, iz1 - iz0, shade(C.asphalt, 1.12), { x: cx, y: Y + 0.03, z: cz });
+        // parking bays: a row of white ticks along two sides of the lot
+        for (const side of [-1, 1]) {
+          const zb = side < 0 ? iz0 + 3 : iz1 - 3;
+          for (let x = ix0 + 2; x < ix1 - 2; x += 2.6) {
+            t.quad(0.18, 5, C.offwhite, { x, y: Y + 0.055, z: zb });
+          }
+        }
+      }
+    }
+  }
+}

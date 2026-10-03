@@ -45,6 +45,7 @@ export function paving(t, x0, z0, x1, z1, y, o = {}) {
   const col = o.col, jcol = o.jointCol ?? shade(col, 0.78);
   const vary = o.vary ?? 0.07, seed = o.seed ?? 0;
   const checker = o.checker ?? null;
+  const lift = o.lift ?? 0.003;        // slab tops above the joint quad
   t.quad(x1 - x0, z1 - z0, jcol, { x: (x0 + x1) / 2, y, z: (z0 + z1) / 2 });
   const nx = Math.max(1, Math.round((x1 - x0) / tile));
   const nz = Math.max(1, Math.round((z1 - z0) / tile));
@@ -55,7 +56,7 @@ export function paving(t, x0, z0, x1, z1, y, o = {}) {
       const base = checker && (i + k) % 2 ? checker : col;
       const tone = 1 - vary + h * vary * 2;
       t.quad(tx - joint, tz - joint, shade(base, tone),
-        { x: x0 + (i + 0.5) * tx, y: y + 0.003, z: z0 + (k + 0.5) * tz });
+        { x: x0 + (i + 0.5) * tx, y: y + lift, z: z0 + (k + 0.5) * tz });
     }
   }
 }
