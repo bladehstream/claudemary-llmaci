@@ -302,12 +302,22 @@ html, body {
 .stage-card:hover { transform: translateY(-5px); box-shadow: 0 13px 0 rgba(107,70,193,0.35); }
 .stage-card.locked { filter: grayscale(0.85); opacity: 0.62; cursor: not-allowed; }
 .stage-card.locked:hover { transform: none; box-shadow: 0 8px 0 rgba(107,70,193,0.35); }
-.sc-art { height: 96px; border-radius: 14px; margin-bottom: 12px; position: relative; overflow: hidden; }
+.sc-art { height: 112px; border-radius: 14px; margin-bottom: 12px; position: relative; overflow: hidden; }
+.sc-art .sc-shot {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* A locked stage is a rumour: you can tell there is somewhere there, not what. */
+.stage-card.locked .sc-shot { filter: blur(5px) brightness(0.85); transform: scale(1.12); }
 .sc-art i {
   position: absolute; border-radius: 4px;
   box-shadow: inset 0 -6px 0 rgba(0,0,0,0.12);
 }
-.sc-name { font-family: var(--font-display); font-size: 25px; font-weight: 800; color: var(--purple); }
+.sc-name { font-family: var(--font-display); font-size: 25px; font-weight: 800; color: var(--purple);
+  white-space: nowrap; line-height: 1.25; }
+/* One line on every card, so every card's blurb, chips and best score start
+   at the same height as its neighbours'. "The Quantum Realm" used to wrap and
+   push its whole card out of step with the row. */
+.sc-name.long { font-size: 20px; line-height: 1.56; }
 .sc-desc { font-size: 14px; color: #5c5470; margin: 4px 0 10px; min-height: 40px; }
 .sc-stats { display: flex; gap: 10px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
 .sc-stats span { background: var(--yellow); border-radius: 999px; padding: 3px 11px; color: var(--ink); }

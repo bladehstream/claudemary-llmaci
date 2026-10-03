@@ -7,6 +7,9 @@ import { TUNING } from '../world/Katamari.js';
 import { ARCHETYPES } from '../world/props/index.js';
 import { C } from '../render/palette.js';
 
+/** Where public/ ends up: '/' on the site, './' for a sub-path deploy. */
+const THUMB_BASE = import.meta.env?.BASE_URL || './';
+
 const STAGE_ART = {
   quantum: [[0, 0.78, 1, 0.22, 0x140828], [0.1, 0.34, 0.16, 0.44, 0x7cf6ff],
     [0.34, 0.14, 0.2, 0.64, 0xff69c8], [0.62, 0.4, 0.14, 0.38, 0xfff08a],
@@ -528,10 +531,21 @@ export class Screens {
         bar.style.background = `#${col.toString(16).padStart(6, '0')}`;
         art.appendChild(bar);
       }
+      /* The real stage, photographed on a GPU by tools/thumbs.mjs, laid over
+         the old coloured-bar sketch. The sketch stays underneath as the
+         fallback: the single-file build has no thumbs folder, and an image
+         that fails to load removes itself rather than showing a broken icon. */
+      const shot = document.createElement('img');
+      shot.className = 'sc-shot';
+      shot.alt = '';
+      shot.decoding = 'async';
+      shot.src = `${THUMB_BASE}thumbs/${s.id}.jpg`;
+      shot.onerror = () => shot.remove();
+      art.appendChild(shot);
       card.appendChild(art);
 
       const name = document.createElement('div');
-      name.className = 'sc-name';
+      name.className = 'sc-name' + (unlocked && s.name.length > 14 ? ' long' : '');
       name.textContent = unlocked ? s.name : '???';
       card.appendChild(name);
 
