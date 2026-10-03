@@ -83,6 +83,9 @@ for (const id of stages) {
       const g = window.__llmaci;
       // setRadius, not `radius =`: the bare field moves the camera and leaves
       // the ball's own mesh at its old scale, which photographs as a marble.
+      // volume too: the next pickup recomputes the radius FROM the volume, and
+      // a radius set alone snaps back to the start size on the first thing it eats
+      g.kat.volume = (4 / 3) * Math.PI * ((g.stage.startSize * m) / 2) ** 3;
       g.kat.setRadius((g.stage.startSize * m) / 2);
       g.kat.pos.y = g.kat.groundY + g.kat.radius;   // a stationary ball is not re-seated
     }, k);
