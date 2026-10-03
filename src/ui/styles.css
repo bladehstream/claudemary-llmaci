@@ -244,26 +244,46 @@ html, body {
   font-weight: 800;
   text-transform: uppercase;
 }
-.game-title .t1 {
-  font-size: clamp(48px, 11vw, 116px);
+/* v2 logo: sticker letters. Each letter has a white inner rim (the stroke) and
+   a dark outer ring (eight hard text-shadows round it), then a drop shadow, so
+   it reads on any sky. Odd and even letters tilt the same amount either way,
+   and one hop travels along both lines in turn, letter by letter (--i). */
+.game-title i {
+  display: inline-block;
+  font-style: normal;
+  paint-order: stroke fill;
+  --r: -4deg;
+  transform: rotate(var(--r));
+  animation: letterHop 3.2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.08s);
+}
+.game-title i:nth-child(even) { --r: 4deg; }
+.game-title .t1 { font-size: clamp(48px, 11vw, 116px); }
+.game-title .t1 i {
   color: var(--yellow);
-  -webkit-text-stroke: 8px var(--purple-d);
-  paint-order: stroke fill;
-  text-shadow: 0 10px 0 rgba(76,47,150,0.35);
-  transform: rotate(-3deg);
-  animation: bobA 4s ease-in-out infinite;
+  -webkit-text-stroke: 0.14em #fff;
+  --ring: var(--purple-d);
 }
-.game-title .t2 {
-  font-size: clamp(36px, 8.4vw, 88px);
+.game-title .t2 { font-size: clamp(36px, 8.4vw, 88px); margin-top: -0.06em; }
+.game-title .t2 i {
   color: var(--pink);
-  -webkit-text-stroke: 7px #fff;
-  paint-order: stroke fill;
-  text-shadow: 0 8px 0 rgba(224,63,127,0.4);
-  transform: rotate(2deg) translateY(-6px);
-  animation: bobB 4.6s ease-in-out infinite;
+  -webkit-text-stroke: 0.14em #fff;
+  --ring: var(--purple-d);
 }
-@keyframes bobA { 0%,100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-10px); } }
-@keyframes bobB { 0%,100% { transform: rotate(2deg) translateY(-6px); } 50% { transform: rotate(3deg) translateY(2px); } }
+.game-title i {
+  text-shadow:
+    0.075em 0 0 var(--ring), -0.075em 0 0 var(--ring), 0 0.075em 0 var(--ring), 0 -0.075em 0 var(--ring),
+    0.053em 0.053em 0 var(--ring), -0.053em 0.053em 0 var(--ring), 0.053em -0.053em 0 var(--ring), -0.053em -0.053em 0 var(--ring),
+    0 0.13em 0 var(--ring), 0 0.18em 0.06em rgba(42,33,64,0.35);
+}
+@keyframes letterHop {
+  0%, 30%, 100% { transform: rotate(var(--r)) translateY(0); }
+  12% { transform: rotate(calc(var(--r) * -0.5)) translateY(-0.12em); }
+  22% { transform: rotate(var(--r)) translateY(0.02em); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-title i { animation: none; }
+}
 
 .title-sub {
   font-size: 22px; font-weight: 600; color: #fff;
@@ -276,6 +296,8 @@ html, body {
   text-shadow: 0 2px 3px rgba(0,0,0,0.35);
 }
 .title-row { display: contents; }
+/* Stacked on a narrow screen, the secondary buttons share one width too. */
+#title-screen .title-row .btn { width: min(12.6em, 82vw); padding-left: 0; padding-right: 0; white-space: nowrap; }
 
 /* ⚠ WIDE SCREENS: THE KATAMARI IS THE HERO. v1's title was a column of five
    buttons, and when the 3D katamari arrived (render/Showcase.js) it could only

@@ -140,9 +140,12 @@
     <div id="title-screen" class="screen">
       <div class="title-bg"></div>
       <div class="title-inner">
-        <h1 class="game-title">
-          <span class="t1">CLAUDEMARY</span>
-          <span class="t2">LLMACI</span>
+        <!-- One span per letter so the logo can roll: each letter is a sticker,
+             tilted alternately left and right, and a hop runs along both lines
+             as one wave (styles.css, .game-title). -->
+        <h1 class="game-title" aria-label="Claudemary LLMaci">
+          <span class="t1" aria-hidden="true"><i style="--i:0">C</i><i style="--i:1">L</i><i style="--i:2">A</i><i style="--i:3">U</i><i style="--i:4">D</i><i style="--i:5">E</i><i style="--i:6">M</i><i style="--i:7">A</i><i style="--i:8">R</i><i style="--i:9">Y</i></span>
+          <span class="t2" aria-hidden="true"><i style="--i:2">L</i><i style="--i:3">L</i><i style="--i:4">M</i><i style="--i:5">A</i><i style="--i:6">C</i><i style="--i:7">I</i></span>
         </h1>
         <p class="title-sub">Roll up the world. Everything sticks. Nothing is out of context.</p>
         <div class="title-buttons">
