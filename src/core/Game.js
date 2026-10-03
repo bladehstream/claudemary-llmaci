@@ -22,6 +22,7 @@ import { atomStage } from '../world/stages/atom.js';
 import { microbeStage } from '../world/stages/microbe.js';
 import { houseStage } from '../world/stages/house.js';
 import { ensureModels, modelReport } from '../world/models.js';
+import { Fx } from '../render/Fx.js';
 import { townStage } from '../world/stages/town.js';
 import { cityStage } from '../world/stages/city.js';
 import { countryStage } from '../world/stages/country.js';
@@ -62,6 +63,8 @@ import '../world/props/nature.js';
 import '../world/props/ai.js';
 
 const SAVE_KEY = 'claudemary-llmaci-save-v1';
+const _fxp = new THREE.Vector3();
+const _vbuf = new THREE.Vector2();
 /* Smallest to largest. The whole game is one continuous zoom: sub-nucleon foam
    to the observable universe, about 40 orders of magnitude, with the house
    sitting near the middle of it. Order matters — `loadStage` walks this array
@@ -97,6 +100,7 @@ export class Game {
     this.canvas = canvas;
     this.scene = new Scene(canvas);
     this.rig = new CameraRig(this.scene.camera);
+    this.fx = new Fx(this.scene.scene);
     this.input = new Input(canvas);
     this.hud = new HUD();
     this.audio = new AudioEngine();
@@ -887,6 +891,7 @@ export class Game {
        reads a comfortable 50-degree reading angle as permanent full throttle. */
     this.touch.releaseAll();
     this.touch.calibrate();
+    this.fx.clear(this.kat);
     this.lastFrame = performance.now();
   }
 
@@ -993,6 +998,7 @@ export class Game {
       this.scene.followSun(this.kat.group.position, this.kat.radius);
       this.scene.setFov(58, dt);
     }
+    this.fx.update(dt, null);
   }
 
   _stepPlaying(dt) {
@@ -1153,6 +1159,7 @@ export class Game {
       this.hud.banner(Math.random() < 0.16 ? pick(CHEERS) : formatSizeShort(m, this.stage.unit));
       this.sfx.sizeUp(this.milestoneIdx);
       this.music.sizeUpSting(this.milestoneIdx);
+      this.fx.sizeUp({ x: kat.pos.x, y: kat.pos.y - kat.radius, z: kat.pos.z }, kat.radius);
       this.milestoneIdx++;
     }
 
@@ -1168,6 +1175,8 @@ export class Game {
     this.scene.followSky(this.scene.camera.position, far);
     this.scene.followSun(kat.group.position, kat.radius);
     this.scene.setFov(58 + clamp(kat.speedFrac - 0.5, 0, 1) * 9, dt);
+    this.fx.setViewport(this.scene.renderer.getDrawingBufferSize(_vbuf).y, this.scene.camera.fov);
+    this.fx.update(dt, kat);
   }
 
   _handleEvents(events) {
@@ -1176,6 +1185,11 @@ export class Game {
         const rel = clamp(ev.size / Math.max(1e-6, this.kat.diameter), 0, 1);
         this.sfx.pickup(rel, ev.size);
         this.hud.pushPickup(ev.arch.name, rel);
+        const f = this.world.field;
+        if (ev.idx != null && f.x[ev.idx] !== undefined) {
+          _fxp.set(f.x[ev.idx], f.y[ev.idx] + (f.hgt[ev.idx] || 0) * 0.5, f.z[ev.idx]);
+        } else _fxp.copy(this.kat.group.position);
+        this.fx.pickup(_fxp, rel, this.kat.radius);
         this.foundThisRun.add(ev.arch.id);
         // Tell the other player this one is gone. No-op when playing alone.
         if (this.net) this.net.notePickup(ev.idx);
@@ -1190,6 +1204,12 @@ export class Game {
       } else if (ev.type === 'bump') {
         this.sfx.bump(ev.impact, this.kat.diameter);
         this.rig.bump(clamp(ev.impact, 0, 1) * 0.35);
+        const k = this.kat;
+        _fxp.copy(k.vel).setY(0);
+        if (_fxp.lengthSq() > 1e-12) _fxp.normalize();
+        _fxp.multiplyScalar(k.radius * 0.9).add(k.group.position);
+        _fxp.y = k.pos.y - k.radius * 0.6;
+        this.fx.bump(_fxp, clamp(ev.impact, 0, 1), k.radius);
       } else if (ev.type === 'knock') {
         this.sfx.knock(ev.count);
         this.hud.banner(pick(KNOCKS));
