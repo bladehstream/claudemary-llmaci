@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const server = await createServer({ root: ROOT, server: { port: 5213 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5213, open: false }, logLevel: 'error' });
 await server.listen();
 
 const browser = await chromium.launch({

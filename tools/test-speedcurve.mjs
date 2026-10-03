@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const ROOT = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const server = await createServer({ root: ROOT, server: { port: 5209 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5209, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),

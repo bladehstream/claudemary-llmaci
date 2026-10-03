@@ -19,7 +19,7 @@ async function loadChromium() {
 const chromium = await loadChromium();
 fs.mkdirSync(OUT, { recursive: true });
 const stage = process.argv[2] || 'house';
-const server = await createServer({ root: ROOT, server: { port: 5201 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5201, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),

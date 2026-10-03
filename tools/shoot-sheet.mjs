@@ -12,7 +12,7 @@ const glb = '/' + args.find((a) => !a.startsWith('--')).split(String.fromCharCod
 const [W, H] = opt('size', '1600x1000').split('x').map(Number);
 const out = path.join(ROOT, 'tools', 'shots', 'look', opt('out', 'sheet.png'));
 fs.mkdirSync(path.dirname(out), { recursive: true });
-const server = await createServer({ root: ROOT, server: { port: 0 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 0, open: false }, logLevel: 'error' });
 await server.listen();
 const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });

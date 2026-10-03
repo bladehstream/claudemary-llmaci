@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { TIERS } from '../src/util/math.js';
 
 const ROOT = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const server = await createServer({ root: ROOT, server: { port: 5211 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5211, open: false }, logLevel: 'error' });
 await server.listen();
 
 const browser = await chromium.launch({

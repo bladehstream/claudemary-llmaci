@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const stage = process.argv[2] || 'galaxy';
-const server = await createServer({ root: ROOT, server: { port: 5232 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5232, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 450 } });

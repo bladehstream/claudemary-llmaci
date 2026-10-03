@@ -18,7 +18,7 @@ let chromium;
 try { chromium = (await import('playwright')).chromium; }
 catch { console.error('needs Playwright: npm i -D playwright && npx playwright install chromium'); process.exit(2); }
 
-const server = await createServer({ root: ROOT, server: { port: 5205 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5205, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),

@@ -24,7 +24,7 @@ const COLS = flag('cols') ? parseInt(flag('cols'), 10) : 4;
 const stages = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 if (!stages.length) { console.error('usage: node tools/propsheet.mjs <stage> [stage...]'); process.exit(1); }
 
-const server = await createServer({ root: ROOT, server: { port: 5217 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5217, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),

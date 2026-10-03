@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'tools', 'shots'); fs.mkdirSync(OUT, { recursive: true });
-const server = await createServer({ root: ROOT, server: { port: 5217 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5217, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH,

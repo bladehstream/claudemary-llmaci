@@ -46,7 +46,7 @@ const args = process.argv.slice(2);
 const STEPS = +(args.find((a) => a.startsWith('--steps='))?.slice(8) || 11);
 const KEEP = args.includes('--wav');
 
-const server = await createServer({ root: ROOT, server: { port: PORT }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: PORT, open: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({
   ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),

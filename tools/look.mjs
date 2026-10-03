@@ -29,7 +29,7 @@ const SECS = Number(opt('secs', '3'));
 const TAG = opt('tag', '');
 fs.mkdirSync(OUT, { recursive: true });
 
-const server = await createServer({ root: ROOT, server: { port: 0 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 0, open: false }, logLevel: 'error' });
 await server.listen();
 const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch({

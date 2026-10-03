@@ -12,7 +12,7 @@ const [W, H] = opt('size', '1600x900').split('x').map(Number);
 const TAG = opt('tag', 'menus');
 const OUT = path.join(ROOT, 'tools', 'shots', 'look');
 fs.mkdirSync(OUT, { recursive: true });
-const server = await createServer({ root: ROOT, server: { port: 0 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 0, open: false }, logLevel: 'error' });
 await server.listen();
 const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });

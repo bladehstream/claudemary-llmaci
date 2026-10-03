@@ -2005,7 +2005,7 @@ function reportDiagnosis(rows) {
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const server = await createServer({ root: ROOT, server: { port: PORT }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: PORT, open: false }, logLevel: 'error' });
 await server.listen();
 
 const exe = findChromium();

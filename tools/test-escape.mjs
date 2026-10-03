@@ -44,7 +44,7 @@ import { readFileSync } from 'node:fs';
 
 const ROOT = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 const PORT = 5288;
-const server = await createServer({ root: ROOT, server: { port: PORT }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: PORT, open: false }, logLevel: 'error' });
 await server.listen();
 
 const browser = await chromium.launch({

@@ -21,7 +21,7 @@ async function loadChromium() {
 const chromium = await loadChromium();
 fs.mkdirSync(OUT, { recursive: true });
 
-const server = await createServer({ root: ROOT, server: { port: 5199 }, logLevel: 'error' });
+const server = await createServer({ root: ROOT, server: { port: 5199, open: false }, logLevel: 'error' });
 await server.listen();
 const url = 'http://localhost:5199/';
 
