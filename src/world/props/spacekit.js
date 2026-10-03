@@ -218,14 +218,15 @@ export function jet(b, y0, len, col, o = {}) {
   const r = len * (o.r ?? 0.025);
   const knots = o.knots ?? 3;
   const hot = o.hot ?? col;
-  b.cyl(r * 0.6, r, len, col, { y: y0 + up * len * 0.5, ghost: true }, S(7));
+  const glow = o.glow ?? 0.6;   // v2: beams are self-lit (render/geom.js)
+  b.cyl(r * 0.6, r, len, col, { y: y0 + up * len * 0.5, ghost: true, glow }, S(7));
   for (let i = 1; i <= knots; i++) {
     const t = i / (knots + 1);
-    b.sphere(r * (1.9 - t * 0.6), hot, { y: y0 + up * len * t, ghost: true }, S(6), S(4));
+    b.sphere(r * (1.9 - t * 0.6), hot, { y: y0 + up * len * t, ghost: true, glow: glow * 1.3 }, S(6), S(4));
   }
   if (o.lobe) {
     b.ellip(len * o.lobe, len * o.lobe * 0.66, len * o.lobe, hot,
-      { y: y0 + up * len * 1.02, ghost: true }, S(7), S(5));
+      { y: y0 + up * len * 1.02, ghost: true, glow }, S(7), S(5));
   }
   return b;
 }
@@ -251,7 +252,7 @@ export function corona(b, R, col, o = {}, n = 14) {
       x: dx * (R + len * 0.4), y: y + dy * (R + len * 0.4), z: dz * (R + len * 0.4),
       rx: Math.atan2(Math.hypot(dx, dz), dy) * (dz >= 0 ? 1 : 1),
       rz: -Math.atan2(dx, dy),
-      ghost: true,
+      ghost: true, glow: o.glow ?? 0.7,
     }, S(4));
   }
   return b;
@@ -266,7 +267,7 @@ export function prominence(b, R, col, a, size = 0.3, o = {}) {
   const rr = R * size;
   b.torus(rr, rr * (o.tube ?? 0.055), col, {
     x: Math.cos(a) * R * 0.94, y: y + (o.lift ?? 0.35) * R, z: Math.sin(a) * R * 0.94,
-    ry: -a, rx: o.tilt ?? 1.1, ghost: true,
+    ry: -a, rx: o.tilt ?? 1.1, ghost: true, glow: o.glow ?? 0.7,
   }, S(4), S(9));
   return b;
 }
@@ -294,7 +295,7 @@ export function swarm(b, RX, RY, RZ, n, cols, rnd, o = {}) {
       x: Math.cos(ph) * s * t * (RX - rr),
       y: yc + u * t * (RY - rr) * flat,
       z: Math.sin(ph) * s * t * (RZ - rr),
-      ghost: !solid,
+      ghost: !solid, glow: o.glow ?? 0.5,
     }, S(4), S(3));
   }
   return b;
@@ -352,6 +353,7 @@ export function pillars(b, R, H, n, dark, lit, rnd, o = {}) {
     }, S(6));
     b.sphere(w * 0.5, lit, {
       x: Math.cos(a) * d * 1.04, y: yc + h * 1.0, z: Math.sin(a) * d * 1.04, ghost: true,
+      glow: o.glow ?? 0.6,
     }, S(5), S(4));
   }
   return b;
@@ -414,7 +416,7 @@ export function sheet(b, R, H, arcSpan, col, o = {}, seg = 18) {
 export function ring(b, R, col, o = {}, seg = 22) {
   const tube = R * (o.tube ?? 0.045);
   b.torus(R, tube, col,
-    { ...o, rx: (o.rx ?? 0) + Math.PI / 2, y: o.y ?? 0, ghost: true }, S(5), S(seg));
+    { ...o, rx: (o.rx ?? 0) + Math.PI / 2, y: o.y ?? 0, ghost: true, glow: o.glow ?? 0.5 }, S(5), S(seg));
   return b;
 }
 

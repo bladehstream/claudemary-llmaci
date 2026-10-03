@@ -51,6 +51,7 @@
 
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
+import { glowColor } from '../../render/geom.js';
 
 const P = defineProp;
 const U = 'femto';
@@ -92,6 +93,17 @@ const Q = {
   cG: 0x62ff8a,
   cB: 0x5aa8ff,
 };
+
+/* v2: the luminous half of the palette is self-lit (render/geom.js). This is
+   the stage the header calls "lit by itself against a near-black vacuum", and
+   until glow existed it was lit by the same sun as the house. The white-hot
+   cores and the pale tints are the light; the deep and dim tones stay
+   surfaces so there is still something for the light to fall on. */
+for (const [hex, k] of [
+  [Q.hot, 0.9], [Q.cyanHi, 0.7], [Q.magHi, 0.6], [Q.ice, 0.4],
+  [Q.cyan, 0.45], [Q.magenta, 0.4], [Q.acid, 0.45], [Q.teal, 0.35], [Q.lime, 0.35],
+  [Q.cR, 0.35], [Q.cG, 0.35], [Q.cB, 0.35],
+]) glowColor(hex, k);
 
 /* ------------------------------------------------------------
    Drawing helpers

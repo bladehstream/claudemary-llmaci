@@ -30,6 +30,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { N8AOPass } from 'n8ao';
 import { clamp, damp } from '../util/math.js';
+import { makeStars } from './Stars.js';
+
 
 /* Saturation, contrast, vignette and the tone curve, in linear light.
 
@@ -153,6 +155,9 @@ export class Scene {
     this.sky.renderOrder = -1;
     this.sky.frustumCulled = false;
     this.scene.add(this.sky);
+    // a starfield on the dome, shown on the night stages only (render/Stars.js)
+    this.stars = makeStars();
+    this.sky.add(this.stars);
 
     this.scene.fog = new THREE.Fog(0xdff0e4, 40, 200);
 
@@ -203,8 +208,13 @@ export class Scene {
     composer.addPass(ao);
 
     let bloom = null;
-    if (this.quality === 'high') {
-      bloom = new UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), 0.2, 0.55, 0.95);
+    /* Bloom on 'med' too, at a third of the resolution: since parts can glow
+       (render/geom.js) bloom is what makes the luminous stages luminous, and
+       'med' is what every desktop gets by default. Phones default to 'low',
+       which has no post at all. */
+    if (this.quality !== 'low') {
+      const div = this.quality === 'high' ? 2 : 3;
+      bloom = new UnrealBloomPass(new THREE.Vector2(w / div, h / div), 0.2, 0.55, 0.95);
       composer.addPass(bloom);
     }
 
@@ -295,6 +305,7 @@ export class Scene {
        the hemisphere gave up — night stages keep v1's full hemisphere. */
     this.hemi.intensity = this._night ? 1.15 : 0.85;
     this.material.envMapIntensity = this._night ? 0.6 : 0.45;
+    this.stars.visible = this._night;
     this._skyCols = { top, bottom };
     this._buildEnv(top, bottom);
     this._applyNight();
@@ -395,15 +406,25 @@ export class Scene {
    * than a pixel contributes nothing rather than aliasing.
    */
   _installDetail(mat) {
-    this.detail = { level: { value: 0 }, amp: { value: 0.055 } };
+    this.detail = { level: { value: 0 }, amp: { value: 0.055 }, glow: { value: 1 } };
     const u = this.detail;
+    /* GLOW (see render/geom.js): geometry that has an `emis` attribute adds
+       it to the emissive term. Geometry without one — every Blender model,
+       most props — reads the default below, which is zero. Set explicitly
+       rather than trusting the GL default, because a disabled attribute keeps
+       whatever generic value its location last had. */
+    mat.defaultAttributeValues = { ...(mat.defaultAttributeValues || {}), emis: [0, 0, 0] };
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uDetailLevel = u.level;
       sh.uniforms.uDetailAmp = u.amp;
+      sh.uniforms.uGlow = u.glow;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
+          attribute vec3 emis;
+          varying vec3 vEmis;
           varying vec3 vDetailPos;`)
         .replace('#include <project_vertex>', `#include <project_vertex>
+          vEmis = emis;
           vec4 dWorld = vec4( transformed, 1.0 );
           #ifdef USE_INSTANCING
             dWorld = instanceMatrix * dWorld;
@@ -411,6 +432,8 @@ export class Scene {
           vDetailPos = ( modelMatrix * dWorld ).xyz;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
+          varying vec3 vEmis;
+          uniform float uGlow;
           varying vec3 vDetailPos;
           uniform float uDetailLevel;
           uniform float uDetailAmp;
@@ -443,9 +466,11 @@ export class Scene {
             n += mix( dOct( vDetailPos, fw, L ),       dOct( vDetailPos, fw, L + 1.0 ), t ) * 0.6;
             n += mix( dOct( vDetailPos, fw, L - 1.0 ), dOct( vDetailPos, fw, L ),       t ) * 0.35;
             diffuseColor.rgb *= 1.0 + n * uDetailAmp * 2.0;
-          }`);
+          }`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          totalEmissiveRadiance += vEmis * uGlow;`);
     };
-    mat.customProgramCacheKey = () => 'detail-v1';
+    mat.customProgramCacheKey = () => 'detail-v2';
   }
 
   /** Sky dome rides with the camera so it never clips. */
@@ -507,11 +532,23 @@ export class Scene {
     if (this.post) {
       this.post.composer.setPixelRatio(this.renderer.getPixelRatio());
       this.post.composer.setSize(w, h);
+      /* 'med' bloom runs a size down: it is a blur, and a blur does not need
+         the pixels. The composer has just set it to full size, so shrink it
+         back after. */
+      if (this.post.bloom && this.quality === 'med') {
+        const pr = this.renderer.getPixelRatio();
+        this.post.bloom.setSize(Math.round((w * pr) / 1.5), Math.round((h * pr) / 1.5));
+      }
       this.post.grade.uniforms.aspect.value = w / Math.max(1, h);
     }
   }
 
   render() {
+    if (this.stars.visible) {
+      const u = this.stars.material.uniforms;
+      u.uTime.value = performance.now() / 1000;
+      u.uPR.value = this.renderer.getPixelRatio();
+    }
     if (this.post) this.post.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }

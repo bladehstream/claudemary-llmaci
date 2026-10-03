@@ -40,6 +40,30 @@ function applyOpts(geo, o) {
   return geo;
 }
 
+/* ---------------- glow ----------------
+   Self-lit parts. A part glows if its opts carry `glow: k`, or if its colour
+   has been registered with `glowColor(hex, k)` — the second is how a whole
+   stage's luminous palette lights up without touching every call that paints
+   with it. Glow is a per-vertex `emis` attribute (colour x k) that the shared
+   material adds to its emissive term (render/Scene.js), so it costs no extra
+   draw calls and blooms on the quality levels that have bloom. */
+const GLOW = new Map();
+/** Every part painted exactly `hex` from now on glows with strength `k`. */
+export function glowColor(hex, k) { GLOW.set(hex >>> 0, k); }
+
+function glowOf(color, opts) {
+  if (opts.glow != null) return opts.glow;
+  return typeof color === 'number' ? (GLOW.get(color >>> 0) || 0) : 0;
+}
+
+function setEmis(geo, color, k) {
+  const col = new THREE.Color(color);
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = col.r * k; arr[i * 3 + 1] = col.g * k; arr[i * 3 + 2] = col.b * k; }
+  geo.setAttribute('emis', new THREE.BufferAttribute(arr, 3));
+}
+
 function paint(geo, color) {
   const col = new THREE.Color(color);
   const n = geo.attributes.position.count;
@@ -85,6 +109,8 @@ export class GeomBuilder {
     geo.clearGroups();
     applyOpts(geo, opts);
     paint(geo, color);
+    const k = glowOf(color, opts);
+    if (k > 0) setEmis(geo, color, k);
     this.parts.push(geo);
     this.ghost.push(!!opts.ghost);
     return this;
@@ -374,6 +400,14 @@ export class GeomBuilder {
       p.deleteAttribute('uv');
       p.deleteAttribute('uv1');
       p.clearGroups();
+    }
+    // A merge needs one attribute set: if anything glows, the rest get zero glow.
+    if (parts.some((p) => p.attributes.emis)) {
+      for (const p of parts) {
+        if (!p.attributes.emis) {
+          p.setAttribute('emis', new THREE.BufferAttribute(new Float32Array(p.attributes.position.count * 3), 3));
+        }
+      }
     }
     /* SEPARATE COPLANAR FACES, once, for every prop in the game.
      *

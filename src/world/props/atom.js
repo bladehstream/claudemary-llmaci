@@ -29,6 +29,7 @@
 
 import { defineProp } from './index.js';
 import { C } from '../../render/palette.js';
+import { glowColor } from '../../render/geom.js';
 
 const P = defineProp;
 const TAU = Math.PI * 2;
@@ -75,6 +76,13 @@ const A = {
   sheet:   0xffb35c,
   coil:    0x8f7ad6,
 };
+
+/* v2: the particles glow (render/geom.js); the elements and bonds do not, so
+   a molecule still reads as a solid model with charges sparkling round it. */
+for (const [hex, k] of [
+  [A.electron, 0.6], [A.spark, 0.8], [A.quark, 0.45], [A.glowV, 0.5], [A.glowM, 0.5],
+  [A.proton, 0.25],
+]) glowColor(hex, k);
 
 /* ------------------------------------------------------------
    Drawing helpers

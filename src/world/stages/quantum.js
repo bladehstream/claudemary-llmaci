@@ -32,6 +32,7 @@
    ============================================================ */
 
 import { C } from '../../render/palette.js';
+import { glowColor } from '../../render/geom.js';
 
 /* ---------------- ground layers ----------------
 
@@ -154,6 +155,13 @@ const EDGE_V   = 0x9a5cff;
 const EDGE_A   = 0xd8ff45;
 const WALLC    = C.black;
 const WALLLIT  = 0x7b4ee0;
+/* v2: the neon deck trims, the wall lights, the lattice and the interference
+   fringes are self-lit (render/geom.js) — the depth cues described above, now
+   glowing rather than merely brighter. The floor and decks stay surfaces. */
+for (const [hex, k] of [
+  [EDGE_C, 0.8], [EDGE_M, 0.8], [EDGE_V, 0.7], [EDGE_A, 0.7], [WALLLIT, 0.55],
+  [LATTICE, 0.5], [FRINGE_A, 0.35], [FRINGE_B, 0.35],
+]) glowColor(hex, k);
 
 export const quantumStage = {
   id: 'quantum',
