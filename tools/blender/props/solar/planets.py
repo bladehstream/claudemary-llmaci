@@ -20,7 +20,10 @@ sheets) is modelled too: it is half of what these things look like.
 
 Glow: v1's solar props register no glow colours, and of the spacekit helpers
 they call only `ring()` self-lights (0.5) — the shepherds' gap ring in
-`sol_ring`. That one part glows here; nothing else does.
+`sol_ring`. That one part glows as in v1. v2 ALSO self-lights the star and
+its activity (sol_sun, sol_sunspot, sol_flare, sol_loop, sol_prominence; see
+`shine`): the brightest things on a dark stage, and unlit they read as
+painted clay. A deliberate change from v1, asked for by the user.
 """
 import math
 import random
@@ -379,6 +382,14 @@ def stone(r, at, col, seed, sub=1, scale=(1, 1, 1), cuts=6, depth=0.22, ry=0.0, 
     return _smooth(o, 32)
 
 
+def shine(parts, k):
+    """Self-light every part in `parts` at strength k (kit.glow). Emission is
+    the part's own painted colour times k, so a dark umbra stays dark."""
+    for o in parts:
+        glow(o, k)
+    return parts
+
+
 def lift(parts):
     """Rest the prop on the floor (Blender z = 0) — v1 ground-aligns too."""
     lo = min(v.co.z for o in parts for v in o.data.vertices)
@@ -631,6 +642,7 @@ def sol_sunspot(v):
                                                       if th < sp * 0.97 else lt(S.penumbra, 0.15)))
         place(spot, (0, cy, 0))
         parts.append(spot)
+    shine(parts, 0.4)
     return lift(parts)
 
 
@@ -683,10 +695,12 @@ def sol_loop(v):
     if v:
         parts.append(place(arch(Z * 1.15, Z * 1.9, Z * 0.09, S.corona, S.plasmaPl, n=24, sides=10,
                                 ph=2.0 + v, wob=0.8, sink=Z * 0.18)))
+    shine(parts[1:], 0.7)                  # the loops
+    glow(parts[0], 0.3)                    # the limb between the feet
     # the footpoints: bright knots where the loop plugs into the surface
     for s in (-1, 1):
-        parts.append(egg(Z * 0.36, Z * 0.3, Z * 0.3, S.limb, (s * Z * 0.85, -Z * 0.03, 0), seg=20,
-                         top=S.plasmaPl, bottom=dk(S.limb, 0.1)))
+        parts.append(glow(egg(Z * 0.36, Z * 0.3, Z * 0.3, S.limb, (s * Z * 0.85, -Z * 0.03, 0), seg=20,
+                              top=S.plasmaPl, bottom=dk(S.limb, 0.1)), 0.5))
     return parts
 
 
@@ -718,7 +732,9 @@ def sol_flare(v):
         paint(o, S.corona, lambda q: mix(S.corona, S.plasmaPl, max(0.0, -q.y) / 1.5))
         o.data.transform(aim(dirv))
         place(o, tuple(p))
-        parts.append(o)
+        parts.append(glow(o, 0.8))
+    shine(parts[:2], 0.5)                  # the spot and its low corona
+    shine(parts[2:5], 0.7)                 # the ribbons
     return lift(parts)
 
 
@@ -1130,6 +1146,8 @@ def sol_prominence(v):
             paint(o, S.corona, lambda q: mix(S.corona, S.plasmaPl, max(0.0, q.y) / 1.4))
             o.data.transform(aim((p - Vector((0, Z * 1.5, 0))).normalized()))
             parts.append(place(o, tuple(p)))
+    shine(parts[:2], 0.4)                  # the footpoint mounds
+    shine(parts[2:], 0.7)                  # the curtain, its rims, strands and rain
     return parts
 
 
@@ -1234,4 +1252,6 @@ def sol_sun(v):
             parts.append(sweep(pts, rad, c0, n=6, fn=lambda u, c0=c0, c1=c1: mix(c0, c1, u ** 1.2)))
     for o in parts:
         place(o, (0, Z, 0))
+    shine(parts[:10], 0.45)                # photosphere, active regions, corona mounds
+    shine(parts[10:], 0.7)                 # the prominence tongues
     return parts
