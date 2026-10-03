@@ -14,6 +14,7 @@
    ============================================================ */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, lerp, damp, sphereVolume, sphereRadius, TAU } from '../util/math.js';
 
 const _v1 = new THREE.Vector3();
@@ -373,6 +374,84 @@ export function topSpeedFor(diameter, startSize = 0.05, stageSpeed = 0.7) {
   return stageSpeed * Math.pow(growth, TUNING.speedP);
 }
 
+/**
+ * The ball itself — the first thing on screen in every round and, for the
+ * first few seconds, the only thing the player is looking at. v1's was a plain
+ * green icosphere with a vertical gradient, which read as a marble.
+ *
+ * Now a toy: a soft green core with 32 rounded cream studs, 12 large ones at
+ * the icosahedron's vertices and 20 small ones at its face centres. That is a
+ * pattern the eye can lock onto (see visual-taste: a repeated element must
+ * repeat), and — the practical reason — a sphere with no features does not
+ * visibly ROLL. Studs make the spin legible at a glance, which is the single
+ * most important piece of feedback this game gives.
+ *
+ * The studs rise at most 0.09 of the radius above the core, so the silhouette
+ * stays inside what the collision sphere promises to within a few percent.
+ */
+function buildCoreGeometry() {
+  const parts = [];
+  const paint = (geo, fn) => {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const pos = g.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    const c = new THREE.Color();
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      fn(v, c);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.deleteAttribute('uv');
+    return g;
+  };
+
+  const green = new THREE.Color(0x58b83c), deep = new THREE.Color(0x3f8f2c);
+  parts.push(paint(new THREE.IcosahedronGeometry(1, 4), (v, c) => {
+    c.copy(deep).lerp(green, (v.y + 1) * 0.5);
+  }));
+
+  const ico = new THREE.IcosahedronGeometry(1, 0);
+  const verts = [];
+  const p = ico.attributes.position;
+  const seen = new Set();
+  for (let i = 0; i < p.count; i++) {
+    const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+    if (!seen.has(key)) { seen.add(key); verts.push(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i)).normalize()); }
+  }
+  const faces = [];
+  for (let i = 0; i < p.count; i += 3) {
+    faces.push(new THREE.Vector3(
+      p.getX(i) + p.getX(i + 1) + p.getX(i + 2),
+      p.getY(i) + p.getY(i + 1) + p.getY(i + 2),
+      p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)).normalize());
+  }
+  ico.dispose();
+
+  const cream = new THREE.Color(0xfff0c2), rim = new THREE.Color(0xe8b85a);
+  const up = new THREE.Vector3(0, 1, 0);
+  const stud = (dir, r, h) => {
+    // a squashed dome: hemisphere scaled flat, set into the surface
+    const g = new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    g.scale(1, h / r, 1);
+    g.translate(0, 0.985, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, dir));
+    return paint(g, (v, c) => {
+      const lift = v.dot(dir) - 0.985;
+      c.copy(rim).lerp(cream, Math.min(1, lift / (h * 0.55)));
+    });
+  };
+  for (const d of verts) parts.push(stud(d, 0.21, 0.09));
+  for (const d of faces) parts.push(stud(d, 0.12, 0.06));
+
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  // ⚠ No computeVertexNormals: on non-indexed geometry it computes FACE normals
+  // and the ball comes out faceted. The source primitives' normals are right.
+  return merged;
+}
+
 let _uid = 0;
 
 export class Katamari {
@@ -385,18 +464,7 @@ export class Katamari {
     this.spinner = new THREE.Group();      // carries the roll rotation
     this.group.add(this.spinner);
 
-    const coreGeo = new THREE.IcosahedronGeometry(1, 3);
-    // give the core a soft two-tone look via vertex colours
-    const cnt = coreGeo.attributes.position.count;
-    const colors = new Float32Array(cnt * 3);
-    const cA = new THREE.Color(0x63b345), cB = new THREE.Color(0x4c9138);
-    const pos = coreGeo.attributes.position;
-    for (let i = 0; i < cnt; i++) {
-      const t = (pos.getY(i) + 1) * 0.5;
-      const c = cA.clone().lerp(cB, 1 - t);
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-    }
-    coreGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const coreGeo = buildCoreGeometry();
     this.core = new THREE.Mesh(coreGeo, material);
     this.core.castShadow = true;
     this.core.receiveShadow = true;
