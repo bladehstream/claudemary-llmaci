@@ -158,6 +158,21 @@ def recolor(obj, fn):
     return obj
 
 
+def glow(obj, k=1.0):
+    """Make a finished part self-lit, `k` as in v1's `glowColor(hex, k)` / `{ glow: k }`.
+
+    Stored as a per-corner float `glow`; `finish()` turns it into `_EMIS`
+    (linear base colour x k), which the exporter writes as a custom attribute
+    and `src/world/models.js` maps onto the game's `emis`. Parts never passed
+    here get 0 when the parts are joined.
+    """
+    me = obj.data
+    attr = me.attributes.get('glow') or me.attributes.new('glow', 'FLOAT', 'CORNER')
+    for d in attr.data:
+        d.value = k
+    return obj
+
+
 # ------------------------------------------------------------------ primitives
 # `at` is the BOTTOM CENTRE for boxes, cylinders and lathes; the CENTRE for
 # spheres and tori. `rot` is degrees XYZ applied before the move.
@@ -403,6 +418,16 @@ def finish(parts, name, ao=0.75, ao_dist=None):
         a = occl.data[i].color[0]
         k = 1.0 - ao * (1.0 - a)
         col.data[i].color = (b[0] * k, b[1] * k, b[2] * k, 1.0)
+    # self-lit parts: emission is the unshaded base colour times the part's k
+    g = me.attributes.get('glow')
+    if g is not None:
+        if any(d.value > 0 for d in g.data):
+            emis = me.attributes.new('_EMIS', 'FLOAT_COLOR', 'CORNER')
+            for i in range(len(emis.data)):
+                b = base.data[i].color
+                k = g.data[i].value
+                emis.data[i].color = (b[0] * k, b[1] * k, b[2] * k, 1.0)
+        me.attributes.remove(me.attributes['glow'])
     me.color_attributes.remove(me.color_attributes['ao'])
     me.color_attributes.remove(me.color_attributes['base'])
     me.color_attributes.active_color = me.color_attributes['Col']
@@ -427,4 +452,5 @@ def export(path, names=None):
         export_all_vertex_colors=False, export_active_vertex_color_when_no_material=True,
         export_texcoords=False, export_normals=True, export_yup=True,
         export_meshopt_compression_enable=False,
+        export_attributes=True,     # `_EMIS`, the self-lit parts (see glow())
     )

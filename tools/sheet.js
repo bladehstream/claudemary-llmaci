@@ -13,15 +13,38 @@ import '../src/world/props/house.js';
 import '../src/world/props/town.js';
 import '../src/world/props/city.js';
 import '../src/world/props/nature.js';
+// every other stage's props too, so a model of any archetype has its v1 beside it
+import '../src/world/props/ai.js';
+import '../src/world/props/quantum.js';
+import '../src/world/props/atom.js';
+import '../src/world/props/microbe.js';
+import '../src/world/props/country.js';
+import '../src/world/props/world.js';
+import '../src/world/props/solar.js';
+import '../src/world/props/galaxy.js';
+import '../src/world/props/universe.js';
 import { fromGltfMesh } from '../src/world/models.js';
 import { houseStage } from '../src/world/stages/house.js';
+import { quantumStage } from '../src/world/stages/quantum.js';
+import { atomStage } from '../src/world/stages/atom.js';
+import { microbeStage } from '../src/world/stages/microbe.js';
+import { countryStage } from '../src/world/stages/country.js';
+import { worldStage } from '../src/world/stages/world.js';
+import { solarStage } from '../src/world/stages/solar.js';
+import { galaxyStage } from '../src/world/stages/galaxy.js';
+import { universeStage } from '../src/world/stages/universe.js';
 
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('c');
 const sc = new Scene(canvas);
 sc.setQuality(q.get('quality') || 'high');
-sc.setSky(houseStage.sky);
-sc.setSun(houseStage.sun, houseStage.sun.intensity);
+/* ?stage=<id> lights the sheet like that stage (sky, sun), so self-lit parts
+   on a dark stage can be judged against the darkness they will sit in. */
+const STAGES = { house: houseStage, quantum: quantumStage, atom: atomStage, microbe: microbeStage,
+  country: countryStage, world: worldStage, solar: solarStage, galaxy: galaxyStage, universe: universeStage };
+const lit = STAGES[q.get('stage')] || houseStage;
+sc.setSky(lit.sky);
+sc.setSun(lit.sun, lit.sun.intensity);
 sc.scene.fog = null;
 buildCatalog();
 
@@ -37,7 +60,7 @@ const rows = Math.ceil(items.length / cols);
 const CELL = 1;
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(cols * CELL + 2, rows * CELL + 2), sc.material);
 const fg = floor.geometry;
-fg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(fg.attributes.position.count * 3).fill(0.55), 3));
+fg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(fg.attributes.position.count * 3).fill(lit === houseStage ? 0.55 : 0.12), 3));
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 sc.scene.add(floor);

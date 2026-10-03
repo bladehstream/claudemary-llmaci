@@ -62,6 +62,11 @@ export function fromGltfMesh(mesh) {
   // procedural prop (a 4-component COLOR_0 compiles a separate USE_COLOR_ALPHA program)
   const c = src.attributes.color;
   g.setAttribute('color', new THREE.BufferAttribute(c ? f32(c, 3) : new Float32Array(n * 3).fill(0.8), 3));
+  // self-lit parts (kit.glow in tools/blender): the exporter's `_EMIS` custom
+  // attribute is the game's `emis`, the colour the shared material adds to its
+  // emissive term (render/geom.js, render/Scene.js)
+  const e = src.attributes._emis;
+  if (e) g.setAttribute('emis', new THREE.BufferAttribute(f32(e, 3), 3));
   if (src.index) g.setIndex(src.index.clone());
   // the glTF node carries the dequantising transform; bake it in
   mesh.updateMatrixWorld(true);

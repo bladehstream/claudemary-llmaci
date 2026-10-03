@@ -1,5 +1,5 @@
 /* Photograph tools/sheet.html on the real GPU.
-     node tools/shoot-sheet.mjs <glb path from repo root> [--only=a,b] [--cols=6] [--out=name.png] [--size=1600x1000] [--ry=0.5] */
+     node tools/shoot-sheet.mjs <glb path from repo root> [--only=a,b] [--cols=6] [--out=name.png] [--size=1600x1000] [--ry=0.5] [--stage=quantum] */
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import path from 'node:path';
@@ -22,6 +22,7 @@ page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.text()); });
 const qs = new URLSearchParams({ glb, cols: opt('cols', '6'), ry: opt('ry', '0.5') });
 if (opt('only', '')) qs.set('only', opt('only', ''));
+if (opt('stage', '')) qs.set('stage', opt('stage', ''));
 await page.goto(`${BASE}/tools/sheet.html?${qs}`, { waitUntil: 'load' });
 await page.waitForFunction(() => window.__sheetReady === true, null, { timeout: 60000 });
 await page.waitForTimeout(600);
