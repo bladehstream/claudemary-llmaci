@@ -17,6 +17,11 @@ from kit import (box, cyl, sphere, torus, lathe, extrude, tube, arc_points,
                  subdivide, deform, recolor, lin, mixc, C, SETS)
 from kit import _from_bmesh, _bevel, _place, paint, _smooth
 
+# Lit windows (and the stadium's floodlight banks) are C.lemon faces; they
+# self-light through kit.finish's glow_cols. The city turns them up as its
+# sky goes to dusk (Scene.setDusk); in daylight they sit at a fraction.
+LIT = {C.lemon: 0.9}
+
 MODELS = {}
 FINISH = {}
 
@@ -273,7 +278,7 @@ def piers(W, D, z0, h, w, color, proud=0.25):
 
 # ---------------------------------------------------------------- buildings
 
-@model('office_small', ao=0.55, ao_dist=4.0)
+@model('office_small', ao=0.55, ao_dist=4.0, glow_cols=LIT)
 def office_small(v):
     W, D, H = 13 + v * 2, 11 + v, 17 + v * 5
     wall = SETS['building'][v % len(SETS['building'])]
@@ -374,7 +379,7 @@ def balconies(levels, out, rail, length, wall_y, side, slab_col, rail_col, slab=
     return o
 
 
-@model('apartment', ao=0.6, ao_dist=4.0)
+@model('apartment', ao=0.6, ao_dist=4.0, glow_cols=LIT)
 def apartment(v):
     W, D = 22.0, 14.0
     H = 26 + v * 6 - 0.8
@@ -520,7 +525,7 @@ def lit_panes(cw, cd, z0, rows, colsx, colsy, color, p, seed, off=0.1):
     return out
 
 
-@model('skyscraper', ao=0.6, ao_dist=9.0)
+@model('skyscraper', ao=0.6, ao_dist=9.0, glow_cols=LIT)
 def skyscraper(v):
     H = 140 + v * 40
     w, d, z0 = 30.0, 28.0, 0.0
@@ -573,7 +578,7 @@ def skyscraper(v):
     return parts
 
 
-@model('tower', ao=0.6, ao_dist=7.0)
+@model('tower', ao=0.6, ao_dist=7.0, glow_cols=LIT)
 def tower(v):
     W, D, H = 18.0 + v * 3, 18.0 + v * 2, 62.0 + v * 22
     col = [C.steelDark, C.concrete, C.glassDark, C.lightgrey][v]
@@ -918,7 +923,7 @@ def wind_turbine(v):
 
 # ---------------------------------------------------------------- big structures
 
-@model('stadium', ao=0.6, ao_dist=7.0)
+@model('stadium', ao=0.6, ao_dist=7.0, glow_cols=LIT)
 def stadium(v):
     R = 59.2
     sx = 64.0 / 59.2                          # an oval bowl: 128 x 118

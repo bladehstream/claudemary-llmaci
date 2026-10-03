@@ -359,12 +359,16 @@ def mirror_x(obj):
 
 # ------------------------------------------------------------------ finish
 
-def finish(parts, name, ao=0.75, ao_dist=None):
+def finish(parts, name, ao=0.75, ao_dist=None, glow_cols=None):
     """Join parts into one mesh named `name`, bake AO into it, write `Col`.
 
     `ao` is how far the occlusion darkens (0 = none, 1 = full black in a fully
     enclosed corner). `ao_dist` defaults to a quarter of the prop's largest
     dimension, so a thumbtack and a fridge occlude in proportion.
+
+    `glow_cols` ({hex: k}) self-lights every face painted exactly that colour,
+    like `glow()` but by colour, for detail that is a recoloured face rather
+    than a part of its own (a building's lit windows).
     """
     for o in bpy.context.selected_objects:
         o.select_set(False)
@@ -418,6 +422,15 @@ def finish(parts, name, ao=0.75, ao_dist=None):
         a = occl.data[i].color[0]
         k = 1.0 - ao * (1.0 - a)
         col.data[i].color = (b[0] * k, b[1] * k, b[2] * k, 1.0)
+    # self-lit by colour: corners whose base colour is one of glow_cols
+    if glow_cols:
+        g = me.attributes.get('glow') or me.attributes.new('glow', 'FLOAT', 'CORNER')
+        keys = [(lin(h), k) for h, k in glow_cols.items()]
+        for i in range(len(g.data)):
+            b = base.data[i].color
+            for c, k in keys:
+                if abs(b[0] - c[0]) + abs(b[1] - c[1]) + abs(b[2] - c[2]) < 1e-3:
+                    g.data[i].value = max(g.data[i].value, k)
     # self-lit parts: emission is the unshaded base colour times the part's k
     g = me.attributes.get('glow')
     if g is not None:
