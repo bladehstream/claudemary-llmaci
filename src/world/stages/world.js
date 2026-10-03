@@ -56,6 +56,7 @@
    ============================================================ */
 
 import { G } from '../props/world.js';
+import { hexes, shade } from './dress.js';
 
 /** Anything that stands in the sea. Must not come out of a LAND pool. */
 const WET = ['wd_reef', 'wd_fjord', 'wd_island', 'wd_storm', 'wd_peninsula',
@@ -158,6 +159,7 @@ export const worldStage = {
     const Y_SHELF = 0.13;        // pale shelf skirt round every landmass
     const Y_SURF = 0.185;        // the surf line right at a shore
     const D_DECK = 0.04;         // the landmass's own surface
+    const D_TILE = 0.055;        // the hex mosaic over the deck
     const D_BIOME = 0.07;        // forest / desert / steppe painted on the deck
     const D_BIOME2 = 0.11;       // a second biome over the first
     const D_WATER = 0.15;        // inland seas and rivers
@@ -221,8 +223,10 @@ export const worldStage = {
         // the crust block: sides you can see, lid safely inside the platform
         t.box(x1 - x0 - CRUST_INSET * 2, top - CRUST_GAP - CRUST_BASE, z1 - z0 - CRUST_INSET * 2,
           G.crust, { x: cx, y: (top - CRUST_GAP + CRUST_BASE) / 2, z: cz });
-        // and the deck itself, footprint EXACTLY the platform's
-        t.quad(x1 - x0, z1 - z0, kind.floor, { x: cx, y: top + D_DECK, z: cz });
+        // and the deck itself, footprint EXACTLY the platform's: the grout
+        // colour, with the hex mosaic laid over it once the biomes are known
+        t.quad(x1 - x0, z1 - z0, shade(kind.floor, 0.72), { x: cx, y: top + D_DECK, z: cz });
+        rc.kind = kind;
       });
       REGIONS.push(reg);
       return reg;
@@ -273,13 +277,25 @@ export const worldStage = {
       }
     };
 
-    const TEMPERATE = { floor: G.land, ban: BAN.temperate };
-    const DESERT = { floor: G.steppe, ban: BAN.desert };
-    const ALPINE = { floor: G.scree, ban: BAN.alpine };
-    const POLAR = { floor: G.ice, ban: BAN.polar };
-    const JUNGLE = { floor: G.jungle, ban: BAN.jungle };
-    const VOLCANIC = { floor: G.basalt, ban: BAN.volcanic };
-    const ISLE = { floor: G.jungle, ban: BAN.isle };
+    /* The ground of every landmass is a mosaic of hex tiles (see `hexes` in
+       dress.js) on one lattice shared by the whole map, each tile one of its
+       land kind's tones: the board-game reading of a continent. */
+    const TILE_R = 4.5;
+    const tiles = (...cols) => ({ r: TILE_R, gap: 0.06, cols });
+    const TEMPERATE = { floor: G.land, ban: BAN.temperate,
+      tiles: tiles(G.land, G.land, G.landDry, G.forest, shade(G.land, 0.9)) };
+    const DESERT = { floor: G.steppe, ban: BAN.desert,
+      tiles: tiles(G.steppe, G.steppe, G.sandDeep, shade(G.steppe, 1.08), G.silt) };
+    const ALPINE = { floor: G.scree, ban: BAN.alpine,
+      tiles: tiles(G.scree, G.scree, G.rock, G.granite, shade(G.scree, 1.08)) };
+    const POLAR = { floor: G.ice, ban: BAN.polar,
+      tiles: tiles(G.ice, G.ice, G.snow, G.iceBlue) };
+    const JUNGLE = { floor: G.jungle, ban: BAN.jungle,
+      tiles: tiles(G.jungle, G.jungle, G.jungleDk, G.forest, G.marsh) };
+    const VOLCANIC = { floor: G.basalt, ban: BAN.volcanic,
+      tiles: tiles(G.basalt, G.basalt, G.ash, shade(G.basalt, 1.3)) };
+    const ISLE = { floor: G.jungle, ban: BAN.isle,
+      tiles: tiles(G.jungle, G.land, G.jungleDk, G.landDry) };
 
     /* --- the Home Coast, where you start ---
        Deck 1.2 against a starting radius of 0.8: a wall for the first few
@@ -411,19 +427,36 @@ export const worldStage = {
     w.bound(B, -B, B + 7, B, 44);
 
     /* ---------------- surface detail on the decks ---------------- */
+    /* A biome patch (D_BIOME, D_BIOME2) is not drawn as a quad: it recolours
+       the hex tiles whose centres it covers, so a forest is a cluster of
+       dark tiles rather than a rectangle lying on the board. Water and
+       tracks stay quads over the tiles. The r() calls are the same either
+       way, so placement does not move. */
     let biomeN = 0;
+    const PATCHES = [];
     const paint = (reg, col, n, scale, dy) => {
       for (let i = 0; i < n; i++) {
         const rc = reg.rects[Math.floor(r() * reg.rects.length)];
         const ww = (rc.x1 - rc.x0) * scale * (0.5 + r() * 0.8);
         const dd = (rc.z1 - rc.z0) * scale * (0.5 + r() * 0.8);
-        t.quad(ww, dd, col, {
+        const o = {
           x: rc.x0 + ww / 2 + r() * Math.max(0, rc.x1 - rc.x0 - ww),
           y: rc.top + dy + (biomeN++ % 14) * 0.002,
           z: rc.z0 + dd / 2 + r() * Math.max(0, rc.z1 - rc.z0 - dd),
           ry: (r() - 0.5) * 0.5,
-        });
+        };
+        if (dy < D_WATER) PATCHES.push({ ...o, hw: ww / 2, hd: dd / 2, cos: Math.cos(o.ry), sin: Math.sin(o.ry),
+          cols: [col, col, shade(col, 0.9), shade(col, 1.08)] });
+        else t.quad(ww, dd, col, o);
       }
+    };
+    /** The tones of the last patch covering (x, z), in the patch's own frame. */
+    const patchAt = (x, z) => {
+      for (let i = PATCHES.length - 1; i >= 0; i--) {
+        const p = PATCHES[i], dx = x - p.x, dz = z - p.z;
+        if (Math.abs(dx * p.cos - dz * p.sin) <= p.hw && Math.abs(dx * p.sin + dz * p.cos) <= p.hd) return p.cols;
+      }
+      return undefined;
     };
     paint(home, G.landDry, 7, 0.3, D_BIOME);
     paint(home, G.forest, 4, 0.18, D_BIOME2);
@@ -451,6 +484,12 @@ export const worldStage = {
     paint(craton, G.snow, 4, 0.1, D_WATER);
     for (const reg of REGIONS) {
       if (reg.kind === ISLE) paint(reg, r() < 0.5 ? G.jungleDk : G.sand, 2, 0.3, D_BIOME);
+    }
+    let tileN = 0;
+    for (const reg of REGIONS) {
+      for (const rc of reg.rects) {
+        hexes(t, rc.x0, rc.z0, rc.x1, rc.z1, rc.top + D_TILE, { ...rc.kind.tiles, seed: tileN++, colsAt: patchAt });
+      }
     }
 
     /* ---------------- the impassable landmarks ----------------

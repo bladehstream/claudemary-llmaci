@@ -20,6 +20,8 @@
    surface height they are dressing.
    ============================================================ */
 
+import * as THREE from 'three';
+
 /** Pure hash of two integers to [0,1). */
 export function hash2(a, b) {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) >>> 0;
@@ -113,6 +115,39 @@ export function fields(t, x0, z0, x1, z1, y, o = {}) {
         if (alongX) t.quad(fw, s, c, { x: cx, y: y + lift, z: cz + u });
         else t.quad(s, fd, c, { x: cx + u, y: y + lift, z: cz });
       }
+    }
+  }
+}
+
+/** One flat-topped hexagon lying in XZ, unit circumradius: six triangles. */
+let HEX = null;
+
+/**
+ * A mosaic of hexagonal tiles over a rectangle, the board-game reading of a
+ * continent. The lattice is anchored at the world origin, not at the
+ * rectangle, so every landmass's tiles sit on the same lines across the whole
+ * map; a tile is laid only where it fits entirely inside the rectangle, which
+ * leaves a clean border of whatever is underneath round each edge. `gap` is
+ * the grout between tiles, as a fraction of the radius. `colsAt(x, z)` may
+ * return a different set of tones for the tile centred there (a forest or a
+ * desert painted across the land), or nothing to keep `cols`.
+ */
+export function hexes(t, x0, z0, x1, z1, y, o = {}) {
+  const R = o.r ?? 4, gap = o.gap ?? 0.08, cols = o.cols;
+  const vary = o.vary ?? 0.04, seed = o.seed ?? 0;
+  HEX ??= new THREE.CircleGeometry(1, 6).rotateX(-Math.PI / 2);
+  const dx = R * 1.5, dz = R * Math.sqrt(3), hz = dz / 2;
+  const i0 = Math.ceil((x0 + R) / dx), i1 = Math.floor((x1 - R) / dx);
+  for (let i = i0; i <= i1; i++) {
+    const off = (i & 1) * hz;
+    const k0 = Math.ceil((z0 + hz - off) / dz), k1 = Math.floor((z1 - hz - off) / dz);
+    for (let k = k0; k <= k1; k++) {
+      const x = i * dx, z = k * dz + off;
+      const h = hash2(i + seed * 131, k - seed * 71);
+      const set = o.colsAt?.(x, z) ?? cols;
+      const col = shade(set[Math.floor(h * set.length)], 1 - vary + hash2(k, i) * vary * 2);
+      const g = HEX.clone().scale(R * (1 - gap), 1, R * (1 - gap));
+      t.push(g, col, { x, y, z });
     }
   }
 }
