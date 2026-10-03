@@ -275,6 +275,32 @@ html, body {
   margin-top: 26px; font-size: 13px; color: rgba(255,255,255,0.92);
   text-shadow: 0 2px 3px rgba(0,0,0,0.35);
 }
+.title-row { display: contents; }
+
+/* ⚠ WIDE SCREENS: THE KATAMARI IS THE HERO. v1's title was a column of five
+   buttons, and when the 3D katamari arrived (render/Showcase.js) it could only
+   go behind them, so the lower buttons and the footer sat on top of its
+   busiest part. On a landscape screen the logo now holds the top, the ball
+   holds the middle, and the buttons line up underneath it: Start Rolling on
+   its own, the other four in one centred row. Everything is on the centre
+   line, which is what makes the screen read as composed rather than stacked.
+   Showcase.js frames the ball for this layout using the same aspect test. */
+@media (min-aspect-ratio: 6/5) and (min-height: 520px) {
+  #title-screen .title-inner {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2.6vh 20px 1.8vh;
+  }
+  #title-screen .game-title { margin-bottom: 0; }
+  #title-screen .game-title .t1 { font-size: clamp(44px, 6.6vw, 100px); }
+  #title-screen .game-title .t2 { font-size: clamp(34px, 5vw, 76px); }
+  #title-screen .title-sub { margin: 2px 0 0; font-size: clamp(15px, 1.35vw, 20px); }
+  #title-screen .title-buttons { margin-top: auto; gap: 14px; }
+  #title-screen .title-row {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+  }
+  #title-screen .title-foot { margin-top: 1.6vh; }
+}
 
 /* ------------------------------------------------------------
    Stage select

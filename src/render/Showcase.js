@@ -96,18 +96,31 @@ export class Showcase {
     this.sky.material.uniforms.uTime.value = this.t;
     this.sky.material.uniforms.uAspect.value = camera.aspect;
 
-    /* "Planet rising": the ball sits low and fills the bottom of the frame,
-       the logo and buttons float over the sky above it. Portrait screens pull
-       back so the ball still spans the width. */
     const R = this.kat.radius;
-    const portrait = camera.aspect < 1;
-    // the ball's crown is all that shows: a horizon of junk under the menu
-    const dist = R * (portrait ? 3.4 : 2.5);
-    camera.position.set(0, R * 1.0, dist);
-    camera.lookAt(0, R * (portrait ? 2.35 : 2.1), 0);
+    if (camera.aspect >= 1.2 && this._viewH(camera) >= 520) {
+      /* WIDE: the hero shot. The ball whole, in the middle of the screen,
+         between the logo above and the buttons below (see the matching
+         media query in styles.css). The look point sits a little above the
+         ball's centre so the ball lands just under the middle of the frame,
+         where the gap between logo and buttons is. */
+      // shorter windows have a shorter gap between logo and buttons: back off
+      const back = Math.min(1.6, Math.max(1, 760 / this._viewH()));
+      camera.position.set(0, R * 0.9 * back, R * 6.4 * back);
+      camera.lookAt(0, R * 0.05, 0);
+    } else {
+      /* NARROW: "planet rising" — the ball sits low and fills the bottom of
+         the frame, the stacked buttons float over the sky above it. */
+      const portrait = camera.aspect < 1;
+      const dist = R * (portrait ? 3.4 : 2.5);
+      camera.position.set(0, R * 1.0, dist);
+      camera.lookAt(0, R * (portrait ? 2.35 : 2.1), 0);
+    }
     camera.near = R * 0.05; camera.far = R * 40;
     camera.updateProjectionMatrix();
   }
+
+  /** CSS pixel height of the view, to match the stylesheet's min-height. */
+  _viewH() { return typeof window !== 'undefined' ? window.innerHeight : 900; }
 
   set visible(v) { this.root.visible = v; }
   get visible() { return this.root.visible; }

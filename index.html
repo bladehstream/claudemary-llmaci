@@ -140,14 +140,18 @@
         <p class="title-sub">Roll up the world. Everything sticks. Nothing is out of context.</p>
         <div class="title-buttons">
           <button class="btn btn-big" data-action="play">Start Rolling</button>
-          <button class="btn alt" data-action="coop">Play With a Friend</button>
-          <button class="btn" data-action="how">How to Play</button>
-          <button class="btn" data-action="collection">Collection</button>
-          <button class="btn" data-action="options">Options</button>
-          <!-- Only offered once the universe has actually been cleared. An
-               ending you can watch before you have earned it is a spoiler
-               button on the front page. -->
-          <button id="btn-ending" class="btn alt hidden" data-action="ending">The Ending</button>
+          <!-- A row under the big button on wide screens; on narrow ones it is
+               `display: contents` and the buttons stack exactly as before. -->
+          <div class="title-row">
+            <button class="btn alt" data-action="coop">Play With a Friend</button>
+            <button class="btn" data-action="how">How to Play</button>
+            <button class="btn" data-action="collection">Collection</button>
+            <button class="btn" data-action="options">Options</button>
+            <!-- Only offered once the universe has actually been cleared. An
+                 ending you can watch before you have earned it is a spoiler
+                 button on the front page. -->
+            <button id="btn-ending" class="btn alt hidden" data-action="ending">The Ending</button>
+          </div>
         </div>
         <p class="title-foot">A fan-made homage, rolled together by Claude. Original code, original music, no assets from the real game.</p>
       </div>
