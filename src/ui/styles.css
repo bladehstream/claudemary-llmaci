@@ -296,8 +296,20 @@ html, body {
   #title-screen .game-title .t2 { font-size: clamp(34px, 5vw, 76px); }
   #title-screen .title-sub { margin: 2px 0 0; font-size: clamp(15px, 1.35vw, 20px); }
   #title-screen .title-buttons { margin-top: auto; gap: 14px; }
+  /* The row's buttons are one width, the widest one's, so they read as a set
+     on a shared line rather than four pills sized by their labels. One row
+     when there is room for it; otherwise two columns, with an odd one out
+     (The Ending, once unlocked) centred under them. */
   #title-screen .title-row {
-    display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+    display: grid; grid-auto-flow: column; grid-auto-columns: 12.6em;
+    justify-content: center; gap: 12px; font-size: 20px;
+  }
+  #title-screen .title-row .btn { padding-left: 0; padding-right: 0; white-space: nowrap; }
+}
+@media (min-aspect-ratio: 6/5) and (min-height: 520px) and (max-width: 1100px) {
+  #title-screen .title-row { grid-auto-flow: row; grid-template-columns: repeat(2, 12.6em); }
+  #title-screen .title-row .btn:not(.hidden):last-of-type:nth-of-type(odd) {
+    grid-column: 1 / -1; justify-self: center; width: 12.6em;
   }
   #title-screen .title-foot { margin-top: 1.6vh; }
 }
@@ -603,20 +615,22 @@ html, body {
 @keyframes sgPop { 35% { scale: 1.12; } }
 
 /* ---- v2 clock ----
-   The time left as a pie that drains clockwise, digits on top. */
+   The time left as a ring that drains clockwise round a plain face, with the
+   digits on the face. v1 had the pie under the digits, so the drained wedge
+   cut through them like a clock hand. */
 .clock {
-  --pie: #ffffff;
+  --pie: var(--pink);
   width: 124px; height: 124px; border-radius: 50%;
   display: inline-grid; place-items: center;
   background:
-    radial-gradient(circle, rgba(107,70,193,0.0) 0 56%, transparent 57%),
-    conic-gradient(var(--pie) calc(var(--time, 1) * 1turn), rgba(42,33,64,0.22) 0);
+    radial-gradient(circle, rgba(255,255,255,0.95) 0 63%, transparent 64%),
+    conic-gradient(var(--pie) calc(var(--time, 1) * 1turn), rgba(42,33,64,0.18) 0);
   border: 4px solid var(--purple);
-  box-shadow: 0 5px 0 rgba(107,70,193,0.35), inset 0 0 0 5px rgba(255,255,255,0.55);
+  box-shadow: 0 5px 0 rgba(107,70,193,0.35);
 }
-.clock.urgent { --pie: var(--yellow); animation: urgentPulse 0.5s ease-in-out infinite; }
-.clock .timer { font-size: 40px; }
-.clock .timer.urgent { animation: none; }
+.clock.urgent { --pie: var(--red); animation: urgentPulse 0.5s ease-in-out infinite; }
+.clock .timer { font-size: 38px; color: var(--purple); -webkit-text-stroke: 0; text-shadow: none; }
+.clock .timer.urgent { animation: none; color: var(--red); }
 .hud-topright { position: absolute; top: 18px; right: 20px; text-align: center; }
 .hud-bottomleft { position: absolute; bottom: 18px; left: 20px; }
 .hud-bottomright { position: absolute; bottom: 18px; right: 20px; text-align: right; }
@@ -627,7 +641,7 @@ html, body {
   border-radius: 18px;
   padding: 6px 18px 8px;
   box-shadow: 0 5px 0 rgba(107,70,193,0.35);
-  display: inline-block;
+  box-sizing: border-box; width: 272px;   /* the goal panel's width: one column */
 }
 .size-label {
   font-size: 13px; font-weight: 700; color: var(--purple);
@@ -649,11 +663,12 @@ html, body {
 
 .goal-panel {
   margin-top: 8px;
-  background: rgba(255,255,255,0.86);
-  border: 3px solid var(--purple);
-  border-radius: 14px;
-  padding: 6px 12px 8px;
-  width: 258px;
+  background: rgba(255,255,255,0.9);
+  border: 4px solid var(--purple);
+  border-radius: 18px;
+  padding: 6px 18px 8px;
+  box-shadow: 0 5px 0 rgba(107,70,193,0.35);
+  box-sizing: border-box; width: 272px;
 }
 .goal-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: var(--purple); }
 .goal-bar {
@@ -688,26 +703,38 @@ html, body {
   text-shadow: 0 2px 0 rgba(42,33,64,0.55); margin-top: 2px;
 }
 
-.pickup-feed { display: flex; flex-direction: column-reverse; gap: 4px; }
+/* The feed: pills in the HUD's own language (white, purple rim, a drop
+   shadow below), each led by a dot whose colour says how big the catch was.
+   Sizes are in em so the narrow layout can scale the whole feed at once. */
+.pickup-feed { display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px; font-size: 17px; }
 .pickup-item {
+  display: inline-flex; align-items: center; gap: 0.45em;
   background: rgba(255,255,255,0.94);
-  border-left: 6px solid var(--grass);
-  border-radius: 8px;
-  padding: 3px 14px 4px;
-  font-size: 17px; font-weight: 600;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+  border: 3px solid var(--purple);
+  border-radius: 999px;
+  padding: 0.15em 0.9em 0.2em 0.45em;
+  font-family: var(--font-display); font-size: 1em; font-weight: 700; color: var(--ink);
+  box-shadow: 0 3px 0 rgba(107,70,193,0.3);
   animation: feedIn 260ms cubic-bezier(.2,1.4,.4,1) both;
   white-space: nowrap;
 }
-.pickup-item.big { border-left-color: var(--orange); font-size: 21px; font-weight: 700; }
-.pickup-item.huge { border-left-color: var(--pink); font-size: 25px; font-weight: 800; color: var(--pink-deep); }
+.pickup-item::before {
+  content: ''; flex: none; width: 0.72em; height: 0.72em; border-radius: 50%;
+  background: var(--grass); box-shadow: inset 0 -0.12em 0 rgba(0,0,0,0.2);
+}
+.pickup-item.big { font-size: 1.22em; }
+.pickup-item.big::before { background: var(--orange); }
+.pickup-item.huge { font-size: 1.45em; font-weight: 800; color: var(--pink-deep); border-color: var(--pink-deep); }
+.pickup-item.huge::before { background: var(--pink); }
 .pickup-item.fading { animation: feedOut 400ms ease forwards; }
 @keyframes feedIn { from { opacity: 0; transform: translateX(-40px) scale(0.8); } to { opacity: 1; transform: none; } }
 @keyframes feedOut { to { opacity: 0; transform: translateX(-30px); } }
 
 .mini-stats {
-  background: rgba(255,255,255,0.82);
-  border-radius: 12px; padding: 5px 14px;
+  background: rgba(255,255,255,0.9);
+  border: 3px solid var(--purple);
+  box-shadow: 0 3px 0 rgba(107,70,193,0.3);
+  border-radius: 14px; padding: 4px 14px;
   font-size: 15px; font-weight: 600; color: var(--purple);
   font-variant-numeric: tabular-nums;
 }
@@ -963,9 +990,10 @@ html, body {
   .size-gauge { display: none; }
   .clock { width: auto; height: auto; background: none; border: 0; box-shadow: none; display: block; }
   .clock.urgent { animation: none; }
-  .clock .timer { font-size: 38px; }
+  .clock .timer { font-size: 38px; color: #fff; -webkit-text-stroke: 6px var(--purple); text-shadow: 0 4px 0 rgba(76,47,150,0.4); }
+  .clock .timer.urgent { color: var(--yellow); -webkit-text-stroke-color: var(--red); }
   .hud-topright { text-align: right; }
-  .goal-panel { width: 200px; }
+  .size-panel, .goal-panel { width: 214px; }
   .how-grid { grid-template-columns: 100px 1fr; font-size: 14px; }
   .opt-row { grid-template-columns: 140px 1fr 40px; font-size: 15px; }
 }

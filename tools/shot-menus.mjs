@@ -29,7 +29,13 @@ await page.evaluate(() => window.__llmaci.onAction('pick-stage', { dataset: { st
 await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 120000 });
 await page.waitForTimeout(800); await shot('3-intro');
 await page.evaluate(() => window.__llmaci.begin());
-await page.waitForTimeout(2500); await shot('4-hud');
+await page.waitForTimeout(2500);
+// a few catches in the feed, one of each size class, so the shot shows it
+await page.evaluate(() => {
+  const h = window.__llmaci.hud;
+  h.pushPickup('Paperclip', 0.1); h.pushPickup('Rubber Duck', 0.4); h.pushPickup('Teapot', 0.7);
+});
+await page.waitForTimeout(400); await shot('4-hud');
 await page.evaluate(() => { const g = window.__llmaci; g.kat.radius = g.stage.goal * 0.55; g.finish('time'); });
 await page.waitForTimeout(1500); await shot('5-results');
 if (errs.length) console.log(errs.slice(0, 4).join('\n'));
