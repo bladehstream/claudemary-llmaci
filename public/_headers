@@ -36,6 +36,14 @@
 # in code. What it WILL still do is stop hostile peer data from becoming
 # executable, which is the risk that actually matters.
 #
+# ⚠ v2: `connect-src 'self'`, CHANGED KNOWINGLY (2026-10-03). The modelled props
+# ship as GLB files under /models/ and GLTFLoader fetches them, which 'none'
+# blocks outright. 'self' still forbids every request to any OTHER origin, so the
+# property this line exists for — the page cannot phone anywhere — holds; what
+# it now permits is reading the site's own static files. The alternative,
+# smuggling the models in as base64 inside JS chunks, keeps 'none' at the cost of
+# a third more bytes and a JSON-sized parse on every load, for no security gain.
+#
 # style-src allows inline because the HUD writes element styles directly;
 # data:/blob: on img/media/font because the typefaces, the generated silent WAV
 # and the fart samples are all data URIs rather than files.
@@ -43,4 +51,4 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'

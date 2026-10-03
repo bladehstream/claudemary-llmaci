@@ -1,0 +1,31 @@
+/* Photograph tools/sheet.html on the real GPU.
+     node tools/shoot-sheet.mjs <glb path from repo root> [--only=a,b] [--cols=6] [--out=name.png] [--size=1600x1000] [--ry=0.5] */
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const args = process.argv.slice(2);
+const opt = (k, d) => { const a = args.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
+const glb = '/' + args.find((a) => !a.startsWith('--')).split(String.fromCharCode(92)).join('/');
+const [W, H] = opt('size', '1600x1000').split('x').map(Number);
+const out = path.join(ROOT, 'tools', 'shots', 'look', opt('out', 'sheet.png'));
+fs.mkdirSync(path.dirname(out), { recursive: true });
+const server = await createServer({ root: ROOT, server: { port: 0 }, logLevel: 'error' });
+await server.listen();
+const BASE = server.resolvedUrls.local[0].replace(/\/$/, '');
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: W, height: H } });
+const errs = [];
+page.on('pageerror', (e) => errs.push(e.message));
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.text()); });
+const qs = new URLSearchParams({ glb, cols: opt('cols', '6'), ry: opt('ry', '0.5') });
+if (opt('only', '')) qs.set('only', opt('only', ''));
+await page.goto(`${BASE}/tools/sheet.html?${qs}`, { waitUntil: 'load' });
+await page.waitForFunction(() => window.__sheetReady === true, null, { timeout: 60000 });
+await page.waitForTimeout(600);
+await page.screenshot({ path: out });
+console.log(`-> ${path.relative(ROOT, out)}`);
+if (errs.length) console.log(errs.slice(0, 6).join('\n'));
+await browser.close(); await server.close();

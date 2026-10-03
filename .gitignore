@@ -60,3 +60,9 @@ npm-debug.log*
 # would double the audio in the repo for no benefit. Re-bake from wherever you
 # keep the originals with `npm run bakefarts -- <dir>`.
 sfx_an/
+
+# Local working files for v2 tooling
+.look.log
+.scratch/
+tools/blender/out/
+__pycache__/

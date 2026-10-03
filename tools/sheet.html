@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>model sheet</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #222; overflow: hidden; font: 600 13px system-ui, sans-serif; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  #labels div { position: absolute; transform: translate(-50%, 0); color: #222; background: rgba(255,255,255,0.8);
+    padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<script type="module" src="./sheet.js"></script>
+</body>
+</html>

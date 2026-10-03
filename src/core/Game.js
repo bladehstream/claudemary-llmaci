@@ -21,6 +21,7 @@ import { quantumStage } from '../world/stages/quantum.js';
 import { atomStage } from '../world/stages/atom.js';
 import { microbeStage } from '../world/stages/microbe.js';
 import { houseStage } from '../world/stages/house.js';
+import { applyModels } from '../world/models.js';
 import { townStage } from '../world/stages/town.js';
 import { cityStage } from '../world/stages/city.js';
 import { countryStage } from '../world/stages/country.js';
@@ -320,6 +321,11 @@ export class Game {
     await frame();
     const t0 = performance.now();
     buildCatalog();
+    /* Modelled props replace the procedural ones for DRAWING only — every
+       gameplay number above was taken from the procedural build first. See
+       world/models.js. A pack that fails to load leaves the procedural set. */
+    this.screens.setLoading('Unpacking the toy box…');
+    this.models = await applyModels();
     this.screens.setLoading(`${ARCHETYPES.length} kinds of thing ready…`);
     await frame();
 
