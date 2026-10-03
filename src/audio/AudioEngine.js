@@ -50,6 +50,11 @@ const STAGE = {
   vibe: 0.52,
   scat: 0.00,
   brass: 0.00,
+  // v2 voices
+  keys: -0.36,
+  lead: 0.12,
+  pad: 0.00,
+  bell: 0.46,
 };
 
 /* VELOCITY, NOT VOLUME.
@@ -125,6 +130,16 @@ const TRIM = {
   hat: 0.60,
   shaker: 0.90,
   tom: 0.78,
+  /* v2 voices. Calibrated like the rest: rendered at gain 0.15/0.45/0.90 and
+     matched in RMS to `vibe` at the same gains (tools/voicelab.mjs), so moving
+     a role onto one of them does not move it in the mix. Untrimmed at 0.45
+     they measured keys -14.2, lead -19.2, pad -19.7, bell -23.4 dB against
+     vibe's -22.8; lead and pad then sit a little under the match because a
+     sustained voice reads louder than a struck one at the same RMS. */
+  keys: 0.37,
+  lead: 0.60,
+  pad: 0.62,
+  bell: 1.05,
 };
 
 export class AudioEngine {
@@ -901,6 +916,198 @@ export class AudioEngine {
     car.start(t); trem.start(t);
     for (const o of modeOsc) { o.start(t); o.stop(t + dur + 0.05); }
     car.stop(t + dur + 0.05); trem.stop(t + dur + 0.05);
+  }
+
+  /* ============================================================
+     v2 VOICES. Four new colours for the rescore, each built so that
+     VELOCITY CHANGES THE SPECTRUM, the one law the whole band shares.
+     ============================================================ */
+
+  /**
+   * Electric piano: two-operator FM, the tine-and-bar sound. A sine carrier
+   * with a 1:1 modulator gives the warm body; a 14:1 modulator gives the bark
+   * of a hard strike and is gated almost entirely by velocity, which is why a
+   * soft chord is round and a hard one is bell-edged. The modulation index
+   * decays faster than the note, so every chord blooms and then mellows.
+   */
+  keys(t, freq, dur, gain = 0.3, out = null) {
+    const ctx = this.ctx;
+    const dest = this._seat(out || this.music, 'keys');
+    const v = this._vel(gain);
+    const peak = gain * TRIM.keys;
+    const end = t + dur + 0.6;
+
+    const car = ctx.createOscillator();
+    car.type = 'sine'; car.frequency.value = freq;
+    car.detune.value = (Math.random() * 2 - 1) * 4;
+
+    const mod = ctx.createOscillator();
+    mod.type = 'sine'; mod.frequency.value = freq;
+    const idx = ctx.createGain();
+    /* The sustained index depends on velocity too, not only the strike: a
+       first pass decayed every note to the same 18% and measured a loud/soft
+       centroid ratio of 1.08 — velocity reached the first 50ms and nothing
+       after it. */
+    const I = freq * (0.3 + v * 2.6);
+    idx.gain.setValueAtTime(I, t);
+    idx.gain.exponentialRampToValueAtTime(Math.max(1, I * (0.08 + v * 0.3)), t + 0.35 + v * 0.4);
+    mod.connect(idx); idx.connect(car.frequency);
+
+    const bark = ctx.createOscillator();
+    bark.type = 'sine'; bark.frequency.value = freq * 14;
+    const bidx = ctx.createGain();
+    const B = Math.max(0.6, freq * v * v * 3.5);
+    bidx.gain.setValueAtTime(B, t);
+    bidx.gain.exponentialRampToValueAtTime(Math.max(0.5, B * 0.01), t + 0.05);
+    bark.connect(bidx); bidx.connect(car.frequency);
+
+    // a gentle chorus: a second carrier a few cents sharp, quieter
+    const car2 = ctx.createOscillator();
+    car2.type = 'sine'; car2.frequency.value = freq; car2.detune.value = 7;
+    idx.connect(car2.frequency);
+    const c2 = ctx.createGain(); c2.gain.value = 0.35;
+    car2.connect(c2);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.004);
+    g.gain.setTargetAtTime(peak * 0.55, t + 0.004, 0.25);
+    g.gain.setTargetAtTime(0, t + dur, 0.12);
+    car.connect(g); c2.connect(g);
+    g.connect(dest);
+    g.connect(this._send(0.28, dest));
+    for (const o of [car, mod, bark, car2]) { o.start(t); o.stop(end); }
+  }
+
+  /**
+   * Synth lead: two detuned saws through a resonant lowpass whose cutoff is
+   * opened by velocity and by an envelope, with vibrato that arrives late the
+   * way a singer's does. Bright and forward: the voice a hook is written for.
+   */
+  lead(t, freq, dur, gain = 0.3, out = null) {
+    const ctx = this.ctx;
+    const dest = this._seat(out || this.music, 'lead');
+    const v = this._vel(gain);
+    const peak = gain * TRIM.lead * 0.5;
+    const end = t + dur + 0.3;
+
+    const vib = ctx.createOscillator();
+    vib.type = 'sine'; vib.frequency.value = 5.6 * this._hum(0.05);
+    const vibAmt = ctx.createGain();
+    vibAmt.gain.setValueAtTime(0, t);
+    vibAmt.gain.linearRampToValueAtTime(0, t + 0.16);
+    vibAmt.gain.linearRampToValueAtTime(freq * 0.007, t + 0.42);
+    vib.connect(vibAmt);
+
+    const oscs = [];
+    for (const det of [-6, 6]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = det;
+      vibAmt.connect(o.frequency);
+      oscs.push(o);
+    }
+    const sq = ctx.createOscillator();
+    sq.type = 'square'; sq.frequency.value = freq / 2;
+    const sqg = ctx.createGain(); sqg.gain.value = 0.18;
+    sq.connect(sqg);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 3 + v * 4;
+    const base = Math.min(16000, freq * (1.6 + v * 2.5));
+    lp.frequency.setValueAtTime(Math.min(18000, base * 3.2), t);
+    lp.frequency.exponentialRampToValueAtTime(base, t + 0.18);
+    for (const o of oscs) o.connect(lp);
+    sqg.connect(lp);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.012);
+    g.gain.setTargetAtTime(peak * 0.8, t + 0.012, 0.15);
+    g.gain.setTargetAtTime(0, t + dur, 0.06);
+    lp.connect(g); g.connect(dest);
+    g.connect(this._send(0.3, dest));
+    vib.start(t); vib.stop(end);
+    for (const o of [...oscs, sq]) { o.start(t); o.stop(end); }
+  }
+
+  /**
+   * Pad: three saws spread a little in pitch, slow to arrive and slow to
+   * leave, through a lowpass that breathes. The voice of the cosmic stages:
+   * it does not play notes so much as fill a room with a chord.
+   */
+  pad(t, freq, dur, gain = 0.3, out = null) {
+    const ctx = this.ctx;
+    const dest = this._seat(out || this.music, 'pad');
+    const v = this._vel(gain);
+    const peak = gain * TRIM.pad * 0.3;
+    const att = 0.35 + (1 - v) * 0.5;
+    const rel = 0.9;
+    const end = t + Math.max(att, dur) + rel * 4;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.Q.value = 0.8;
+    lp.frequency.setValueAtTime(freq * 1.5, t);
+    lp.frequency.linearRampToValueAtTime(Math.min(16000, freq * (2.5 + v * 3)), t + att + 0.4);
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine'; lfo.frequency.value = 0.23 * this._hum(0.2);
+    const lfoAmt = ctx.createGain(); lfoAmt.gain.value = freq * 0.6;
+    lfo.connect(lfoAmt); lfoAmt.connect(lp.frequency);
+
+    const oscs = [];
+    for (const det of [-11, 0, 13]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = det + (Math.random() * 2 - 1) * 2;
+      o.connect(lp); oscs.push(o);
+    }
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + att);
+    g.gain.setTargetAtTime(0, t + Math.max(att, dur), rel);
+    lp.connect(g); g.connect(dest);
+    g.connect(this._send(0.55, dest));
+    lfo.start(t); lfo.stop(end);
+    for (const o of oscs) { o.start(t); o.stop(end); }
+  }
+
+  /**
+   * Bell / celesta: FM with an inharmonic 3.5:1 modulator, so the partials sit
+   * where a struck metal plate puts them rather than on the harmonic series.
+   * Short index decay, long tail. Sparkle on top of a texture.
+   */
+  bell(t, freq, dur, gain = 0.3, out = null) {
+    const ctx = this.ctx;
+    const dest = this._seat(out || this.music, 'bell');
+    const v = this._vel(gain);
+    const peak = gain * TRIM.bell * 0.8;
+    const tail = Math.max(0.6, dur * 1.6);
+    const end = t + tail + 0.2;
+
+    const car = ctx.createOscillator();
+    car.type = 'sine'; car.frequency.value = freq;
+    const mod = ctx.createOscillator();
+    mod.type = 'sine'; mod.frequency.value = freq * 3.5;
+    const idx = ctx.createGain();
+    const I = freq * (0.4 + v * 3.2);
+    idx.gain.setValueAtTime(I, t);
+    idx.gain.exponentialRampToValueAtTime(Math.max(1, I * (0.03 + v * 0.15)), t + 0.6);
+    mod.connect(idx); idx.connect(car.frequency);
+
+    const oct = ctx.createOscillator();
+    oct.type = 'sine'; oct.frequency.value = freq * 2.01;
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.25, t);
+    og.gain.exponentialRampToValueAtTime(0.01, t + tail * 0.5);
+    oct.connect(og);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(peak * 1e-3, t + tail);
+    car.connect(g); og.connect(g);
+    g.connect(dest);
+    g.connect(this._send(0.45, dest));
+    for (const o of [car, mod, oct]) { o.start(t); o.stop(end); }
   }
 
   /**

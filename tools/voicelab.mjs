@@ -270,6 +270,11 @@ const VOICES = {
      Hz, not a MIDI note. Music.js calls it with 200. midi 55 is
      196Hz, which is that floor tom. */
   tom:    { pitched: true,  note: 55, dur: 0.30, hz: true },
+  // v2
+  keys:   { pitched: true,  note: 64, dur: 0.70, hz: false },
+  lead:   { pitched: true,  note: 76, dur: 0.60, hz: false },
+  pad:    { pitched: true,  note: 60, dur: 1.20, hz: false },
+  bell:   { pitched: true,  note: 84, dur: 0.70, hz: false },
 };
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -490,6 +495,10 @@ async function renderInPage(o) {
     hat: (e, t, f, d, g, out) => e.hat(t, g, o.open, out),
     shaker: (e, t, f, d, g, out) => e.shaker(t, g, out),
     tom: (e, t, f, d, g, out) => e.tom(t, f, g, out),
+    keys: (e, t, f, d, g, out) => e.keys(t, f, d, g, out),
+    lead: (e, t, f, d, g, out) => e.lead(t, f, d, g, out),
+    pad: (e, t, f, d, g, out) => e.pad(t, f, d, g, out),
+    bell: (e, t, f, d, g, out) => e.bell(t, f, d, g, out),
   };
   const play = CALL[o.voice];
   if (!play) throw new Error(`no adapter for voice "${o.voice}"`);

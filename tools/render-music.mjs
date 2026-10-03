@@ -221,7 +221,7 @@ async function renderInPage(o) {
      silent because nothing was scheduled and one that is silent because the
      graph is broken need different fixes, and only this tells them apart. */
   const counts = {};
-  for (const v of ['kick', 'rim', 'snare', 'shaker', 'hat', 'tom', 'bass', 'pluck', 'vibe', 'scat', 'brass']) {
+  for (const v of ['kick', 'rim', 'snare', 'shaker', 'hat', 'tom', 'bass', 'pluck', 'vibe', 'scat', 'brass', 'keys', 'lead', 'pad', 'bell']) {
     const orig = engine[v].bind(engine);
     engine[v] = (...args) => { counts[v] = (counts[v] || 0) + 1; return orig(...args); };
   }
