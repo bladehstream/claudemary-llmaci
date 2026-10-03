@@ -29,6 +29,7 @@
    ============================================================ */
 
 import { G } from '../props/country.js';
+import { fields, shade } from './dress.js';
 
 /** Anything that must not come out of a LAND scatter pool. */
 const WET = ['w_atoll', 'w_island', 'w_oilrig', 'w_ship', 'w_iceberg', 'w_isles', 'w_hurricane'];
@@ -99,6 +100,7 @@ export const countryStage = {
     const Y_SHELF = 5.0;     // pale shelf skirt round every landmass
     const Y_SURF = 8.0;      // the surf line right at a coast
     const D_SAND = -1.1;     // beach rim, hangs just below a deck
+    const D_FIELD = 0.4;     // field margins, and the fields 0.4 above them
     const D_BIOME = 1.2;     // forest / desert / steppe painted on a deck
     const D_WATER = 2.6;     // inland seas and rivers
     const D_ROAD = 3.8;      // roads and rails
@@ -136,6 +138,10 @@ export const countryStage = {
           { x: (x0 + x1) / 2, y: Y_SHELF + (shelfN++ % 24) * 0.09, z: (z0 + z1) / 2 });
         t.quad(x1 - x0 + 90, z1 - z0 + 90, G.sand, { x: (x0 + x1) / 2, y: top + D_SAND, z: (z0 + z1) / 2 });
         t.quad(x1 - x0, z1 - z0, kind.floor, { x: (x0 + x1) / 2, y: top, z: (z0 + z1) / 2 });
+        // the patchwork over the deck: margins at D_FIELD, fields just above
+        fields(t, x0, z0, x1, z1, top + D_FIELD, {
+          ...kind.fields, lift: D_FIELD, seed: Math.round(x0 / 200) * 61 + Math.round(z0 / 200),
+        });
       });
       REGIONS.push(reg);
       return reg;
@@ -158,13 +164,26 @@ export const countryStage = {
       MASK.push({ x0, z0, x1, z1, top: deck * 0.5 });
     };
 
-    const TEMPERATE = { floor: G.plain, ban: BAN.temperate };
-    const DESERT = { floor: G.steppe, ban: BAN.desert };
-    const ALPINE = { floor: G.plainDry, ban: BAN.alpine };
-    const PLAINS = { floor: G.plain, ban: BAN.plains };
-    const TUNDRA = { floor: G.tundra, ban: BAN.tundra };
-    const POLAR = { floor: G.ice, ban: BAN.tundra };
-    const ISLE = { floor: G.jungle, ban: BAN.isle };
+    /* What the ground looks like from up here, per kind of land: a regular
+       grid of fields (see `fields` in dress.js), so the margins between them
+       run on shared lines across a whole landmass. Farmland is a quilt of
+       crops with darker hedgerows; desert is long pale dune strips; the ice
+       is great floes split by blue crevasses. */
+    const FARM = { tile: 130, joint: 7, rows: 0.35, bands: 4,
+      cols: [G.plain, G.plainDry, shade(G.plain, 0.86), 0xbdbb63], jointCol: shade(G.forest, 0.9) };
+    const TEMPERATE = { floor: G.plain, ban: BAN.temperate, fields: FARM };
+    const DESERT = { floor: G.steppe, ban: BAN.desert, fields: { tile: 240, joint: 10, rows: 0.6, bands: 3,
+      cols: [G.steppe, shade(G.steppe, 1.08), G.sandDeep], jointCol: shade(G.steppe, 0.86) } };
+    const ALPINE = { floor: G.plainDry, ban: BAN.alpine, fields: { tile: 200, joint: 10, rows: 0.15, bands: 3,
+      cols: [G.plainDry, shade(G.plainDry, 0.9), G.scree], jointCol: shade(G.plainDry, 0.74) } };
+    const PLAINS = { floor: G.plain, ban: BAN.plains, fields: { ...FARM, tile: 160,
+      cols: [G.plain, G.plainDry, 0xc9b65e, shade(G.plainDry, 0.9)] } };
+    const TUNDRA = { floor: G.tundra, ban: BAN.tundra, fields: { tile: 220, joint: 9, rows: 0.1, bands: 3,
+      cols: [G.tundra, shade(G.tundra, 0.92), 0x8f9a7e], jointCol: shade(G.tundra, 0.78) } };
+    const POLAR = { floor: G.ice, ban: BAN.tundra, fields: { tile: 300, joint: 12, rows: 0, vary: 0.02,
+      cols: [G.ice, G.snow, shade(G.ice, 0.97)], jointCol: G.iceBlue } };
+    const ISLE = { floor: G.jungle, ban: BAN.isle, fields: { ...FARM, tile: 120,
+      cols: [G.jungle, G.plain, shade(G.jungle, 0.86), G.plainDry], jointCol: shade(G.forestDk, 0.9) } };
 
     /* --- the polar caps, top and bottom edges --- */
     const northCap = land('Northern Ice', POLAR, 24, [[-B, -B, B, -11600]]);

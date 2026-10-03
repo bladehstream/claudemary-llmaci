@@ -79,6 +79,45 @@ export function lawn(t, x0, z0, x1, z1, y, o = {}) {
 }
 
 /**
+ * A patchwork of fields over a rectangle, the way farmland reads from the
+ * air. The fields sit on one regular grid, so every boundary runs on a shared
+ * line; the boundaries themselves (hedgerows, field margins, crevasses) are
+ * the `jointCol` quad underneath, showing through the gap round each field.
+ * Each field takes one of `cols` by hash, and a `rows` fraction of them are
+ * ploughed: split into `bands` stripes of alternating tone along an axis that
+ * is also chosen by hash.
+ */
+export function fields(t, x0, z0, x1, z1, y, o = {}) {
+  const tile = o.tile ?? 100, joint = o.joint ?? tile * 0.06;
+  const cols = o.cols, jcol = o.jointCol ?? shade(cols[0], 0.7);
+  const vary = o.vary ?? 0.04, seed = o.seed ?? 0, lift = o.lift ?? 0.003;
+  const rows = o.rows ?? 0.3, bands = o.bands ?? 4;
+  t.quad(x1 - x0, z1 - z0, jcol, { x: (x0 + x1) / 2, y, z: (z0 + z1) / 2 });
+  const nx = Math.max(1, Math.round((x1 - x0) / tile));
+  const nz = Math.max(1, Math.round((z1 - z0) / tile));
+  const tx = (x1 - x0) / nx, tz = (z1 - z0) / nz;
+  const fw = tx - joint, fd = tz - joint;
+  for (let i = 0; i < nx; i++) {
+    for (let k = 0; k < nz; k++) {
+      const a = i + seed * 131, b = k - seed * 71;
+      const col = shade(cols[Math.floor(hash2(a, b) * cols.length)], 1 - vary + hash2(b, a) * vary * 2);
+      const cx = x0 + (i + 0.5) * tx, cz = z0 + (k + 0.5) * tz;
+      if (hash2(a + 7, b + 3) >= rows) {
+        t.quad(fw, fd, col, { x: cx, y: y + lift, z: cz });
+        continue;
+      }
+      const alongX = hash2(a + 5, b + 9) < 0.5;
+      const span = alongX ? fd : fw, s = span / bands;
+      for (let n = 0; n < bands; n++) {
+        const c = shade(col, n % 2 ? 0.9 : 1.04), u = -span / 2 + (n + 0.5) * s;
+        if (alongX) t.quad(fw, s, c, { x: cx, y: y + lift, z: cz + u });
+        else t.quad(s, fd, c, { x: cx + u, y: y + lift, z: cz });
+      }
+    }
+  }
+}
+
+/**
  * Zebra crossing across a road. (cx, cz) is the crossing's centre, `width` the
  * road width it spans, `axis` the direction TRAFFIC runs ('x' or 'z'); the
  * stripes run with the traffic and are laid side by side across the road.
