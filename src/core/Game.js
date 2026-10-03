@@ -1122,6 +1122,14 @@ export class Game {
       if (sec === 30) this.music.setHurry(true);
     }
     if (this.timeLeft <= 0) { this.timeLeft = 0; this.finish('time'); return; }
+    /* A stage with a `dusk` grows dark as the clock runs down (Scene.setDusk):
+       daylight for the first stretch, then the sky warms and the windows come on. */
+    if (this.stage.dusk) {
+      const p = 1 - this.timeLeft / this.stage.time;
+      const { from, to } = this.stage.dusk;
+      const t = clamp((p - from) / (to - from), 0, 1);
+      this.scene.setDusk(t * t * (3 - 2 * t), this.stage.dusk, this.stage);
+    }
 
     /* ---- nothing left to roll up? ---- */
     // Scanning the whole prop array is cheap (a typed-array compare per prop)

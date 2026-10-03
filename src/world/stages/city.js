@@ -78,6 +78,12 @@ export const cityStage = {
   bounds: { minX: -2080, maxX: 2080, minZ: -2080, maxZ: 2080 },
   sky: { top: 0x3f9fd8, bottom: 0xbfe6f2, fog: 0xc9e8f2, fogNear: 880, fogFar: 2900 },
   sun: { x: 0.4, y: 1, z: 0.5, intensity: 1.0 },
+  /* The city goes to dusk as the clock runs down (Scene.setDusk): full day for
+     the first 40% of the round, then the sky warms to an orange horizon under
+     deep blue, the sun drops and reddens, and the lit windows come on, all the
+     way by the last minute. Visual only; nothing in play depends on it. */
+  dusk: { from: 0.4, to: 0.88, top: 0x27306e, bottom: 0xf29a6a, fog: 0xd99a86,
+    sun: 0.32, sunColor: 0xff9a5c, glowDay: 0.12 },
   camera: { pitch: 0.35, distance: 6.6 },
 
   build(w, r) {

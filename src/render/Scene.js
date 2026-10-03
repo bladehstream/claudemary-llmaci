@@ -287,10 +287,8 @@ export class Scene {
     g.dispose();
   }
 
-  setSky({ top, bottom, fog, fogNear, fogFar, nebula }) {
-    this._fogBase = { near: fogNear, far: fogFar };
-    this._night = lum(top) < 0.02 && lum(bottom) < 0.06;
-    const cTop = new THREE.Color(top), cBot = new THREE.Color(bottom);
+  /** Paint the sky dome's vertical gradient. */
+  _paintDome(cTop, cBot) {
     const pos = this.skyGeo.attributes.position;
     const col = this.skyGeo.attributes.color;
     const c = new THREE.Color();
@@ -300,6 +298,17 @@ export class Scene {
       col.setXYZ(i, c.r, c.g, c.b);
     }
     col.needsUpdate = true;
+  }
+
+  setSky({ top, bottom, fog, fogNear, fogFar, nebula }) {
+    this._fogBase = { near: fogNear, far: fogFar };
+    this._night = lum(top) < 0.02 && lum(bottom) < 0.06;
+    this._paintDome(new THREE.Color(top), new THREE.Color(bottom));
+    // a new sky ends any dusk the last stage had going (see setDusk)
+    this._dusk = null;
+    this.detail.glow.value = 1;
+    this.sun.color.set(0xfff4dd);
+    this.hemi.color.set(0xdff0ff);
     this.scene.fog.color.set(fog);
     this.scene.fog.near = fogNear;
     this.scene.fog.far = fogFar;
@@ -339,6 +348,41 @@ export class Scene {
     this.scene.fog.near = damp(this.scene.fog.near, near, 3, 1 / 60);
     this.scene.fog.far = damp(this.scene.fog.far, far, 3, 1 / 60);
     return this.scene.fog.far;
+  }
+
+  /**
+   * Slide a day sky toward dusk: t = 0 is the stage's own sky and sun, t = 1 is
+   * `dusk` ({ top, bottom, fog, sun, sunColor, glowDay }). Self-lit parts (the
+   * city's lit windows, its stadium floodlights) come up with it, from
+   * `glowDay` of their strength in full daylight to all of it at dusk.
+   *
+   * Cheap enough per frame — a 693-vertex dome repaint and a few colour
+   * lerps, skipped unless t moved by a 48th — except the environment map,
+   * which is a PMREM bake and so is redone only every tenth of the way.
+   */
+  setDusk(t, dusk, day) {
+    const q = Math.round(clamp(t, 0, 1) * 48) / 48;
+    if (this._dusk && this._dusk.q === q) return;
+    const envStep = Math.round(q * 10);
+    const rebake = !this._dusk || this._dusk.env !== envStep;
+    this._dusk = { q, env: envStep };
+    const mix = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), q);
+    const top = mix(day.sky.top, dusk.top), bottom = mix(day.sky.bottom, dusk.bottom);
+    this._paintDome(top, bottom);
+    this.scene.fog.color.copy(mix(day.sky.fog, dusk.fog));
+    this.renderer.setClearColor(this.scene.fog.color);
+    this.sun.intensity = THREE.MathUtils.lerp(day.sun.intensity, dusk.sun, q);
+    this.sun.color.copy(mix(0xfff4dd, dusk.sunColor));
+    this.hemi.intensity = THREE.MathUtils.lerp(0.85, 0.42, q);
+    this.hemi.color.copy(mix(0xdff0ff, 0x8a8ac8));
+    this.material.envMapIntensity = THREE.MathUtils.lerp(0.45, 0.25, q);
+    this.detail.glow.value = THREE.MathUtils.lerp(dusk.glowDay ?? 0.15, 1, q);
+    if (this.post?.bloom) {
+      // the day setting (see _applyNight) easing toward a soft night bloom
+      this.post.bloom.strength = THREE.MathUtils.lerp(0.14, 0.4, q);
+      this.post.bloom.threshold = THREE.MathUtils.lerp(0.98, 0.8, q);
+    }
+    if (rebake) this._buildEnv(top.getHex(), bottom.getHex());
   }
 
   setSun(dir, intensity) {
