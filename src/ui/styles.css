@@ -214,7 +214,11 @@ html, body {
    Title screen
    ------------------------------------------------------------ */
 #title-screen { overflow: hidden; }
+/* ⚠ HIDDEN IN v2. The canvas sits UNDER the HTML, so this opaque background
+   hid the 3D title (a real katamari, render/Showcase.js) entirely. The same
+   gradient and rotating rays are now drawn in the scene behind the ball. */
 .title-bg {
+  display: none;
   position: absolute; inset: 0;
   background:
     radial-gradient(circle at 50% 120%, #ffe98a 0%, transparent 55%),

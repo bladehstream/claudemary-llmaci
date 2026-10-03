@@ -23,6 +23,7 @@ import { microbeStage } from '../world/stages/microbe.js';
 import { houseStage } from '../world/stages/house.js';
 import { ensureModels, modelReport } from '../world/models.js';
 import { Fx } from '../render/Fx.js';
+import { Showcase } from '../render/Showcase.js';
 import { townStage } from '../world/stages/town.js';
 import { cityStage } from '../world/stages/city.js';
 import { countryStage } from '../world/stages/country.js';
@@ -325,6 +326,13 @@ export class Game {
     await frame();
     const t0 = performance.now();
     buildCatalog();
+    /* The title's hero ball wears house props, so the house pack is the one
+       pack worth fetching before anyone has chosen a stage. */
+    this.screens.setLoading('Rolling up something to look at…');
+    await ensureModels('house');
+    this.models = modelReport();
+    this.showcase = new Showcase(this.scene.material, ARCHETYPES);
+    this.scene.scene.add(this.showcase.root);
     this.screens.setLoading(`${ARCHETYPES.length} kinds of thing ready…`);
     await frame();
 
@@ -983,7 +991,16 @@ export class Game {
   /** Slow orbit behind the menus so the scene is never dead. */
   _stepIdle(dt) {
     const cam = this.scene.camera;
-    if (this.state === 'title' || !this.world) {
+    const menu = this.state === 'title' || !this.world;
+    if (this.showcase) {
+      this.showcase.visible = menu;
+      this.scene.sky.visible = !menu;
+    }
+    if (menu && this.showcase) {
+      this.showcase.update(dt, cam);
+      // AO and shadow sized to the PROPS on the ball, not the ball itself
+      this.scene.followSun(new THREE.Vector3(0, 0, 0), this.showcase.radius * 0.3);
+    } else if (menu) {
       this._menuAngle = (this._menuAngle || 0) + dt * 0.12;
       const r = 9;
       cam.position.set(Math.cos(this._menuAngle) * r, 4.4, Math.sin(this._menuAngle) * r);
