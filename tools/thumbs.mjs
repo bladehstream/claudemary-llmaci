@@ -23,6 +23,8 @@ const GROW = Number(opt('grow', '3'));
 const Q = Number(opt('q', '82'));
 const PITCH = Number(opt('pitch', '0.44'));
 const DIST = Number(opt('dist', '1.35'));
+// --at=x,z moves the ball there first (final, already-spread coordinates)
+const AT = opt('at', '') ? opt('at', '').split(',').map(Number) : null;
 const OUT = path.join(ROOT, 'public', 'thumbs');
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -50,7 +52,7 @@ for (const id of stages) {
     g.onAction('pick-stage', { dataset: { stage: s } });
   }, id);
   await page.waitForFunction(() => window.__llmaci.state === 'intro', null, { timeout: 180000 });
-  await page.evaluate(([m, PITCH, DIST]) => {
+  await page.evaluate(([m, PITCH, DIST, AT]) => {
     const g = window.__llmaci;
     g.begin();
     g.hud.hide?.();
@@ -63,9 +65,10 @@ for (const id of stages) {
     /* A postcard, not a gameplay frame: higher and further back than the
        play camera, so the ball sits in the lower third and the stage fills
        the rest. The rig eases to these over the settle time below. */
+    if (AT) { g.kat.pos.x = AT[0]; g.kat.pos.z = AT[1]; g.kat.pos.y += 30; }
     g.rig.pitch = PITCH;
     g.rig.distMul *= DIST;
-  }, [GROW, PITCH, DIST]);
+  }, [GROW, PITCH, DIST, AT]);
   await page.waitForTimeout(3500);
   const file = path.join(OUT, `${id}.jpg`);
   await page.screenshot({ path: file, type: 'jpeg', quality: Q });
