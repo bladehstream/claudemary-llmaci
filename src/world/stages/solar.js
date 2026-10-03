@@ -173,7 +173,8 @@ export const solarStage = {
   spawn: { x: -2.0, z: -6.0 },
   spawnClear: 0.5,
   bounds: { minX: -15, maxX: 15, minZ: -14, maxZ: 14 },
-  sky: { top: 0x02040f, bottom: 0x0b1433, fog: 0x060b20, fogNear: 18, fogFar: 62 },
+  sky: { top: 0x02040f, bottom: 0x0b1433, fog: 0x060b20, fogNear: 18, fogFar: 62,
+    nebula: { a: 0x2a4a9a, b: 0x6a3a8a, tilt: 1.15, yaw: 0.4, width: 0.18, strength: 0.7 } },
   // One light, low and warm, coming from the star in the west.
   sun: { x: -0.74, y: 0.6, z: 0.16, intensity: 1.28 },
   camera: { pitch: 0.34, distance: 6.4 },

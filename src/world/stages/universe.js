@@ -160,7 +160,8 @@ export const universeStage = {
   bounds: { minX: -12800, maxX: 12800, minZ: -12800, maxZ: 12800 },
   /* Fog at about 1.7 map-widths of a 50Mpc ball, and near-black, so the outer
      reaches genuinely end in nothing rather than in a visible edge. */
-  sky: { top: 0x010104, bottom: 0x0d0820, fog: 0x06050e, fogNear: 4600, fogFar: 21000 },
+  sky: { top: 0x010104, bottom: 0x0d0820, fog: 0x06050e, fogNear: 4600, fogFar: 21000,
+    nebula: { a: 0x5a48b0, b: 0x2a8a9a, tilt: 0.75, yaw: 1.3, width: 0.26, strength: 0.6 } },
   sun: { x: 0.45, y: 1, z: 0.45, intensity: 1.0 },
   camera: { pitch: 0.36, distance: 6.8 },
 

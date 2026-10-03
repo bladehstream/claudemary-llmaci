@@ -31,6 +31,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { N8AOPass } from 'n8ao';
 import { clamp, damp } from '../util/math.js';
 import { makeStars } from './Stars.js';
+import { makeNebula, setNebula } from './Nebula.js';
 
 
 /* Saturation, contrast, vignette and the tone curve, in linear light.
@@ -158,6 +159,9 @@ export class Scene {
     // a starfield on the dome, shown on the night stages only (render/Stars.js)
     this.stars = makeStars();
     this.sky.add(this.stars);
+    // and a nebula band across it, on the stages whose sky asks for one (render/Nebula.js)
+    this.nebula = makeNebula();
+    this.sky.add(this.nebula);
 
     this.scene.fog = new THREE.Fog(0xdff0e4, 40, 200);
 
@@ -283,7 +287,7 @@ export class Scene {
     g.dispose();
   }
 
-  setSky({ top, bottom, fog, fogNear, fogFar }) {
+  setSky({ top, bottom, fog, fogNear, fogFar, nebula }) {
     this._fogBase = { near: fogNear, far: fogFar };
     this._night = lum(top) < 0.02 && lum(bottom) < 0.06;
     const cTop = new THREE.Color(top), cBot = new THREE.Color(bottom);
@@ -306,6 +310,7 @@ export class Scene {
     this.hemi.intensity = this._night ? 1.15 : 0.85;
     this.material.envMapIntensity = this._night ? 0.6 : 0.45;
     this.stars.visible = this._night;
+    setNebula(this.nebula, nebula);
     this._skyCols = { top, bottom };
     this._buildEnv(top, bottom);
     this._applyNight();

@@ -122,7 +122,8 @@ export const galaxyStage = {
   /* Near-black, and the fog set close: at a fifth of a map width the far side
      of the disc is a haze of dust rather than a hard edge, which is what makes
      25,600ly read as deep rather than as a big room. */
-  sky: { top: 0x030209, bottom: 0x1a0f30, fog: 0x0a0618, fogNear: 4600, fogFar: 20000 },
+  sky: { top: 0x030209, bottom: 0x1a0f30, fog: 0x0a0618, fogNear: 4600, fogFar: 20000,
+    nebula: { a: 0xb07a9a, b: 0x5a6ac0, tilt: 0.7, yaw: 2.2, width: 0.24, strength: 0.8 } },
   sun: { x: 0.36, y: 1, z: 0.46, intensity: 1.12 },
   camera: { pitch: 0.36, distance: 6.6 },
 
