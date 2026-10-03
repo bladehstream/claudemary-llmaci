@@ -38,7 +38,10 @@
    So: gaps of ~0.0015, which is 6% of the starting radius and still hundreds of
    depth-buffer steps at a camera distance of 6.2 radii. Big DECK heights below
    are a different thing entirely — those are meant to be steps you climb. */
+import { grid, shade } from './dress.js';
+
 const Y_AGAR     = 0;        // the plate
+const Y_GRID     = 0.0006;   // the counting grid printed under the plate (to 0.0012)
 const Y_RING     = 0.0015;   // growth rings (tori, not flat, but keep them clear)
 const Y_FILM     = 0.0030;   // mucus film
 const Y_FILM_IN  = 0.0045;   // its wetter middle
@@ -244,6 +247,14 @@ export const microbeStage = {
        rim or of another deck, and every gap is open at both ends. */
     w.plat(-BX, -BZ, BX, BZ, Y_AGAR);
     t.quad(BX * 2, BZ * 2, A.agar, { y: Y_AGAR });
+
+    /* The counting grid printed on the base of the dish, seen through the
+       agar: fine rules every half unit (ten starting-ball widths) and a heavier
+       one every two and a half. It is what tells you that you are moving, and
+       how fast, on a plate that is otherwise one colour; and it is what a
+       gridded colony-counting dish really looks like under the lens. */
+    grid(t, -BX, -BZ, BX, BZ, Y_GRID, { step: 0.5, width: 0.007, every: 5, majorWidth: 0.016,
+      col: shade(A.agar, 0.9), majorCol: A.agarDark });
 
     /* Concentric growth rings spreading out from where the plate was
        inoculated — PAINTED, in short tangential quads, not built.

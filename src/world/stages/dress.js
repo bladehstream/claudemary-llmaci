@@ -119,6 +119,26 @@ export function fields(t, x0, z0, x1, z1, y, o = {}) {
   }
 }
 
+/**
+ * Ruled lines over a rectangle, like the grid printed on a counting dish:
+ * fine lines every `step`, and every `every`-th one a heavier major line laid
+ * a hair above so the crossings never share a plane. Lines start on the
+ * world-origin lattice, not the rectangle's edge, so neighbouring grids agree.
+ */
+export function grid(t, x0, z0, x1, z1, y, o = {}) {
+  const step = o.step ?? 1, w = o.width ?? step * 0.03, col = o.col;
+  const every = o.every ?? 5, mw = o.majorWidth ?? w * 2.5, mcol = o.majorCol ?? shade(col, 0.88);
+  const lift = o.lift ?? 0.0002;
+  const line = (n, along, at) => {
+    const major = n % every === 0, lw = major ? mw : w, c = major ? mcol : col;
+    const yy = y + (major ? lift * 2 : 0) + (along === 'x' ? lift : 0);
+    if (along === 'x') t.quad(x1 - x0, lw, c, { x: (x0 + x1) / 2, y: yy, z: at });
+    else t.quad(lw, z1 - z0, c, { x: at, y: yy, z: (z0 + z1) / 2 });
+  };
+  for (let n = Math.ceil(z0 / step); n * step <= z1; n++) line(n, 'x', n * step);
+  for (let n = Math.ceil(x0 / step); n * step <= x1; n++) line(n, 'z', n * step);
+}
+
 /** One flat-topped hexagon lying in XZ, unit circumradius: six triangles. */
 let HEX = null;
 
