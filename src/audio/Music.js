@@ -39,7 +39,8 @@ const SCHEDULE_AHEAD = 0.14;
  * mix. Measured against `vibe` at 1.0 — these are the ratios that made the
  * five tonal voices sit at the same perceived level in `voicelab`.
  */
-const VOICE_GAIN = { vibe: 1, pluck: 0.62, brass: 0.78, scat: 0.58, bass: 1.5 };
+const VOICE_GAIN = { vibe: 1, pluck: 0.62, brass: 0.78, scat: 0.58, bass: 1.5,
+  keys: 1, lead: 0.9, pad: 1, bell: 0.8 };
 
 /** What a song gets if it does not say. Exactly what every song did before. */
 const DEFAULT_VOICES = { melody: 'vibe', comp: 'pluck', bass: 'bass', double: 'vibe' };
@@ -212,6 +213,10 @@ export class Music {
       case 'brass': return e.brass(t, freq, dur, g);
       case 'scat': return e.scat(t, freq, dur, g, vowel);
       case 'bass': return e.bass(t, freq, dur, g);
+      case 'keys': return e.keys(t, freq, dur, g);
+      case 'lead': return e.lead(t, freq, dur, g);
+      case 'pad': return e.pad(t, freq, dur, g);
+      case 'bell': return e.bell(t, freq, dur, g);
       case 'vibe': default: return e.vibe(t, freq, dur, g);
     }
   }
@@ -390,6 +395,59 @@ export class Music {
     if (inten > 0.6 && s.scat && p.scat && p.melody !== 'layout') {
       for (const [ms, note, dur, vowel] of s.scat) {
         if (ms === pos) e.scat(t, mtof(note - 12), this.stepDuration * dur * 0.9, 0.1 + inten * 0.07, vowel);
+      }
+    }
+
+    /* ---------------- pad (v2) ----------------
+       A held chord under everything, restruck only when the harmony moves, so
+       a two-bar chord is one long breath rather than two. The voicing sits
+       below the comping (low 55) so the two never fight for the same octave,
+       and it is the first tonal layer to arrive: a quiet room still has air. */
+    if (V.pad && inBar === 0 && inten > 0.12 && !p.brk) {
+      const prog = s.prog;
+      const prev = prog[(bar - 1 + prog.length) % prog.length];
+      const changed = bar === 0 || prev[0] !== root || prev[1] !== type;
+      if (changed) {
+        let hold = 1;
+        while (hold < prog.length && bar + hold < prog.length
+          && prog[bar + hold][0] === root && prog[bar + hold][1] === type) hold++;
+        const notes = this._voicing(root, type, s.padLow ?? 55, 4);
+        const amp = 0.1 * (0.55 + inten * 0.5) * (GN.pad ?? 1);
+        const dur = this.stepDuration * 16 * hold * 0.98 * (SUS.pad ?? 1);
+        notes.forEach((n, i) => this._play(V.pad, t + i * 0.018, mtof(n), dur, amp));
+      }
+    }
+
+    /* ---------------- arpeggio (v2) ----------------
+       Chord tones walked in a fixed shape at a fixed rate. Cheap sparkle that
+       states the harmony every sixteenth, which is what lets a melody leave
+       the chord tones without the ear losing the key. Drops out in a break and
+       for a layout cycle, so it never plays to an empty room. */
+    if (V.arp && s.arp && inten > (s.arp.min ?? 0.45) && !p.brk && p.melody !== 'layout') {
+      const A = s.arp;
+      const every = A.every ?? 2;
+      if (inBar % every === 0) {
+        const k = (inBar / every) % A.shape.length;
+        const idx = A.shape[k];
+        if (idx != null && idx >= 0) {
+          const notes = this._voicing(root, type, A.low ?? 72, 4);
+          const n = notes[idx % notes.length] + (idx >= notes.length ? 12 : 0);
+          const accent = k === 0 ? 1.15 : 0.9;
+          this._play(V.arp, t, mtof(n), this.stepDuration * every * (A.hold ?? 1.6),
+            0.075 * (0.6 + inten * 0.5) * accent * (GN.arp ?? 1));
+        }
+      }
+    }
+
+    /* ---------------- counter-melody (v2) ----------------
+       A second written line that answers the tune in its gaps. It follows the
+       same per-cycle presence dice as the scat answers, so it is there most
+       times round and absent some, and never over a layout cycle. */
+    if (V.counter && s.counter && inten > 0.5 && p.scat && p.melody !== 'layout') {
+      for (const [cs, note, dur] of s.counter) {
+        if (cs !== pos) continue;
+        this._play(V.counter, t, mtof(note), this.stepDuration * dur * 0.95,
+          (0.12 + inten * 0.08) * (GN.counter ?? 1));
       }
     }
 

@@ -210,6 +210,29 @@ export const KITS = {
     snare:  grid([]),
     tom:    grid([[16, 0.22]]),
   },
+  /* v2 house. A light pop backbeat under a bossa clave: the snare lands on two
+     and four like a pop record, the rim keeps the 3-3-4 clave the old house
+     groove had, and the kick skips ahead on the and-of-three so the bar leans
+     forward instead of sitting. */
+  skip: {
+    kick:   grid([[0, 1.0], [6, 0.48], [8, 0.78], [11, 0.42], [16, 1.0], [22, 0.48], [24, 0.78], [27, 0.45]]),
+    rim:    grid([[3, 0.5], [6, 0.44], [10, 0.55], [19, 0.5], [22, 0.44], [26, 0.55]]),
+    snare:  grid([[4, 0.34], [12, 0.4], [20, 0.34], [28, 0.42]]),
+    hat:    every(2, 0.085, 4, 0.15),
+    shaker: every(1, 0.045, 4, 0.1),
+    tom:    grid([[30, 0.24]]),
+  },
+  /* v2 menu. Brushes, more or less: no snare hit at all, a kick that only
+     marks the bar, and a shaker doing what a brush sweep does — keep time
+     without saying anything. */
+  hush: {
+    kick:   grid([[0, 0.7], [10, 0.35], [16, 0.62], [26, 0.35]]),
+    rim:    grid([[12, 0.3], [28, 0.34]]),
+    hat:    every(4, 0.05),
+    shaker: every(2, 0.05, 8, 0.085),
+    snare:  grid([]),
+    tom:    grid([]),
+  },
   lounge: {
     kick:   grid([[0, 0.75], [10, 0.45], [16, 0.75], [26, 0.45]]),
     rim:    grid([[6, 0.45], [22, 0.45]]),
@@ -372,7 +395,7 @@ const microbeSong = {
  * reference in the set is worth more than making all twelve new.
  */
 const houseSong = {
-  id: 'house',
+  id: 'house_v1',
   name: 'Everything Sticks',
   bpm: 128,
   kit: 'bossa',
@@ -715,7 +738,7 @@ const universeSong = {
  * hears and it was approved as it stands.
  */
 const menuSong = {
-  id: 'menu',
+  id: 'menu_v1',
   name: 'Somewhere To Start',
   bpm: 104,
   kit: 'lounge',
@@ -731,6 +754,129 @@ const menuSong = {
   brass: [],
   scat: [[0, 76, 5, 0], [8, 74, 4, 3], [32, 74, 5, 0], [48, 74, 6, 4]],
   space: 1.25,
+};
+
+/* ============================================================
+   v2 THEMES.
+
+   Written for the v2 rescore on the four new voices (keys, lead,
+   pad, bell). The v1 house and menu themes stay in the set as
+   `house_v1` / `menu_v1` — they were the approved reference, and a
+   rescore that cannot be A/B'd against the thing it replaces is a
+   guess. Sixteen bars, not eight: an A section and a bridge, so the
+   tune has somewhere to go before it comes home.
+   ============================================================ */
+
+/** "Pocketful of Everything" — v2 house. B-flat major, skipping pop-bossa. */
+const houseSong2 = {
+  id: 'house',
+  name: 'Pocketful of Everything',
+  bpm: 124,
+  kit: 'skip',
+  bars: 16,
+  bassOct: -24,
+  prog: [
+    // A — the hook, twice round a ii-V-I with a back-door G7alt
+    [58, 'maj9'], [55, 'm9'], [60, 'm9'], [65, 'dom13'],
+    [62, 'm7'], [55, 'alt'], [60, 'm9'], [65, 'sus'],
+    // B — up to the IV, a back-door Ab9, then the long way home
+    [63, 'maj9'], [56, 'dom9'], [62, 'm7'], [55, 'dom9'],
+    [60, 'm9'], [65, 'dom9'], [58, 'maj69'], [65, 'alt'],
+  ],
+  /* One rhythmic cell — two short, one long, a turn — stated in bars 1, 3
+     and 5 on different chord tones, so the hook is a SHAPE the ear can follow
+     rather than a string of notes. The bridge lengthens everything and climbs
+     to the C6 in bar 11, the highest note in the piece. */
+  melody: [
+    [0, 74, 2], [2, 77, 2], [4, 81, 5], [10, 79, 1], [11, 77, 1], [12, 74, 3],
+    [16, 74, 2], [18, 77, 2], [20, 79, 5], [26, 77, 2], [28, 74, 2], [30, 70, 2],
+    [32, 72, 2], [34, 75, 2], [36, 79, 5], [42, 77, 1], [43, 75, 1], [44, 72, 3],
+    [48, 74, 3], [51, 72, 1], [52, 69, 4], [58, 65, 2], [60, 67, 2], [62, 69, 2],
+    [64, 74, 2], [66, 77, 2], [68, 81, 5], [74, 84, 1], [75, 81, 1], [76, 77, 3],
+    [80, 79, 2], [82, 80, 2], [84, 83, 4], [90, 80, 2], [92, 77, 4],
+    [96, 75, 2], [98, 79, 2], [100, 82, 4], [104, 79, 2], [106, 75, 2], [108, 74, 4],
+    [112, 72, 8], [122, 65, 1], [123, 67, 1], [124, 69, 2], [126, 72, 2],
+    [128, 79, 6], [134, 82, 2], [136, 79, 3], [139, 77, 1], [140, 74, 4],
+    [144, 75, 6], [150, 72, 2], [152, 78, 4], [156, 77, 4],
+    [160, 77, 4], [164, 81, 4], [168, 84, 6], [174, 81, 2],
+    [176, 83, 4], [180, 81, 2], [182, 79, 2], [184, 77, 4], [188, 74, 4],
+    [192, 75, 3], [195, 74, 1], [196, 72, 4], [200, 75, 2], [202, 79, 2], [204, 82, 4],
+    [208, 81, 6], [214, 79, 2], [216, 77, 4], [220, 75, 4],
+    [224, 74, 8], [232, 70, 2], [234, 72, 2], [236, 74, 4],
+    [240, 77, 2], [242, 75, 2], [244, 73, 2], [246, 69, 2], [248, 66, 4], [252, 65, 2], [254, 73, 2],
+  ],
+  /* The answer lives INSIDE the tune's long notes, an octave and a half
+     below: while the lead holds, the vibes climb a chord. Every entry is a
+     chord tone of its bar, so it never needs the melody to justify it. */
+  counter: [
+    [6, 62, 1], [7, 65, 1], [8, 69, 2],
+    [22, 62, 1], [23, 65, 1], [24, 67, 2],
+    [38, 63, 1], [39, 67, 1], [40, 70, 2],
+    [70, 65, 1], [71, 69, 1], [72, 72, 2],
+    [114, 70, 2], [116, 67, 2], [118, 63, 2],
+    [130, 67, 2], [132, 70, 2],
+    [146, 68, 2], [148, 72, 2],
+    [170, 69, 2], [172, 65, 2],
+    [210, 69, 2], [212, 72, 2],
+    [226, 65, 2], [228, 67, 2], [230, 70, 2],
+  ],
+  brass: [
+    [14, [65, 69, 74], 2],
+    [46, [63, 67, 70], 2],
+    [94, [65, 68, 71], 2],
+    [158, [66, 70, 72], 2],
+    [190, [65, 69, 71], 2],
+    [222, [63, 67, 69], 2],
+    [250, [63, 66, 69], 4],
+  ],
+  scat: [],
+  voices: { melody: 'lead', comp: 'keys', bass: 'bass', double: 'bell', pad: 'pad', counter: 'vibe' },
+  space: 1.15,
+  /* Balanced by measurement against house_v1: the first pass sat 2-3dB heavy
+     between 250Hz and 1kHz (keys and pad in the same octave) and 7dB light
+     above 4kHz. Comp and pad came down and the pad moved up a fourth. */
+  padLow: 60,
+  gain: { melody: 0.95, comp: 0.7, pad: 0.6, counter: 0.9 },
+  sustain: { comp: 1.3 },
+  form: { fill: 1.1, micro: 1.1, break: 0.6, compOut: 0.8 },
+};
+
+/** "Starting Small" — v2 title screen. D major, slow, a music box in a warm room. */
+const menuSong2 = {
+  id: 'menu',
+  name: 'Starting Small',
+  bpm: 96,
+  kit: 'hush',
+  bars: 8,
+  bassOct: -24,
+  padLow: 52,
+  prog: [
+    [62, 'maj9'], [59, 'm9'], [55, 'maj9'], [57, 'dom13'],
+    [66, 'm7'], [59, 'm9'], [64, 'm9'], [57, 'sus'],
+  ],
+  /* Two four-bar phrases that ask and answer: the first climbs to the A5 and
+     falls to C#, unresolved; the second climbs higher, to the C#6, and comes
+     down onto the D it was looking for. */
+  melody: [
+    [0, 78, 3], [3, 76, 1], [4, 74, 2], [6, 76, 2], [8, 81, 6], [14, 78, 2],
+    [16, 76, 3], [19, 74, 1], [20, 73, 4], [24, 74, 2], [26, 78, 6],
+    [32, 79, 3], [35, 78, 1], [36, 76, 2], [38, 78, 2], [40, 83, 6], [46, 81, 2],
+    [48, 79, 4], [52, 78, 2], [54, 76, 2], [56, 73, 8],
+    [64, 76, 3], [67, 78, 1], [68, 81, 4], [72, 85, 4], [76, 83, 2], [78, 81, 2],
+    [80, 78, 6], [86, 76, 2], [88, 74, 4], [92, 73, 2], [94, 74, 2],
+    [96, 76, 4], [100, 79, 4], [104, 83, 6], [110, 81, 2],
+    [112, 79, 4], [116, 76, 4], [120, 74, 6], [126, 76, 2],
+  ],
+  /* The music box: chord tones up and back in eighths, an octave above the
+     tune so the two never collide. */
+  arp: { every: 2, shape: [0, 1, 2, 3, 4, 3, 2, 1], low: 81, hold: 2.2, min: 0.25 },
+  brass: [],
+  scat: [],
+  voices: { melody: 'vibe', comp: 'keys', bass: 'bass', double: null, pad: 'pad', arp: 'bell' },
+  space: 1.5,
+  gain: { melody: 1.05, comp: 0.55, pad: 0.75, arp: 0.8, bass: 0.85 },
+  sustain: { comp: 2.2, melody: 1.1 },
+  form: { fill: 0.5, micro: 0.6, break: 0.5, compOut: 0.9 },
 };
 
 /** Played once when the results panel opens. */
@@ -749,7 +895,7 @@ export const SONGS = {
   quantum: quantumSong,
   atom: atomSong,
   microbe: microbeSong,
-  house: houseSong,
+  house: houseSong2,
   town: townSong,
   city: citySong,
   country: countrySong,
@@ -757,5 +903,8 @@ export const SONGS = {
   solar: solarSong,
   galaxy: galaxySong,
   universe: universeSong,
-  menu: menuSong,
+  menu: menuSong2,
+  /* v1 references, for A/B renders. Not played by the game. */
+  house_v1: houseSong,
+  menu_v1: menuSong,
 };
