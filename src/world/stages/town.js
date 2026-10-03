@@ -7,6 +7,7 @@
    ============================================================ */
 
 import { C } from '../../render/palette.js';
+import { hash2, shade, paving, lawn, zebra } from './dress.js';
 
 const ROAD_Y = 0;
 const KERB_Y = 0.16;
@@ -101,13 +102,15 @@ export const townStage = {
     for (const b of blocks) {
       w.plat(b.cx - b.hw, b.cz - b.hd, b.cx + b.hw, b.cz + b.hd, KERB_Y);
       t.box(b.hw * 2, KERB_Y, b.hd * 2, C.concrete, { x: b.cx, y: KERB_Y / 2, z: b.cz });
-      t.quad(b.hw * 2 - 1.4, b.hd * 2 - 1.4, C.concreteD, { x: b.cx, y: KERB_Y + 0.02, z: b.cz });
+      dressBlock(t, b);
       // gentle kerb ramps at the middle of each edge so you can always get up
       w.ramp(b.cx - 3, b.cz - b.hd - 2.6, b.cx + 3, b.cz - b.hd, ROAD_Y, KERB_Y, 'z');
       w.ramp(b.cx - 3, b.cz + b.hd, b.cx + 3, b.cz + b.hd + 2.6, KERB_Y, ROAD_Y, 'z');
       w.ramp(b.cx - b.hw - 2.6, b.cz - 3, b.cx - b.hw, b.cz + 3, ROAD_Y, KERB_Y, 'x');
       w.ramp(b.cx + b.hw, b.cz - 3, b.cx + b.hw + 2.6, b.cz + 3, KERB_Y, ROAD_Y, 'x');
     }
+
+    dressRoads(t, step, B);
 
     /* ---------------- outer boundary ---------------- */
     w.bound(-B - 4, -B - 4, B + 4, -B, 6, C.concreteD);
@@ -168,11 +171,14 @@ export const townStage = {
     }
     for (let i = 0; i < 10; i++) w.placeId('bench', px - 16 + r() * 32, pz - 16 + r() * 32, r() * 6.28);
     for (let i = 0; i < 6; i++) w.placeId('hedge', px - 16 + r() * 32, pz - 16 + r() * 32, r() * 6.28);
-    t.quad(38, 38, C.grass, { x: px, y: KERB_Y + 0.05, z: pz });
+    lawn(t, px - 19, pz - 19, px + 19, pz + 19, KERB_Y + 0.05, { col: C.grass, band: 2.4, axis: 'z' });
 
     // a field with livestock
     const fx = 60, fz = -12;
-    t.quad(30, 26, C.grassDark, { x: fx, y: 0.06, z: fz });
+    /* v1 laid this at road level, under the block it stands on, so only the
+       strips hanging over the roads ever showed. Clipped to its block and lifted
+       onto it. */
+    lawn(t, 53.3, fz - 13, fx + 15, -5.3, KERB_Y + 0.05, { col: C.grassDark, band: 3, axis: 'z' });
     for (let i = 0; i < 6; i++) w.placeId('cow', fx - 12 + r() * 24, fz - 10 + r() * 20, r() * 6.28);
     for (let i = 0; i < 9; i++) w.placeId('sheep', fx - 12 + r() * 24, fz - 10 + r() * 20, r() * 6.28);
     w.placeId('tractor', fx - 10, fz + 10, 0.8);
@@ -242,3 +248,76 @@ export const townStage = {
     w.scatter({ tag: 'town', lo: 0.15, hi: 0.6, count: 70, x0: -56, z0: -54, x1: -36, z1: -34, avoid });
   },
 };
+
+/* ============================================================
+   Dressing. Visual only — the walkable surfaces are the `plat`s
+   above — and free of the stage RNG (see dress.js).
+   ============================================================ */
+
+const KERB_W = 0.3;       // the kerbstone strip along every block edge
+const PAVE_W = 2.4;       // the pavement inside it, where the street furniture stands
+
+/** Kerbstones, a slab pavement, and a lawn or a plaza in the middle. */
+function dressBlock(t, b) {
+  const x0 = b.cx - b.hw, x1 = b.cx + b.hw, z0 = b.cz - b.hd, z1 = b.cz + b.hd;
+  const y = KERB_Y;
+  const kerb = shade(C.concrete, 1.12);
+  // kerbstones
+  t.quad(x1 - x0, KERB_W, kerb, { x: b.cx, y: y + 0.004, z: z0 + KERB_W / 2 });
+  t.quad(x1 - x0, KERB_W, kerb, { x: b.cx, y: y + 0.004, z: z1 - KERB_W / 2 });
+  t.quad(KERB_W, z1 - z0 - KERB_W * 2, kerb, { x: x0 + KERB_W / 2, y: y + 0.004, z: b.cz });
+  t.quad(KERB_W, z1 - z0 - KERB_W * 2, kerb, { x: x1 - KERB_W / 2, y: y + 0.004, z: b.cz });
+  // pavement ring
+  const i0 = KERB_W, i1 = KERB_W + PAVE_W;
+  const seed = Math.round(b.cx * 3 + b.cz * 7);
+  const pave = { tile: 0.9, col: C.concrete, seed };
+  paving(t, x0 + i0, z0 + i0, x1 - i0, z0 + i1, y + 0.004, pave);
+  paving(t, x0 + i0, z1 - i1, x1 - i0, z1 - i0, y + 0.004, { ...pave, seed: seed + 1 });
+  paving(t, x0 + i0, z0 + i1, x0 + i1, z1 - i1, y + 0.004, { ...pave, seed: seed + 2 });
+  paving(t, x1 - i1, z0 + i1, x1 - i0, z1 - i1, y + 0.004, { ...pave, seed: seed + 3 });
+  // the middle: the shopping street gets a plaza, every other block a lawn
+  const shopping = b.cz === 24 && Math.abs(b.cx) === 24;
+  if (shopping) {
+    paving(t, x0 + i1, z0 + i1, x1 - i1, z1 - i1, y + 0.004,
+      { tile: 1.5, col: 0xd8c9a8, checker: 0xc4a98a, vary: 0.05, seed: seed + 4 });
+  } else {
+    lawn(t, x0 + i1, z0 + i1, x1 - i1, z1 - i1, y + 0.012,
+      { col: shade(C.grass, 0.92), band: 1.9, axis: hash2(seed, 5) < 0.5 ? 'x' : 'z' });
+  }
+}
+
+/** Zebra crossings at every junction, asphalt repairs and manholes. */
+function dressRoads(t, step, B) {
+  const ROAD_W = step - 38;            // 10m between kerbs
+  const Y = ROAD_Y + 0.04;             // above the centre dashes at 0.035
+  for (let i = -1; i <= 1; i++) {
+    for (let k = -1; k <= 1; k++) {
+      const cx = i * step, cz = k * step;
+      const off = ROAD_W / 2 + 2.0;
+      zebra(t, cx, cz - off, ROAD_W, 'z', Y);
+      zebra(t, cx, cz + off, ROAD_W, 'z', Y);
+      zebra(t, cx - off, cz, ROAD_W, 'x', Y);
+      zebra(t, cx + off, cz, ROAD_W, 'x', Y);
+      // the junction box itself, a shade darker where the traffic turns
+      t.quad(ROAD_W, ROAD_W, shade(C.asphalt, 0.93), { x: cx, y: ROAD_Y + 0.02, z: cz });
+    }
+  }
+  // patched asphalt and manhole covers along the roads, placed by hash
+  for (let n = 0; n < 90; n++) {
+    const road = Math.floor(hash2(n, 11) * 5) - 2;        // which road, -2..2
+    const alongX = hash2(n, 12) < 0.5;
+    const s = -B + 8 + hash2(n, 13) * (B * 2 - 16);       // where along it
+    const lane = (hash2(n, 14) - 0.5) * (ROAD_W - 2.4);   // across it
+    const x = alongX ? s : road * step + lane;
+    const z = alongX ? road * step + lane : s;
+    if (Math.abs(x) > B - 4 || Math.abs(z) > B - 4) continue;
+    if (hash2(n, 15) < 0.6) {
+      const w = 1.2 + hash2(n, 16) * 3.2, d = 0.9 + hash2(n, 17) * 2.2;
+      const tone = hash2(n, 18) < 0.5 ? 0.86 : 1.12;
+      t.quad(alongX ? w : d, alongX ? d : w, shade(C.asphalt, tone), { x, y: ROAD_Y + 0.025, z });
+    } else {
+      t.cyl(0.36, 0.36, 0.03, 0x3e3d44, { x, y: ROAD_Y + 0.015, z }, 14);
+      t.cyl(0.3, 0.3, 0.032, 0x55545c, { x, y: ROAD_Y + 0.016, z }, 14);
+    }
+  }
+}
