@@ -23,6 +23,11 @@
     <!-- ============ IN-GAME HUD ============ -->
     <div id="hud" class="hidden">
       <div class="hud-topleft">
+        <!-- The size gauge: a little katamari inside a ring that fills toward
+             the goal (same log scale as the bar). Decorative twin of the goal
+             bar, so it is aria-hidden and the narrow layouts drop it. -->
+        <div id="size-gauge" class="size-gauge" aria-hidden="true"><div class="sg-ball"></div></div>
+        <div class="hud-tl-col">
         <div class="size-panel">
           <div class="size-label">Katamari</div>
           <div id="size-readout" class="size-readout">0m0cm0mm</div>
@@ -35,10 +40,12 @@
           <div class="goal-bar"><div id="goal-fill" class="goal-fill"></div></div>
           <div id="goal-met" class="goal-met hidden">GOAL REACHED — keep rolling!</div>
         </div>
+        </div>
       </div>
 
       <div class="hud-topright">
-        <div id="timer" class="timer">0:00</div>
+        <!-- The clock face: the pie is the time LEFT, and it drains clockwise. -->
+        <div id="clock" class="clock"><div id="timer" class="timer">0:00</div></div>
         <div id="stage-name" class="stage-name"></div>
         <!-- Only ever visible during a co-op round. A friend dropping out is
              otherwise indistinguishable from a friend standing still. -->

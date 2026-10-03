@@ -564,8 +564,60 @@ html, body {
    ------------------------------------------------------------ */
 #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 
-.hud-topleft { position: absolute; top: 18px; left: 20px; }
-.hud-topright { position: absolute; top: 18px; right: 20px; text-align: right; }
+.hud-topleft { position: absolute; top: 18px; left: 20px; display: flex; gap: 12px; align-items: flex-start; }
+
+/* ---- v2 size gauge ----
+   A ring that fills toward the goal around a small spinning katamari. The
+   ring is one conic-gradient driven by --goal (0..1) on #hud, so an update is
+   one custom-property write and a repaint of a 100px box. */
+.size-gauge {
+  --ring: var(--grass);
+  width: 104px; height: 104px; flex: none; border-radius: 50%;
+  padding: 9px;
+  background:
+    conic-gradient(var(--ring) calc(var(--goal, 0) * 1turn), rgba(255,255,255,0.55) 0) border-box;
+  border: 4px solid var(--purple);
+  box-shadow: 0 5px 0 rgba(107,70,193,0.35);
+}
+.size-gauge.met { --ring: var(--yellow); animation: gaugeGlow 1.2s ease-in-out infinite; }
+@keyframes gaugeGlow {
+  0%,100% { box-shadow: 0 5px 0 rgba(107,70,193,0.35), 0 0 0 0 rgba(255,214,79,0); }
+  50% { box-shadow: 0 5px 0 rgba(107,70,193,0.35), 0 0 22px 6px rgba(255,214,79,0.75); }
+}
+.sg-ball {
+  width: 100%; height: 100%; border-radius: 50%;
+  border: 3px solid var(--purple);
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.55) 0 9%, transparent 10%),
+    radial-gradient(circle at 50% 50%, #f5ecc8 0 8%, transparent 9%),
+    radial-gradient(circle at 22% 62%, #f5ecc8 0 7%, transparent 8%),
+    radial-gradient(circle at 76% 34%, #f5ecc8 0 7%, transparent 8%),
+    radial-gradient(circle at 70% 78%, #f5ecc8 0 6%, transparent 7%),
+    radial-gradient(circle at 38% 88%, #f5ecc8 0 5%, transparent 6%),
+    radial-gradient(circle at 50% 12%, #f5ecc8 0 5%, transparent 6%),
+    radial-gradient(circle at 35% 30%, #8fe07a, #46b03f 58%, #2f8a2e);
+  animation: sgSpin 7s linear infinite;
+}
+@keyframes sgSpin { to { transform: rotate(360deg); } }
+.size-gauge.pulse .sg-ball { animation: sgSpin 7s linear infinite, sgPop 320ms ease; }
+@keyframes sgPop { 35% { scale: 1.12; } }
+
+/* ---- v2 clock ----
+   The time left as a pie that drains clockwise, digits on top. */
+.clock {
+  --pie: #ffffff;
+  width: 124px; height: 124px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  background:
+    radial-gradient(circle, rgba(107,70,193,0.0) 0 56%, transparent 57%),
+    conic-gradient(var(--pie) calc(var(--time, 1) * 1turn), rgba(42,33,64,0.22) 0);
+  border: 4px solid var(--purple);
+  box-shadow: 0 5px 0 rgba(107,70,193,0.35), inset 0 0 0 5px rgba(255,255,255,0.55);
+}
+.clock.urgent { --pie: var(--yellow); animation: urgentPulse 0.5s ease-in-out infinite; }
+.clock .timer { font-size: 40px; }
+.clock .timer.urgent { animation: none; }
+.hud-topright { position: absolute; top: 18px; right: 20px; text-align: center; }
 .hud-bottomleft { position: absolute; bottom: 18px; left: 20px; }
 .hud-bottomright { position: absolute; bottom: 18px; right: 20px; text-align: right; }
 
@@ -905,6 +957,14 @@ html, body {
 @media (max-width: 720px) {
   .size-readout { font-size: 30px; }
   .timer { font-size: 38px; }
+  /* Narrow: the gauge and the clock face are the first things to go — the
+     size panel and the goal bar carry the same information in half the width,
+     and on a phone both corners are already shared with touch buttons. */
+  .size-gauge { display: none; }
+  .clock { width: auto; height: auto; background: none; border: 0; box-shadow: none; display: block; }
+  .clock.urgent { animation: none; }
+  .clock .timer { font-size: 38px; }
+  .hud-topright { text-align: right; }
   .goal-panel { width: 200px; }
   .how-grid { grid-template-columns: 100px 1fr; font-size: 14px; }
   .opt-row { grid-template-columns: 140px 1fr 40px; font-size: 15px; }

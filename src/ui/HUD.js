@@ -16,6 +16,8 @@ export class HUD {
     this.goalFill = document.getElementById('goal-fill');
     this.goalMet = document.getElementById('goal-met');
     this.timerEl = document.getElementById('timer');
+    this.clockEl = document.getElementById('clock');
+    this.gaugeEl = document.getElementById('size-gauge');
     this.stageEl = document.getElementById('stage-name');
     this.feedEl = document.getElementById('pickup-feed');
     this.countEl = document.getElementById('stat-count');
@@ -229,6 +231,13 @@ export class HUD {
 
   reset(stage) {
     this.stageEl.textContent = stage.name;
+    this._total = stage.time || 300;
+    this._goalT = -1;
+    this._timeT = -1;
+    this.root.style.setProperty('--goal', '0');
+    this.root.style.setProperty('--time', '1');
+    if (this.gaugeEl) this.gaugeEl.classList.remove('met');
+    if (this.clockEl) this.clockEl.classList.remove('urgent');
     // Every readout on this HUD is in the CURRENT stage's units. See util/math.
     this.unit = stage.unit || 'metric';
     /* `setSize` skips the DOM write when the formatted text is unchanged, which
@@ -280,6 +289,11 @@ export class HUD {
       this.sizeEl.classList.remove('pulse');
       void this.sizeEl.offsetWidth;
       this.sizeEl.classList.add('pulse');
+      if (this.gaugeEl) {
+        this.gaugeEl.classList.remove('pulse');
+        void this.gaugeEl.offsetWidth;
+        this.gaugeEl.classList.add('pulse');
+      }
     }
   }
 
@@ -287,15 +301,33 @@ export class HUD {
     // Log scale: the bar would sit near zero for most of the stage otherwise.
     const t = clamp(Math.log(Math.max(1e-6, current / (goal * 0.02))) / Math.log(50), 0, 1);
     this.goalFill.style.width = `${(t * 100).toFixed(1)}%`;
+    /* The gauge ring mirrors the bar. Quantised so a ball that is growing by
+       a hair every frame does not rewrite a custom property sixty times a
+       second for a change nobody can see. */
+    const q = Math.round(t * 400) / 400;
+    if (q !== this._goalT) {
+      this._goalT = q;
+      this.root.style.setProperty('--goal', q.toFixed(4));
+    }
+    if (this.gaugeEl && met !== this._gaugeMet) {
+      this._gaugeMet = met;
+      this.gaugeEl.classList.toggle('met', !!met);
+    }
     if (!this._exhausted) this.goalMet.classList.toggle('hidden', !met);
   }
 
   setTimer(seconds) {
     this.timerEl.textContent = formatTime(seconds);
+    const f = Math.round(clamp(seconds / (this._total || 300), 0, 1) * 720) / 720;
+    if (f !== this._timeT) {
+      this._timeT = f;
+      this.root.style.setProperty('--time', f.toFixed(4));
+    }
     const urgent = seconds <= 30;
     if (urgent !== this._urgent) {
       this._urgent = urgent;
       this.timerEl.classList.toggle('urgent', urgent);
+      if (this.clockEl) this.clockEl.classList.toggle('urgent', urgent);
     }
   }
 
