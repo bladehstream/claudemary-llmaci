@@ -92,6 +92,30 @@ function seat(geo, target) {
   return [bs.x / ts.x, bs.y / ts.y, bs.z / ts.z];
 }
 
+/**
+ * Fetch a gzipped pack and return the raw GLB bytes.
+ *
+ * WHY GZIP BY HAND: Cloudflare Pages does not compress `model/gltf-binary`, so
+ * the 105-prop house pack went over the wire at 5.9 MB. Gzipped it is 1.8 MB.
+ * The usual answer, meshopt or Draco, needs a WebAssembly decoder and a CSP
+ * that allows it; `DecompressionStream` is native in every browser this game
+ * runs on and needs neither.
+ *
+ * The magic-number check is there because a CDN or dev server that decides to
+ * serve the `.gz` with `Content-Encoding: gzip` hands the browser's own
+ * decompressor the job first, and we then receive plain GLB bytes. Either way
+ * round, the loader gets a GLB.
+ */
+async function fetchPack(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  const buf = await r.arrayBuffer();
+  const head = new Uint8Array(buf, 0, 2);
+  if (head[0] !== 0x1f || head[1] !== 0x8b) return buf;
+  const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
+}
+
 let manifest = null;
 const loadedPacks = new Set();
 const report = { swapped: 0, warned: [], packs: [] };
@@ -147,7 +171,7 @@ export async function ensureModels(stageTag, base = import.meta.env?.BASE_URL ||
   await Promise.all(packs.map(async (pack) => {
     loadedPacks.add(pack);
     try {
-      const gltf = await loader.loadAsync(`${base}models/${pack}.glb`);
+      const gltf = await loader.parseAsync(await fetchPack(`${base}models/${pack}.glb.gz`), '');
       gltf.scene.updateMatrixWorld(true);
       gltf.scene.traverse((o) => { if (o.isMesh) byName.set(o.name, o); });
       report.packs.push(pack);

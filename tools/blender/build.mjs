@@ -31,7 +31,11 @@ if (!fs.existsSync(path.join(HERE, 'out', 'specs.json'))) {
 }
 const outDir = path.join(ROOT, 'public', 'models');
 fs.mkdirSync(outDir, { recursive: true });
-const out = only.length ? path.join(HERE, 'out', `${stage}-${tag}.glb`) : path.join(outDir, `${stage}.glb`);
+/* A full pack is built to tools/blender/out/<stage>.glb and shipped GZIPPED as
+   public/models/<stage>.glb.gz — Cloudflare does not compress .glb, and gzip
+   is 3x on these packs with a decoder every browser already has (see
+   fetchPack in src/world/models.js). */
+const out = path.join(HERE, 'out', only.length ? `${stage}-${tag}.glb` : `${stage}.glb`);
 
 const t0 = Date.now();
 const r = spawnSync(BLENDER, ['-b', '--factory-startup', '--python', path.join(HERE, 'run.py'), '--',
@@ -66,4 +70,13 @@ if (!only.length) {
   fs.writeFileSync(mfPath, JSON.stringify(mf, null, 1) + String.fromCharCode(10));
   console.log(`manifest: ${stage} -> ${ids.length} props`);
 }
-console.log(`${path.relative(ROOT, out)}  ${(raw / 1024).toFixed(0)} KB -> ${(fs.statSync(out).size / 1024).toFixed(0)} KB  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+let shipped = out;
+if (!only.length) {
+  const { gzipSync } = await import('node:zlib');
+  shipped = path.join(outDir, `${stage}.glb.gz`);
+  fs.writeFileSync(shipped, gzipSync(fs.readFileSync(out), { level: 9 }));
+  const stale = path.join(outDir, `${stage}.glb`);
+  if (fs.existsSync(stale)) fs.renameSync(stale, path.join(HERE, 'out', `${stage}.prev.glb`));
+}
+console.log(`${path.relative(ROOT, shipped)}  ${(raw / 1024).toFixed(0)} KB -> ${(fs.statSync(out).size / 1024).toFixed(0)} KB`
+  + `${shipped !== out ? ` -> ${(fs.statSync(shipped).size / 1024).toFixed(0)} KB gz` : ''}  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
