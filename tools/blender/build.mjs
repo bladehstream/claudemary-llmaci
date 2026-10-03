@@ -55,4 +55,15 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
 const doc = await io.read(out);
 await doc.transform(dedup(), prune(), quantize({ quantizePosition: 14, quantizeNormal: 10, quantizeColor: 8 }));
 await io.write(out, doc);
+/* A full pack registers its archetypes in the manifest the game reads to decide
+   which packs a stage needs (see src/world/models.js). Test packs never do. */
+if (!only.length) {
+  const mfPath = path.join(outDir, 'manifest.json');
+  const mf = fs.existsSync(mfPath) ? JSON.parse(fs.readFileSync(mfPath, 'utf8')) : { packs: {} };
+  const ids = [...new Set(doc.getRoot().listNodes().map((n) => n.getName()).filter((n) => n.includes('__'))
+    .map((n) => n.split('__')[0]))].sort();
+  mf.packs[stage] = ids;
+  fs.writeFileSync(mfPath, JSON.stringify(mf, null, 1) + String.fromCharCode(10));
+  console.log(`manifest: ${stage} -> ${ids.length} props`);
+}
 console.log(`${path.relative(ROOT, out)}  ${(raw / 1024).toFixed(0)} KB -> ${(fs.statSync(out).size / 1024).toFixed(0)} KB  in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

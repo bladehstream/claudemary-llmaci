@@ -1,0 +1,12 @@
+{
+ "packs": {
+  "house": [
+   "book",
+   "chair",
+   "mug",
+   "pencil",
+   "rubberduck",
+   "teapot"
+  ]
+ }
+}

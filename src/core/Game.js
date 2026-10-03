@@ -21,7 +21,7 @@ import { quantumStage } from '../world/stages/quantum.js';
 import { atomStage } from '../world/stages/atom.js';
 import { microbeStage } from '../world/stages/microbe.js';
 import { houseStage } from '../world/stages/house.js';
-import { applyModels } from '../world/models.js';
+import { ensureModels, modelReport } from '../world/models.js';
 import { townStage } from '../world/stages/town.js';
 import { cityStage } from '../world/stages/city.js';
 import { countryStage } from '../world/stages/country.js';
@@ -321,11 +321,6 @@ export class Game {
     await frame();
     const t0 = performance.now();
     buildCatalog();
-    /* Modelled props replace the procedural ones for DRAWING only — every
-       gameplay number above was taken from the procedural build first. See
-       world/models.js. A pack that fails to load leaves the procedural set. */
-    this.screens.setLoading('Unpacking the toy box…');
-    this.models = await applyModels();
     this.screens.setLoading(`${ARCHETYPES.length} kinds of thing ready…`);
     await frame();
 
@@ -786,7 +781,17 @@ export class Game {
 
     // Give the browser a frame to paint the loading screen before the
     // (synchronous, and not cheap) world build blocks the thread.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    /* The build below now awaits the model packs, so a second loadStage can
+       start while the first is still waiting. Only the newest one may build. */
+    const ticket = (this._loadTicket = (this._loadTicket || 0) + 1);
+    requestAnimationFrame(() => requestAnimationFrame(async () => {
+      /* Modelled props replace the procedural ones for DRAWING only — every
+         gameplay number was taken from the procedural build at boot. Loaded per
+         stage, here, because the world's instanced meshes take the geometry at
+         build time. A pack that fails to load leaves the procedural set. */
+      await ensureModels(stage.id);
+      if (ticket !== this._loadTicket) return;
+      this.models = modelReport();
       if (this.world) { this.world.dispose(); this.scene.scene.remove(this.world.root); }
       this.world = new World(this.scene.material).build(stage);
       this.scene.scene.add(this.world.root);

@@ -53,11 +53,8 @@ export const houseStage = {
     /* ---------------- floor plan ---------------- */
     // living room + kitchen share the boarded floor
     w.plat(-12, -10, 12, 11, FLOOR_Y);
-    t.quad(24, 21, C.floorWood, { x: 0, y: FLOOR_Y, z: 0.5 });
-    // plank lines
-    for (let i = 0; i < 22; i++) {
-      t.box(24, 0.004, 0.03, C.woodDark, { x: 0, y: FLOOR_Y + 0.003, z: -10 + i * 0.96 });
-    }
+    // floorboards, wainscot, rails and windows: see dressHouse
+    dressHouse(t);
 
     // tatami room (west), raised
     w.plat(-12, -10, -3.2, 1.6, TATAMI_Y);
@@ -191,3 +188,107 @@ export const houseStage = {
     }
   },
 };
+
+/* ------------------------------------------------------------------
+   Set dressing — DRAWN ONLY, and deliberately off the stage's RNG.
+
+   v1's floor was one tan quad with twenty-two 3cm lines across it, so
+   a room read as a single swatch of colour from your feet to the far
+   wall. This lays real floorboards (17cm, staggered, each its own shade
+   of the same wood over a dark gap), and gives the walls a painted dado,
+   rails and windows, so the room reads as a room at every ball size.
+
+   ⚠ NOTHING HERE MAY CALL THE STAGE'S `r()`. Every scatter below this
+   call draws from that one stream, so a single extra draw would move
+   every prop in the house and change the balance. Shade jitter comes
+   from a position hash instead.
+
+   ⚠ The decals rule (tools/test-decals.mjs): boards sit exactly on the
+   floor deck, the gap base 2mm under it, nothing horizontal above
+   +0.003. And no board crosses the tatami step or the garden drop,
+   which v1's single quad did — it was drawn straight over the garden.
+   ------------------------------------------------------------------ */
+function hash2(a, b) {
+  let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function shade(hex, k) {
+  const r = Math.min(255, Math.round(((hex >> 16) & 255) * k));
+  const g = Math.min(255, Math.round(((hex >> 8) & 255) * k));
+  const b = Math.min(255, Math.round((hex & 255) * k));
+  return (r << 16) | (g << 8) | b;
+}
+
+function dressHouse(t) {
+  /* ---- floorboards ---- */
+  const BOARD = 0.17, GAP = 0.004;
+  const rows = Math.floor(21 / BOARD);
+  for (let i = 0; i < rows; i++) {
+    const z0 = -10 + i * BOARD, zc = z0 + BOARD / 2;
+    // the boarded floor is everything but the tatami room and the garden
+    let xa = -12, xb = 12;
+    if (zc < 1.6) xa = -3.2;
+    if (zc > 4.6) xb = 1.6;
+    if (xb - xa < 0.05) continue;
+    t.quad(xb - xa, BOARD, 0x5c3d22, { x: (xa + xb) / 2, y: FLOOR_Y - 0.002, z: zc });
+    let x = xa - hash2(i, 7) * 1.6;
+    let k = 0;
+    while (x < xb) {
+      const len = 1.1 + hash2(i, k * 3 + 1) * 1.5;
+      const s = Math.max(x, xa), e = Math.min(x + len, xb);
+      if (e - s > 0.04) {
+        const h = hash2(i, k * 3 + 2);
+        const tone = h < 0.08 ? 0.82 : 0.92 + hash2(k, i * 5 + 3) * 0.16;
+        t.quad(e - s - GAP, BOARD - GAP, shade(C.floorWood, tone), { x: (s + e) / 2, y: FLOOR_Y, z: zc });
+      }
+      x += len; k++;
+    }
+  }
+
+  /* ---- a rug in the living room, under the low table ---- */
+  t.quad(3.4, 2.4, 0x7e3b45, { x: -0.2, y: FLOOR_Y + 0.0015, z: -5.2 });
+  t.quad(3.0, 2.0, 0xd9b77a, { x: -0.2, y: FLOOR_Y + 0.002, z: -5.2 });
+  t.quad(2.7, 1.7, 0x9c4a50, { x: -0.2, y: FLOOR_Y + 0.0025, z: -5.2 });
+
+  /* ---- walls: dado panel, rails, skirting ----
+     Inner faces of the four bounds, and the wall heights v1 built them at. */
+  const WALLS = [
+    // [axis, fixed coordinate, from, to, facing (+1/-1 into the room)]
+    ['z', -10, -12, 12, +1],
+    ['z', 11, -12, 1.6, -1],
+    ['x', -12, -10, 11, +1],
+    ['x', 12, -10, 4.6, -1],
+  ];
+  const DADO = 0x9fb59a, RAIL = 0x7a5232, SKIRT = 0x6e4a2c;
+  for (const [axis, at, from, to, dir] of WALLS) {
+    const len = to - from, mid = (from + to) / 2;
+    const place = (h, y, depth, col) => {
+      const off = at + dir * depth / 2;
+      if (axis === 'z') t.box(len, h, depth, col, { x: mid, y, z: off });
+      else t.box(depth, h, len, col, { x: off, y, z: mid });
+    };
+    place(0.9, 0.45, 0.012, DADO);            // painted lower panel
+    place(0.05, 0.92, 0.03, RAIL);            // dado rail
+    place(0.1, 0.05, 0.022, SKIRT);           // skirting board
+    place(0.04, 2.3, 0.02, RAIL);             // picture rail
+    // vertical panel grooves in the dado, every 30cm
+    for (let u = from + 0.3; u < to - 0.1; u += 0.3) {
+      const off = at + dir * 0.014;
+      if (axis === 'z') t.box(0.012, 0.78, 0.004, shade(DADO, 0.82), { x: u, y: 0.5, z: off });
+      else t.box(0.004, 0.78, 0.012, shade(DADO, 0.82), { x: off, y: 0.5, z: u });
+    }
+  }
+
+  /* ---- windows on the south wall: sky panes in white frames ---- */
+  for (const wx of [-8.5, -4.5, 3.0, 7.5]) {
+    const z = -10 + 0.02;
+    t.box(1.6, 1.1, 0.01, 0xbfe6f7, { x: wx, y: 1.6, z });            // glass
+    t.box(1.7, 0.06, 0.05, 0xf4f1ea, { x: wx, y: 2.18, z });          // head
+    t.box(1.8, 0.06, 0.09, 0xf4f1ea, { x: wx, y: 1.02, z: z + 0.02 }); // sill
+    for (const sx of [-0.82, 0, 0.82]) t.box(0.05, 1.12, 0.05, 0xf4f1ea, { x: wx + sx, y: 1.6, z });
+    t.box(1.66, 0.04, 0.04, 0xf4f1ea, { x: wx, y: 1.6, z });          // transom
+  }
+}
+

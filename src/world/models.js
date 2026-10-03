@@ -27,8 +27,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ARCHETYPES } from './props/index.js';
 
-/** Stage packs that exist. One GLB per stage, every model in it named `id__variant`. */
-export const PACKS = ['house'];
+/* Which pack holds which archetypes: public/models/manifest.json, written by
+   tools/blender/build.mjs whenever it builds a full pack. Packs are loaded
+   per STAGE, on the way into it — the whole set would be tens of megabytes at
+   boot for a player who may only ever see the house. */
+const MANIFEST = 'models/manifest.json';
 
 /**
  * A plain BufferGeometry from a glTF mesh: position, normal, and colour reduced
@@ -89,29 +92,26 @@ function seat(geo, target) {
   return [bs.x / ts.x, bs.y / ts.y, bs.z / ts.z];
 }
 
-let loaded = null;
+let manifest = null;
+const loadedPacks = new Set();
+const report = { swapped: 0, warned: [], packs: [] };
 
-/**
- * Load every pack and swap models in for the procedural geometry they replace.
- * Call AFTER `buildCatalog()`. Safe to call twice; a missing or broken pack is
- * logged and skipped, so the game always has the procedural set to fall back on.
- */
-export async function applyModels(base = import.meta.env?.BASE_URL || './') {
-  if (loaded) return loaded;
-  const byName = new Map();
-  const loader = new GLTFLoader();
-  for (const pack of PACKS) {
-    try {
-      const gltf = await loader.loadAsync(`${base}models/${pack}.glb`);
-      gltf.scene.updateMatrixWorld(true);
-      gltf.scene.traverse((o) => { if (o.isMesh) byName.set(o.name, o); });
-    } catch (e) {
-      console.warn(`[models] pack ${pack} not loaded:`, e?.message || e);
-    }
+async function getManifest(base) {
+  if (manifest) return manifest;
+  try {
+    const r = await fetch(`${base}${MANIFEST}`, { cache: 'no-cache' });
+    manifest = r.ok ? await r.json() : { packs: {} };
+  } catch {
+    manifest = { packs: {} };   // file:// (the single-file build) or offline
   }
-  const report = { swapped: 0, warned: [] };
+  return manifest;
+}
+
+/** Swap every model in `byName` in for the procedural geometry it replaces. */
+function swapIn(byName) {
   for (const p of ARCHETYPES) {
     for (let v = 0; v < p.geos.length; v++) {
+      if (p.geos[v].userData.model) continue;
       const m = byName.get(`${p.id}__${v}`) || byName.get(`${p.id}__0`);
       if (!m) continue;
       const geo = fromGltfMesh(m);
@@ -127,7 +127,40 @@ export async function applyModels(base = import.meta.env?.BASE_URL || './') {
       report.swapped++;
     }
   }
-  if (report.warned.length) console.warn(`[models] size mismatch >25%: ${report.warned.join(', ')}`);
-  loaded = report;
+}
+
+/**
+ * Make sure every pack holding a prop this stage can place is loaded and
+ * swapped in. Call AFTER `buildCatalog()` and BEFORE the stage's world is built
+ * (the instanced meshes take `p.geos` at build time). A missing or broken pack
+ * is logged and skipped — the procedural set is always there to fall back on.
+ */
+export async function ensureModels(stageTag, base = import.meta.env?.BASE_URL || './') {
+  const mf = await getManifest(base);
+  const want = new Set(ARCHETYPES.filter((p) => p.tags.includes(stageTag)).map((p) => p.id));
+  const packs = Object.entries(mf.packs || {})
+    .filter(([name, ids]) => !loadedPacks.has(name) && ids.some((id) => want.has(id)))
+    .map(([name]) => name);
+  if (!packs.length) return report;
+  const loader = new GLTFLoader();
+  const byName = new Map();
+  await Promise.all(packs.map(async (pack) => {
+    loadedPacks.add(pack);
+    try {
+      const gltf = await loader.loadAsync(`${base}models/${pack}.glb`);
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse((o) => { if (o.isMesh) byName.set(o.name, o); });
+      report.packs.push(pack);
+    } catch (e) {
+      console.warn(`[models] pack ${pack} not loaded:`, e?.message || e);
+    }
+  }));
+  const before = report.warned.length;
+  swapIn(byName);
+  if (report.warned.length > before) {
+    console.warn(`[models] size mismatch >25%: ${report.warned.slice(before).join(', ')}`);
+  }
   return report;
 }
+
+export function modelReport() { return report; }
