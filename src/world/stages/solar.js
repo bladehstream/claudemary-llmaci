@@ -299,6 +299,47 @@ export const solarStage = {
       track(rad, Y_RIM + DEC_RIM + 0.0006, 0x2d5484, 0.08, R_RI);
     }
 
+    /* A polar chart under the tracks: faint rings every half unit and spokes
+       every 1.2 degrees, all centred on the star, with every fifth line of
+       each a little brighter. The orbital tracks are a ring every couple of
+       units, thirty starting-ball widths apart, so on its own the floor gave
+       no sense of motion; at this spacing the ball always has a line within a
+       few widths of it. Each grid sits just above its deck's paint and just
+       below that deck's tracks. Clipped to the same inset rectangles as the
+       tracks, for the same reason. */
+    const RING = 0.5, SPOKE = (1.2 * Math.PI) / 180;
+    const polar = (rect, y, col, major) => {
+      const [xa, za, xb, zb] = rect;
+      for (let n = Math.ceil(15 / RING); n * RING < 48; n++) {
+        const rad = n * RING, big = n % 5 === 0;
+        const seg = Math.max(32, Math.round((TAU * rad) / 0.5));
+        const q = (TAU * rad / seg) * 1.15;
+        for (let k = 0; k < seg; k++) {
+          const a = (k / seg) * TAU;
+          const x = SUNX + Math.cos(a) * rad, z = Math.sin(a) * rad;
+          if (x < xa || x > xb || z < za || z > zb) continue;
+          t.quad(q, big ? 0.026 : 0.012, big ? major : col, {
+            x, y: y + 0.0001 + (k % 2) * 0.0001, z,
+            ry: Math.atan2(-Math.cos(a), -Math.sin(a)),
+          });
+        }
+      }
+      for (let n = -52; n <= 52; n++) {
+        const a = n * SPOKE, c = Math.cos(a), s = Math.sin(a);
+        let r0 = (xa - SUNX) / c, r1 = (xb - SUNX) / c;
+        if (s > 1e-6) { r0 = Math.max(r0, za / s); r1 = Math.min(r1, zb / s); }
+        if (s < -1e-6) { r0 = Math.max(r0, zb / s); r1 = Math.min(r1, za / s); }
+        if (r1 - r0 < 0.2) continue;
+        const rm = (r0 + r1) / 2, big = n % 5 === 0;
+        t.quad(r1 - r0, big ? 0.026 : 0.012, big ? major : col,
+          { x: SUNX + c * rm, y, z: s * rm, ry: -a });
+      }
+    };
+    polar(R_IN, Y_BASE + 0.001, 0x382a2a, 0x543a30);
+    polar(R_BE, Y_BELT + DEC_BELT + 0.0002, 0x222d55, 0x33467e);
+    polar(R_OU, Y_OUTER + 0.0012, 0x22335a, 0x334c82);
+    polar(R_RI, Y_RIM + DEC_RIM + 0.0002, 0x2a4a7a, 0x3a64a0);
+
     /* The heliospheric current sheet: the wavy surface where the star's field
        changes sign, running north-south through the belt. Paint, at the same
        tiny offset as everything else on this deck. */
