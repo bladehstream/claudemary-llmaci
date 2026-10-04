@@ -193,8 +193,22 @@ export class PropField {
    * Hide archetypes that have become sub-pixel next to the katamari.
    * They stay collidable and collectable — this only skips drawing them.
    */
+  /**
+   * Draw every prop regardless of size. Set at the end of a round, when the
+   * few things left are exactly the small ones the cutoff below would hide.
+   */
+  setReveal(on) {
+    if (this._reveal === !!on) return;
+    this._reveal = !!on;
+    this._cutoff = -1;
+  }
+
+  /** Props with a pickup size under this are not being drawn (0: none hidden). */
+  hiddenBelow() { return this._reveal ? 0 : this._cutoff; }
+
   setDetailCutoff(katamariDiameter) {
-    const cutoff = katamariDiameter / 130;
+    const cutoff = this._reveal ? 0 : katamariDiameter / 130;
+    if (cutoff === this._cutoff) return;
     if (Math.abs(cutoff - this._cutoff) < cutoff * 0.05) return;
     this._cutoff = cutoff;
     for (const g of this.groupList) {

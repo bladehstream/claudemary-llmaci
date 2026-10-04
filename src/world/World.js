@@ -792,13 +792,45 @@ export class World {
    * player reported it as "impossible to see the final few pieces". Once the
    * count is small enough to be findable, the HUD points at them.
    */
-  remainingCollectable(diameter, max = 16) {
+  remainingCollectable(diameter, max = 16, near = null) {
     const limit = diameter * TUNING.pickupRatio;
     const f = this.field;
     const out = [];
-    for (let i = 0; i < f.n && out.length < max; i++) {
+    /* With `near`, the `max` CLOSEST to it: the finder now switches on with a
+       few dozen left, more than it should draw, and the nearest are the ones
+       worth pointing at. Only ever called with a few dozen alive, so a full
+       pass and a sort is nothing. */
+    for (let i = 0; i < f.n && (near || out.length < max); i++) {
       if (f.alive[i] && f.pickup[i] <= limit) out.push({ x: f.x[i], y: f.y[i] + f.hgt[i] * 0.5, z: f.z[i] });
     }
+    if (near) {
+      const d2 = (p) => (p.x - near.x) ** 2 + (p.z - near.z) ** 2;
+      out.sort((a, b) => d2(a) - d2(b));
+      out.length = Math.min(out.length, max);
+    }
+    return out;
+  }
+
+  /**
+   * The `max` collectables nearest `near` that the size cutoff is currently
+   * hiding (PropField.setDetailCutoff): still alive and edible, but small
+   * enough next to the ball that they are no longer drawn. The HUD rings them,
+   * so nothing you can still eat is ever invisible AND unmarked.
+   */
+  hiddenCollectable(diameter, max, near) {
+    const cutoff = this.field.hiddenBelow();
+    if (!(cutoff > 0)) return [];
+    const limit = Math.min(diameter * TUNING.pickupRatio, cutoff);
+    const f = this.field;
+    const out = [];
+    for (let i = 0; i < f.n; i++) {
+      if (f.alive[i] && f.pickup[i] < limit) {
+        const dx = f.x[i] - near.x, dz = f.z[i] - near.z;
+        out.push({ x: f.x[i], y: f.y[i] + f.hgt[i] * 0.5, z: f.z[i], d: dx * dx + dz * dz });
+      }
+    }
+    out.sort((a, b) => a.d - b.d);
+    out.length = Math.min(out.length, max);
     return out;
   }
 

@@ -34,8 +34,16 @@ import { universeStage } from '../world/stages/universe.js';
 import { clamp, formatSize, formatSizeShort, makeRng } from '../util/math.js';
 import { CHEERS, BIG_CATCH, KNOCKS, pick } from '../ui/quips.js';
 
-/** Show the end-of-round finder once this many collectables or fewer remain. */
-const FINDER_AT = 12;
+/**
+ * Show the end-of-round finder once this many collectables or fewer remain,
+ * pointing at the FINDER_DOTS nearest. It was 12, which a city player beat by
+ * clearing all but 41: everything small enough to be left over was also small
+ * enough to be hidden by the size cutoff (PropField.setDetailCutoff), so the
+ * stage could not end and there was nothing to see and nothing pointing.
+ * At this count the cutoff is lifted too.
+ */
+const FINDER_AT = 50;
+const FINDER_DOTS = 12;
 
 /**
  * Seconds Enter must be held to abandon a round.
@@ -1150,12 +1158,25 @@ export class Game {
            handful across a 4km city by eye is a search with no information
            rather than a test of anything. The threshold is deliberately low
            so this can never help you play — only help you finish. */
-        this._finderPts = world.countCollectable(kat.diameter, FINDER_AT) <= FINDER_AT
-          ? world.remainingCollectable(kat.diameter, FINDER_AT)
-          : null;
+        const left = world.countCollectable(kat.diameter, FINDER_AT);
+        const few = left <= FINDER_AT;
+        this._finderLeft = few ? left : 0;
+        world.field.setReveal(few);
+        if (few) {
+          this._finderPts = world.remainingCollectable(kat.diameter, FINDER_DOTS, kat.pos);
+          this._finderFaint = false;
+        } else {
+          /* Before that, quieter rings on the nearest things the size cutoff
+             has stopped drawing: still edible, too small next to you to see. */
+          const hid = world.hiddenCollectable(kat.diameter, FINDER_DOTS, kat.pos);
+          this._finderPts = hid.length ? hid : null;
+          this._finderFaint = true;
+        }
       }
     }
-    if (this._finderPts && !this.exhausted) this.hud.setFinder(this._finderPts, this.scene.camera);
+    if (this._finderPts && !this.exhausted) {
+      this.hud.setFinder(this._finderPts, this.scene.camera, this._finderLeft, this._finderFaint);
+    }
     else this.hud.clearFinder();
     if (this.exhausted) {
       this.exhaustedIn -= dt;

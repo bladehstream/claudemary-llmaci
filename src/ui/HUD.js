@@ -113,11 +113,17 @@ export class HUD {
    * a stage requires collecting the LAST thing, and hunting stragglers across
    * a 4km city by eye is a search with no information, not a skill test.
    */
-  setFinder(pts, camera) {
+  /**
+   * @param total  how many are left, for the label
+   * @param faint  the quieter mid-round mode: rings on hidden things only, no
+   *               label, and nothing pinned to the screen edge
+   */
+  setFinder(pts, camera, total = pts?.length ?? 0, faint = false) {
     if (!this.finderEl) return;
     if (!pts || !pts.length) { this.clearFinder(); return; }
     this.finderEl.classList.remove('hidden');
-    if (this._finderCount) this._finderCount.classList.remove('hidden');
+    this.finderEl.classList.toggle('faint', faint);
+    if (this._finderCount) this._finderCount.classList.toggle('hidden', faint);
 
     const w = this.finderEl.clientWidth || window.innerWidth;
     const h = this.finderEl.clientHeight || window.innerHeight;
@@ -136,15 +142,15 @@ export class HUD {
       // Shared with the co-op friend marker; see `_project` for why a point
       // behind the camera needs both axes flipped before the edge clamp.
       const { sx, sy, off } = HUD._project(p, camera, w, h, pad);
-      dot.style.display = '';
+      dot.style.display = faint && off ? 'none' : '';
       dot.classList.toggle('off', off);
       dot.style.left = `${sx}px`;
       dot.style.top = `${sy}px`;
     }
     if (this._finderCount) {
-      this._finderCount.textContent = pts.length === 1
+      this._finderCount.textContent = total === 1
         ? 'ONE THING LEFT'
-        : `${pts.length} THINGS LEFT`;
+        : `${total} THINGS LEFT`;
     }
   }
 
