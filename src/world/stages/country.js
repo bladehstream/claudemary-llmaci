@@ -62,7 +62,9 @@ export const countryStage = {
   seed: 19690720,
   startSize: 50,
   goal: 1600,
-  time: 540,
+  /* 9:00 -> 7:00 (2026-10-04). Found very easy in play; the bot reaches the
+     goal at 3:38 and has eaten all but 9 of 4,602 props by 5:30. */
+  time: 420,
   speed: 320,
   density: 1,
   spread: 1,

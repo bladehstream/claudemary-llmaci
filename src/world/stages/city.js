@@ -25,7 +25,10 @@ export const cityStage = {
   seed: 19990921,
   startSize: 5,
   goal: 200,
-  time: 480,
+  /* 8:00 -> 6:00 (2026-10-04). A player cleared the city with 2:30 to spare,
+     and the bot (balance.mjs 0.9) agrees: goal at 2:33, 4,184 of 4,191 props
+     gone by 5:30, nothing left to do after that. */
+  time: 360,
   // m/s at startSize; the curve grows from here.
   // 43s to cross at 5m, which matches the house — and 5.5x the pace of the
   // old global curve, which needed four minutes and is what made this stage

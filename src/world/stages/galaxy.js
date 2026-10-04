@@ -110,7 +110,8 @@ export const galaxyStage = {
      quoted in universe.js both predate this measurement and neither reproduces
      at `--runs=15` skill 0.9; whatever settings produced them are not recorded,
      which is the whole reason this note says how it was measured. */
-  time: 630,
+  /* 10:30 -> 9:30 (2026-10-04): the bot clears all 3,060 props by about 8:30. */
+  time: 570,
   speed: 330,
   density: 1,
   spread: 1,

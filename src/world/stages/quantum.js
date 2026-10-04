@@ -189,7 +189,9 @@ export const quantumStage = {
    * knowledge on the first frame of every run — so the cost of not knowing is
    * invisible to it everywhere, and largest exactly here. Same blind spot as
    * the galaxy and universe clocks, for a different reason. */
-  time: 300,
+  /* 5:00 -> 5:30 (2026-10-04): a player found the realm impossible to roll up
+     completely at 5:00. */
+  time: 330,
   /**
    * 0.39, not 0.30 — the actual reason this stage played badly.
    *
